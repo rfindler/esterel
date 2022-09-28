@@ -109,3 +109,25 @@
             (par (pause)
                  (emit s))))
    (hash s #t)))
+
+(check-equal?
+ (react! (reaction
+          (par (par (pause)
+                    (pause))
+               (par (pause)
+                    (pause)))))
+ (hash))
+
+(check-equal?
+ (react! (reaction
+          (par (par (par (par (pause)
+                              (pause))
+                         (par (pause)
+                              (pause)))
+                    (pause))
+               (par (pause)
+                    (par (par (pause)
+                              (pause))
+                         (par (pause)
+                              (pause)))))))
+ (hash))
