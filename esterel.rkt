@@ -211,6 +211,11 @@
   ;; had a wrong guess (we guessed it won't be emitted but
   ;; it actually gets emitted)
   (define wrong-guess #f)
+
+  ;; when a failure occurs (emitted a signal that'd been guessed to be absent)
+  ;; then we know that any super set of that set of signals is also going to fail
+  ;; so we can avoid looking at them
+  ;; .... need to turn that observation into an algorithm to choose subsets!
   
   (define (choose-a-signal-to-be-absent)
     (cond
