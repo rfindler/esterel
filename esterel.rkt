@@ -17,7 +17,10 @@
   [pause (->* () #:pre (in-reaction?) void?)]))
 
 (struct signal ())
-  
+
+(struct checkpoint-request (resp-chan))
+(define reaction-prompt-tag (make-continuation-prompt-tag 'reaction))
+
 (define current-signal-table (make-parameter #f))
 (define (in-reaction?) (and (current-signal-table) #t))
   
@@ -26,11 +29,20 @@
   (channel-put (signal-table-emit-chan signal-table) a-signal))
   
 (define (signal-value a-signal)
-   (define signal-table (current-signal-table))
+  (define signal-table (current-signal-table))
   (define resp-chan (make-channel))
   (channel-put (signal-table-signal-chan signal-table)
                (vector a-signal (current-thread) resp-chan))
-  (channel-get resp-chan))
+  (let loop ()
+    (define maybe-val (channel-get resp-chan))
+    (cond
+      [(checkpoint-request? maybe-val)
+       (call/cc
+        (λ (k)
+          (channel-put (checkpoint-request-resp-chan maybe-val) k))
+        reaction-prompt-tag)
+       (loop)]
+      [else maybe-val])))
 
 (define-syntax (par stx)
   (syntax-case stx ()
@@ -46,16 +58,28 @@
   (unless (in-reaction?) (error 'par "not in a reaction"))
   (define children-threads
     (for/set ([thunk (in-list thunks)])
-      (thread thunk)))
+      (thread
+       (λ ()
+         (call-with-continuation-prompt
+          thunk
+          reaction-prompt-tag)))))
   (define signal-table (current-signal-table))
+  (define checkpoint-chan (make-channel))
   (channel-put (signal-table-par-start-chan signal-table)
-               (cons (current-thread) children-threads))
+               (vector checkpoint-chan (current-thread) children-threads))
   (let loop ([pending-par-threads children-threads])
     (cond
       [(set-empty? pending-par-threads) (void)]
       [else
        (apply
         sync
+        (handle-evt
+         checkpoint-chan
+         (λ (resp-chan)
+           (call/cc
+            (λ (k)
+              (channel-put resp-chan k)))
+           (loop pending-par-threads)))
         (for/list ([pending-par-thread (in-set pending-par-threads)])
           (handle-evt
            pending-par-thread
@@ -84,15 +108,7 @@
   (define the-signal-table
     (signal-table (make-channel) (make-channel) (make-channel)
                   (make-channel) (make-channel) (make-channel) (make-channel)))
-  (define first-instant-sema (make-semaphore 0))
-  (define (reaction-thread-thunk)
-    (semaphore-wait first-instant-sema)
-    (thunk)
-    (channel-put (signal-table-react-thread-done-chan the-signal-table) (void)))
-  (define reaction-thread
-    (parameterize ([current-signal-table the-signal-table])
-      (thread reaction-thread-thunk)))
-  (thread (λ () (run-reaction-thread reaction-thread first-instant-sema the-signal-table)))
+  (thread (λ () (run-reaction-thread thunk the-signal-table)))
   (reaction the-signal-table))
 
 (define (react! a-reaction)
@@ -108,26 +124,38 @@
     [else
      (error 'react! "a reaction is already running")]))
      
-(define (run-reaction-thread reaction-thread first-instant-sema the-signal-table)
+(define (run-reaction-thread thunk the-signal-table)
+  (define first-instant-sema (make-semaphore 0))
+  (define reaction-thread
+    (let ([first-instant-sema first-instant-sema])
+      (parameterize ([current-signal-table the-signal-table])
+        (define (reaction-thread-thunk)
+          (semaphore-wait first-instant-sema)
+          (call-with-continuation-prompt
+           (λ ()
+             (thunk)
+             (channel-put (signal-table-react-thread-done-chan the-signal-table) (void)))
+           reaction-prompt-tag))
+        (thread reaction-thread-thunk))))
   (match-define (signal-table signal-chan emit-chan
                               par-start-chan par-partly-done-chan
                               pause-chan instant-chan
                               react-thread-done-chan)
     the-signal-table)
 
-  ;; hash[signal -o-> boolean?] -- if a signal isn't mapped, its value isn't yet known
-  (define signals (make-hash))
+  ;; if a signal isn't mapped, its value isn't yet known
+  (define/contract signals
+    (hash/c signal? boolean?)
+    (make-hash))
 
   (struct blocked-thread (thread resp-chan) #:transparent)
     
-  ;; hash[signal -o-> (listof blocked-thread?)]
   ;; threads that are blocked, waiting for a signal's value to be decided
   ;; (a missing entry is the same as the empty list)
   (define/contract signal-waiters
     (hash/c signal? (listof blocked-thread?))
     (make-hash))
 
-  ;; hash[thread -> chan]
   ;; each paused thread is blocked on the corresponding channel
   (define/contract paused-threads
     (hash/c thread? channel?)
@@ -135,7 +163,7 @@
 
   ;; (set/c hash)
   ;; all of the threads in the reaction that aren't
-  ;; blocked on a signal and have not paused
+  ;;    blocked on a signal and have not paused
   (define running-threads (set reaction-thread))
   (define/contract (add-running-thread t)
     (-> thread? void?)
@@ -146,10 +174,17 @@
   (define (remove-running-thread t)
     (set! running-threads (set-remove running-threads t)))
 
-  ;; hash[thread --> (setof thread)]
-  ;; a parent points to a set of its children
+  ;; a parent thread (of a par) points to a set of its children
   (define/contract par-children
     (hash/c thread? (set/c thread?))
+    (make-hash))
+
+  ;; each parent thread (of a par) points to the channel
+  ;;    that it listens for checkpoint requests on
+  ;; the domain of this map is the set of threads that
+  ;;    are currently parents of a `par`
+  (define/contract par-checkpoint-chans
+    (hash/c thread? channel?)
     (make-hash))
 
   ;; (or/c #f (chan/c (or/c (hash/c signal? boolean?) #f)))
@@ -159,16 +194,50 @@
   ;; got taken in this instant. Any chan that gets put into
   ;; never gets, #f, tho. Only those that don't get put here do
   (define instant-complete-chan #f)
+
+  (struct rollback-point (continuations
+                          guess
+                          signals signal-waiters paused-threads
+                          running-threads par-children par-checkpoint-chans))
+
+  (define rollback-points '())
+
+  ;; channels that were guessed wrong to be emitted
+  (define/contract bad-guesses
+    (set/c channel?)
+    (set))
+
+  ;; this gets set to a signal when we discover that signal
+  ;; had a wrong guess (we guessed it won't be emitted but
+  ;; it actually gets emitted)
+  (define wrong-guess #f)
   
   (define (choose-a-signal-to-be-absent)
-    (define signal-to-be-absent (for/first ([(k v) (in-hash signal-waiters)]) k))
-    (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
-    (hash-set! signals signal-to-be-absent #f)
-    (hash-remove! signal-waiters signal-to-be-absent)
-    (for ([a-blocked-thread (in-list blocked-threads)])
-      (match-define (blocked-thread thread resp-chan) a-blocked-thread)
-      (channel-put resp-chan #f)
-      (add-running-thread thread)))
+    (cond
+      [wrong-guess (void)]
+      [else
+       (collect-rollback-point-continuations)
+       (define signal-to-be-absent (for/first ([(k v) (in-hash signal-waiters)]) k))
+       (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
+       (hash-set! signals signal-to-be-absent #f)
+       (hash-remove! signal-waiters signal-to-be-absent)
+       (for ([a-blocked-thread (in-list blocked-threads)])
+         (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+         (channel-put resp-chan #f)
+         (add-running-thread thread))]))
+
+  (define (collect-rollback-point-continuations)
+    (for ([(par-checkpoint-thread checkpoint-chan) (in-hash par-checkpoint-chans)])
+      (define k-chan (make-channel))
+      (channel-put checkpoint-chan k-chan)
+      (channel-get k-chan))
+    (define checkpoint-request-chan (make-channel))
+    (define a-checkpoint-request (checkpoint-request checkpoint-request-chan))
+    (for ([(signal blocked-threads) (in-hash signal-waiters)])
+      (for ([a-blocked-thread (in-list blocked-threads)])
+        (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+        (channel-put resp-chan a-checkpoint-request)
+        (channel-get checkpoint-request-chan))))
 
   (let loop ()
     (cond
@@ -230,15 +299,17 @@
              [#t
               (void)]
              [#f
-              (error 'non-constructive! "(not really; we need to roll back here)")])
+              (set! wrong-guess a-signal)])
            (loop)))
         (handle-evt
          par-start-chan
-         (λ (parent+children-threads)
-           (match-define (cons parent-thread children-threads) parent+children-threads)
+         (λ (checkpoint-chan+parent+children-threads)
+           (match-define (vector checkpoint-chan parent-thread children-threads)
+             checkpoint-chan+parent+children-threads)
            (add-running-threads children-threads)
            (remove-running-thread parent-thread)
            (hash-set! par-children parent-thread children-threads)
+           (hash-set! par-checkpoint-chans parent-thread checkpoint-chan)
            (loop)))
         (handle-evt
          par-partly-done-chan
@@ -250,6 +321,7 @@
            (cond
              [(set-empty? parents-new-children)
               (hash-remove! par-children parent-thread)
+              (hash-remove! par-checkpoint-chans parent-thread)
               (add-running-thread parent-thread)]
              [else
               (hash-set! par-children parent-thread parents-new-children)])
