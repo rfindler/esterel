@@ -1,4 +1,5 @@
 #lang racket
+(require "structs.rkt" "search-state.rkt")
 
 (provide
  (rename-out [-reaction reaction])
@@ -15,8 +16,6 @@
              #:pre (in-reaction?)
              void?)]
   [pause (->* () #:pre (in-reaction?) void?)]))
-
-(struct signal ())
 
 (struct checkpoint-request (resp-chan))
 (define reaction-prompt-tag (make-continuation-prompt-tag 'reaction))
@@ -199,18 +198,16 @@
                           guess
                           signals signal-waiters paused-threads
                           running-threads par-children par-checkpoint-chans))
+  (define (rollback! a-rollback-point) (void))
+  (define (current-rollback-point)
+    (void))
 
-  (define rollback-points '())
-
-  ;; channels that were guessed wrong to be emitted
-  (define/contract bad-guesses
-    (set/c channel?)
-    (set))
+  (define se-st (new-search-state))
 
   ;; this gets set to a signal when we discover that signal
   ;; had a wrong guess (we guessed it won't be emitted but
   ;; it actually gets emitted)
-  (define wrong-guess #f)
+  (define wrong-guess? #f)
 
   ;; when a failure occurs (emitted a signal that'd been guessed to be absent)
   ;; then we know that any super set of that set of signals is also going to fail
@@ -218,18 +215,27 @@
   ;; .... need to turn that observation into an algorithm to choose subsets!
   
   (define (choose-a-signal-to-be-absent)
-    (cond
-      [wrong-guess (void)]
-      [else
-       (collect-rollback-point-continuations)
-       (define signal-to-be-absent (for/first ([(k v) (in-hash signal-waiters)]) k))
-       (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
-       (hash-set! signals signal-to-be-absent #f)
-       (hash-remove! signal-waiters signal-to-be-absent)
-       (for ([a-blocked-thread (in-list blocked-threads)])
-         (match-define (blocked-thread thread resp-chan) a-blocked-thread)
-         (channel-put resp-chan #f)
-         (add-running-thread thread))]))
+    (define signal-to-be-absent
+      (cond
+        [wrong-guess?
+         (set! wrong-guess? #f)
+         (define-values (rollback-point choice) (fail! se-st))
+         (unless choice
+           (error 'esterel.rkt "non constructive program"))
+         (rollback! rollback-point)
+         choice]
+        [else
+         (continue! se-st
+                    (current-rollback-point)
+                    (hash-keys signals)
+                    (hash-keys signal-waiters))]))
+    (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
+    (hash-set! signals signal-to-be-absent #f)
+    (hash-remove! signal-waiters signal-to-be-absent)
+    (for ([a-blocked-thread (in-list blocked-threads)])
+      (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+      (channel-put resp-chan #f)
+      (add-running-thread thread)))
 
   (define (collect-rollback-point-continuations)
     (for ([(par-checkpoint-thread checkpoint-chan) (in-hash par-checkpoint-chans)])
@@ -304,7 +310,7 @@
              [#t
               (void)]
              [#f
-              (set! wrong-guess a-signal)])
+              (set! wrong-guess? #t)])
            (loop)))
         (handle-evt
          par-start-chan
