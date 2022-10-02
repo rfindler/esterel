@@ -32,15 +32,16 @@
   (define resp-chan (make-channel))
   (channel-put (signal-table-signal-chan signal-table)
                (vector a-signal (current-thread) resp-chan))
-  (let loop ()
+  (let loop ([resp-chan resp-chan])
     (define maybe-val (channel-get resp-chan))
     (cond
       [(checkpoint-request? maybe-val)
-       (call/cc
-        (λ (k)
-          (channel-put (checkpoint-request-resp-chan maybe-val) k))
-        reaction-prompt-tag)
-       (loop)]
+       (loop
+        (call/cc
+         (λ (k)
+           (channel-put (checkpoint-request-resp-chan maybe-val) k)
+           resp-chan)
+         reaction-prompt-tag))]
       [else maybe-val])))
 
 (define-syntax (par stx)
@@ -75,10 +76,12 @@
         (handle-evt
          checkpoint-chan
          (λ (resp-chan)
-           (call/cc
-            (λ (k)
-              (channel-put resp-chan k)))
-           (loop pending-par-threads)))
+           (loop
+            (call/cc
+             (λ (k)
+               (channel-put resp-chan k)
+               pending-par-threads)
+             reaction-prompt-tag))))
         (for/list ([pending-par-thread (in-set pending-par-threads)])
           (handle-evt
            pending-par-thread
@@ -92,7 +95,17 @@
   (define resp-chan (make-channel))
   (channel-put (signal-table-pause-chan signal-table)
                (cons (current-thread) resp-chan))
-  (channel-get resp-chan))
+  (let loop ([resp-chan resp-chan])
+    (define val (channel-get resp-chan))
+    (cond
+      [(channel? val)
+       (loop
+        (call/cc
+         (λ (k)
+           (channel-put val k)
+           resp-chan)
+         reaction-prompt-tag))]
+      [else val])))
 
 
 (struct signal-table (signal-chan
@@ -155,6 +168,14 @@
     (hash/c signal? (listof blocked-thread?) #:flat? #t #:immutable #t)
     (hash))
 
+  ;; find-signal : thread -> blocked-thread or #f
+  ;; returns the signal that `thread` is blocked on, or #f it is isn't blocked on a signal
+  (define (find-signal thread)
+    (for*/or ([(signal blocked-threads) (in-hash signal-waiters)]
+              [a-blocked-thread (in-list blocked-threads)])
+      (and (equal? (blocked-thread-thread a-blocked-thread) thread)
+           a-blocked-thread)))
+
   ;; each paused thread is blocked on the corresponding channel
   (define/contract paused-threads
     (hash/c thread? channel? #:flat? #t #:immutable #t)
@@ -194,25 +215,12 @@
   ;; never gets, #f, tho. Only those that don't get put here do
   (define instant-complete-chan #f)
 
-  (struct rollback-point (continuations
-                          guess
-                          signals signal-waiters paused-threads
-                          running-threads par-children par-checkpoint-chans))
-  (define (rollback! a-rollback-point) (void))
-  (define (current-rollback-point)
-    (void))
-
   (define se-st (new-search-state))
 
-  ;; this gets set to a signal when we discover that signal
+  ;; this gets set to #t when we discover that signal
   ;; had a wrong guess (we guessed it won't be emitted but
   ;; it actually gets emitted)
   (define wrong-guess? #f)
-
-  ;; when a failure occurs (emitted a signal that'd been guessed to be absent)
-  ;; then we know that any super set of that set of signals is also going to fail
-  ;; so we can avoid looking at them
-  ;; .... need to turn that observation into an algorithm to choose subsets!
   
   (define (choose-a-signal-to-be-absent)
     (define signal-to-be-absent
@@ -237,18 +245,53 @@
       (channel-put resp-chan #f)
       (add-running-thread thread)))
 
-  (define (collect-rollback-point-continuations)
-    (for ([(par-checkpoint-thread checkpoint-chan) (in-hash par-checkpoint-chans)])
-      (define k-chan (make-channel))
-      (channel-put checkpoint-chan k-chan)
-      (channel-get k-chan))
-    (define checkpoint-request-chan (make-channel))
-    (define a-checkpoint-request (checkpoint-request checkpoint-request-chan))
-    (for ([(signal blocked-threads) (in-hash signal-waiters)])
-      (for ([a-blocked-thread (in-list blocked-threads)])
-        (match-define (blocked-thread thread resp-chan) a-blocked-thread)
-        (channel-put resp-chan a-checkpoint-request)
-        (channel-get checkpoint-request-chan))))
+  ;; rb-tree : rb-tree?
+  ;; signals : (hash/c signal? boolean? #:flat? #t #:immutable #t)
+  (struct rollback-point (rb-tree signals))
+  (define (rollback! a-rollback-point) (void))
+  (define (current-rollback-point) (rollback-point (collect-rollback-points) signals))
+
+  (struct rb-tree ())
+
+  ;; cont : continuation[listof thread]
+  ;; children : (set/c rb?)
+  (struct rb-par rb-tree (cont children))
+
+  ;; cont : continuation[channel]
+  (struct rb-paused rb-tree (cont))
+
+  ;; cont : continuation[channel]
+  (struct rb-blocked rb-tree (cont))
+
+  ;; collect-rollback-points : -> rb-tree?
+  (define (collect-rollback-points)
+    (define k-chan (make-channel))
+    (define a-checkpoint-request (checkpoint-request k-chan))
+    (let loop ([thread reaction-thread])
+      (cond
+        [(hash-has-key? par-children thread)
+         (define checkpoint-chan (hash-ref par-checkpoint-chans thread))
+         (channel-put checkpoint-chan k-chan)
+         ;; these continuations accept a list of threads to wait for and
+         ;; continue the loop in `par` with them; to implement `trap`,
+         ;; we probably need to communicate more information back and forth here
+         ;; as `par` needs to do end pauses when traps happen
+         (define par-continuation (channel-get k-chan))
+         (rb-par
+          par-continuation
+          (for/set ([child (in-set (hash-ref par-children thread))])
+            (loop child)))]
+        [(hash-has-key? paused-threads thread)
+         (define paused-chan (hash-ref paused-threads thread))
+         (channel-put paused-chan k-chan)
+         (rb-paused (channel-get k-chan))]
+        [(find-signal thread)
+         =>
+         (λ (a-blocked-thread)
+           (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+           (channel-put resp-chan a-checkpoint-request)
+           (rb-blocked (channel-get k-chan)))]
+        [else (error 'collect-rollback-points "lost a thread ~s" thread)])))
 
   (let loop ()
     (cond

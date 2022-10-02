@@ -118,6 +118,16 @@
                     (pause)))))
  (hash))
 
+(let ([s (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (par (par (signal-value s)
+               (pause))
+          (par (pause)
+               (signal-value s)))))
+   (hash s #f)))
+
 (check-equal?
  (react! (reaction
           (par (par (par (par (pause)
