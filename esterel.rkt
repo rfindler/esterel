@@ -144,21 +144,21 @@
 
   ;; if a signal isn't mapped, its value isn't yet known
   (define/contract signals
-    (hash/c signal? boolean?)
-    (make-hash))
+    (hash/c signal? boolean? #:flat? #t #:immutable #t)
+    (hash))
 
   (struct blocked-thread (thread resp-chan) #:transparent)
     
   ;; threads that are blocked, waiting for a signal's value to be decided
   ;; (a missing entry is the same as the empty list)
   (define/contract signal-waiters
-    (hash/c signal? (listof blocked-thread?))
-    (make-hash))
+    (hash/c signal? (listof blocked-thread?) #:flat? #t #:immutable #t)
+    (hash))
 
   ;; each paused thread is blocked on the corresponding channel
   (define/contract paused-threads
-    (hash/c thread? channel?)
-    (make-hash))
+    (hash/c thread? channel? #:flat? #t #:immutable #t)
+    (hash))
 
   ;; (set/c hash)
   ;; all of the threads in the reaction that aren't
@@ -175,16 +175,16 @@
 
   ;; a parent thread (of a par) points to a set of its children
   (define/contract par-children
-    (hash/c thread? (set/c thread?))
-    (make-hash))
+    (hash/c thread? (set/c thread?) #:flat? #t #:immutable #t)
+    (hash))
 
   ;; each parent thread (of a par) points to the channel
   ;;    that it listens for checkpoint requests on
   ;; the domain of this map is the set of threads that
   ;;    are currently parents of a `par`
   (define/contract par-checkpoint-chans
-    (hash/c thread? channel?)
-    (make-hash))
+    (hash/c thread? channel? #:flat? #t #:immutable #t)
+    (hash))
 
   ;; (or/c #f (chan/c (or/c (hash/c signal? boolean?) #f)))
   ;; #f means we're not in an instant, chan means we are.
@@ -230,8 +230,8 @@
                     (hash-keys signals)
                     (hash-keys signal-waiters))]))
     (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
-    (hash-set! signals signal-to-be-absent #f)
-    (hash-remove! signal-waiters signal-to-be-absent)
+    (set! signals (hash-set signals signal-to-be-absent #f))
+    (set! signal-waiters (hash-remove signal-waiters signal-to-be-absent))
     (for ([a-blocked-thread (in-list blocked-threads)])
       (match-define (blocked-thread thread resp-chan) a-blocked-thread)
       (channel-put resp-chan #f)
@@ -258,7 +258,7 @@
             instant-complete-chan)
        (channel-put instant-complete-chan signals)
        (set! instant-complete-chan #f)
-       (set! signals (make-hash)) ;; reset the signals in preparation for the next instant
+       (set! signals (hash)) ;; reset the signals in preparation for the next instant
        (loop)]
 
       ;; an instant is not runnning, wait for one to start (but don't wait for other stuff)
@@ -275,7 +275,7 @@
            (for ([(paused-thread resp-chan) (in-hash paused-threads)])
              (channel-put resp-chan (void))
              (add-running-thread paused-thread))
-           (set! paused-threads (make-hash))
+           (set! paused-threads (hash))
            (loop))))]
 
       ;; an instant is running, handle the various things that can happen during it
@@ -289,7 +289,8 @@
              ['unknown
               (remove-running-thread the-thread)
               (define a-blocked-thread (blocked-thread the-thread resp-chan))
-              (hash-set! signal-waiters a-signal (cons a-blocked-thread (hash-ref signal-waiters a-signal '())))
+              (define new-waiters (cons a-blocked-thread (hash-ref signal-waiters a-signal '())))
+              (set! signal-waiters (hash-set signal-waiters a-signal new-waiters))
               (when (set-empty? running-threads) (choose-a-signal-to-be-absent))]
              [#f
               (channel-put resp-chan #f)]
@@ -301,12 +302,12 @@
          (λ (a-signal)
            (match (hash-ref signals a-signal 'unknown)
              ['unknown
-              (hash-set! signals a-signal #t)
+              (set! signals (hash-set signals a-signal #t))
               (for ([a-blocked-thread (hash-ref signal-waiters a-signal '())])
                 (match-define (blocked-thread thread resp-chan) a-blocked-thread)
                 (channel-put resp-chan #t)
                 (add-running-thread thread))
-              (hash-remove! signal-waiters a-signal)]
+              (set! signal-waiters (hash-remove signal-waiters a-signal))]
              [#t
               (void)]
              [#f
@@ -319,8 +320,8 @@
              checkpoint-chan+parent+children-threads)
            (add-running-threads children-threads)
            (remove-running-thread parent-thread)
-           (hash-set! par-children parent-thread children-threads)
-           (hash-set! par-checkpoint-chans parent-thread checkpoint-chan)
+           (set! par-children (hash-set par-children parent-thread children-threads))
+           (set! par-checkpoint-chans (hash-set par-checkpoint-chans parent-thread checkpoint-chan))
            (loop)))
         (handle-evt
          par-partly-done-chan
@@ -331,18 +332,18 @@
              (set-remove (hash-ref par-children parent-thread) done-thread))
            (cond
              [(set-empty? parents-new-children)
-              (hash-remove! par-children parent-thread)
-              (hash-remove! par-checkpoint-chans parent-thread)
+              (set! par-children (hash-remove par-children parent-thread))
+              (set! par-checkpoint-chans (hash-remove par-checkpoint-chans parent-thread))
               (add-running-thread parent-thread)]
              [else
-              (hash-set! par-children parent-thread parents-new-children)])
+              (set! par-children (hash-set par-children parent-thread parents-new-children))])
            (loop)))
         (handle-evt
          pause-chan
          (λ (thread+resp-chan)
            (match-define (cons paused-thread resp-chan) thread+resp-chan)
            (remove-running-thread paused-thread)
-           (hash-set! paused-threads paused-thread resp-chan)
+           (set! paused-threads (hash-set paused-threads paused-thread resp-chan))
            (loop)))
         (handle-evt
          instant-chan
