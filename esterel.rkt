@@ -3,6 +3,7 @@
 
 (provide
  (rename-out [-reaction reaction])
+ (rename-out [-signal signal])
  par
  (contract-out
   [react! (-> reaction? (hash/c signal? boolean? #:immutable #t #:flat? #t))]
@@ -10,7 +11,6 @@
   [signal-value (->* (signal?)
                      #:pre (in-reaction?)
                      boolean?)]
-  [signal (-> signal?)]
   [signal? (-> any/c boolean?)]
   [emit (->* (signal?)
              #:pre (in-reaction?)
@@ -24,7 +24,19 @@
 
 (define current-signal-table (make-parameter #f))
 (define (in-reaction?) (and (current-signal-table) #t))
-  
+
+(define-syntax (-signal stx)
+  (syntax-case stx ()
+    [(_) #`(mk-signal.1 '#,(syntax-local-name))]
+    [x (identifier? #'x) #`mk-signal.0]))
+
+(define mk-signal.0
+  (let ([signal
+         (λ () (signal #f))])
+    signal))
+
+(define (mk-signal.1 x) (signal (format "~a" x)))
+
 (define (emit a-signal)
   (define signal-table (current-signal-table))
   (channel-put (signal-table-emit-chan signal-table) a-signal))
