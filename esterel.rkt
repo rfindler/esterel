@@ -56,17 +56,20 @@
 
 (define (par/proc thunks)
   (unless (in-reaction?) (error 'par "not in a reaction"))
+  (define s (make-semaphore 0))
   (define children-threads
     (for/set ([thunk (in-list thunks)])
-      (thread
-       (λ ()
-         (call-with-continuation-prompt
-          thunk
-          reaction-prompt-tag)))))
+      (define (thunk-to-run)
+        (semaphore-wait s)
+        (call-with-continuation-prompt
+         thunk
+         reaction-prompt-tag))
+      (thread (procedure-rename thunk-to-run (object-name thunk)))))
   (define signal-table (current-signal-table))
   (define checkpoint-chan (make-channel))
   (channel-put (signal-table-par-start-chan signal-table)
                (vector checkpoint-chan (current-thread) children-threads))
+  (for ([_ (in-list thunks)]) (semaphore-post s))
   (let loop ([pending-par-threads children-threads]
              [checkpoint-chan checkpoint-chan])
     (cond
