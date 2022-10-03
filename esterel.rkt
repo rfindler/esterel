@@ -346,27 +346,34 @@
              (loop child)))
          (define checkpoint-chan (make-channel))
          (define par-thread
-           (thread
-            (λ ()
-              (par-cont children-threads checkpoint-chan))))
+           (make-rebuilt-thread (λ () (par-cont children-threads checkpoint-chan))))
          (set! par-children (hash-set par-children par-thread children-threads))
-         (set! par-checkpoint-chans (hash-set par-checkpoint-chans checkpoint-chan))]
+         (set! par-checkpoint-chans (hash-set par-checkpoint-chans par-thread checkpoint-chan))
+         par-thread]
         [(rb-paused cont)
          (define pause-chan (make-channel))
          (define paused-thread
-           (thread
-            (λ ()
-              (cont pause-chan))))
+           (make-rebuilt-thread
+            (λ () (cont pause-chan))))
          (set! paused-threads (hash-set paused-threads paused-thread pause-chan))
          paused-thread]
         [(rb-blocked a-signal cont)
          (define resp-chan (make-channel))
          (define blocked-thread
-           (thread
-            (λ ()
-              (cont resp-chan))))
+           (make-rebuilt-thread
+            (λ () (cont resp-chan))))
          (add-signal-waiter! a-signal blocked-thread resp-chan)
          blocked-thread])))
+
+  ;; we didn't save the parameterization at the point of the pause/signal-value/par
+  ;; and so we cannot restore it here; not sure if this is important or not, tho!
+  (define (make-rebuilt-thread thunk)
+    (parameterize ([current-signal-table the-signal-table])
+      (thread
+       (λ ()
+         (call-with-continuation-prompt
+          thunk
+          reaction-prompt-tag)))))
 
   (let loop ()
     (cond

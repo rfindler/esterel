@@ -142,6 +142,98 @@
                               (pause)))))))
  (hash))
 
+;; popl 2019 figure 2
+(let ([sl (signal)]
+      [so1 (signal)]
+      [so2 (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (emit sl)
+     (if (signal-value sl)
+         (emit so1)
+         (emit so2))))
+   (hash sl #t so1 #t)))
+
+;; popl 2019 figure 3
+(let ([sl (signal)]
+      [so1 (signal)]
+      [so2 (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (par (emit sl)
+          (if (signal-value sl)
+              (emit so1)
+              (emit so2)))))
+   (hash sl #t so1 #t)))
+
+
+;; popl 2019 figure 4
+(let ([sl (signal)]
+      [so1 (signal)]
+      [so2 (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (if (signal-value sl)
+         (emit so1)
+         (emit so2))))
+   (hash sl #f so2 #t)))
+
+;; popl 2019 figure 5
+;; this one is wrong -- this is a non-constructive program, but we don't detect that
+;; and instead "live with" the assignment of both signals to absent
+(let ([sl1 (signal)]
+      [sl2 (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (par (when (signal-value sl1) (emit sl2))
+          (when (signal-value sl2) (emit sl1)))))
+   (hash sl1 #f sl2 #f)))
+
+
+;; popl 2019 figure 6
+(let ([sl (signal)]
+      [so1 (signal)]
+      [so2 (signal)])
+  (define r
+    (reaction
+     (par (begin (pause)
+                 (emit sl))
+          (if (signal-value sl) (emit so1) (emit so2)))))
+  (check-equal?
+   (react! r)
+   (hash sl #f so2 #t))
+  (check-equal?
+   (react! r)
+   (hash sl #t)))
+
+;; popl 2019 figure 7
+(let ([sl1 (signal)]
+      [sl2 (signal)]
+      [sl3 (signal)]
+      [so1 (signal)]
+      [so2 (signal)])
+  (define r
+    (reaction
+     (par (if (signal-value sl1)
+              (if (signal-value sl2)
+                  (emit so1)
+                  (emit sl3))
+              (if (signal-value sl2)
+                  (emit so2)
+                  (emit sl3)))
+          (begin
+            (emit sl2)
+            (when (signal-value sl3) (pause))
+            (emit sl1)))))
+  (check-equal?
+   (react! r)
+   (hash sl1 #t sl2 #t sl3 #f so1 #t)))
+
+;; popl 2019, figure 8
 (check-exn
  #rx"not constructive"
  (λ ()
@@ -151,3 +243,49 @@
        (if (signal-value s1)
            (void)
            (emit s1)))))))
+
+;; popl 2019, figure 9
+;; same deal as figure 5: this one is wrong -- this is a non-constructive program
+;; but we don't detect it
+(let ([s1 (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (if (signal-value s1)
+         (emit s1)
+         (void))))
+   (hash s1 #f)))
+
+
+;; popl 2019, figure 10 example 1
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (let ([s1 (signal)])
+     (react!
+      (reaction
+       (if (signal-value s1)
+           (emit s1)
+           (emit s1)))))))
+
+;; popl 2019, figure 10 example 1
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (let ([s1 (signal)])
+     (react!
+      (reaction
+       (if (signal-value s1) (void) (void))
+       (emit s1))))))
+
+;; popl 2019, figure 11
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (let ([sl1 (signal)]
+         [sl2 (signal)])
+     (react!
+      (reaction
+       (par (when (signal-value sl1) (emit sl2))
+            (begin (when (signal-value sl2) pause)
+                   (emit sl1))))))))
