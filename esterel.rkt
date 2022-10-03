@@ -399,6 +399,13 @@
            (set! paused-threads (hash))
            (loop))))]
 
+      ;; everyone's blocked on signals or paused; pick a signal to set to be absent
+      [(set-empty? running-threads)
+       (when (= 0 (hash-count signal-waiters))
+         (error 'esterel.rkt "internal error; expected someone to be blocked on a signal"))
+       (choose-a-signal-to-be-absent)
+       (loop)]
+
       ;; an instant is running, handle the various things that can happen during it
       [else
        (sync
@@ -414,8 +421,7 @@
            (match (hash-ref signals a-signal 'unknown)
              ['unknown
               (remove-running-thread the-thread)
-              (add-signal-waiter! a-signal the-thread resp-chan)
-              (when (set-empty? running-threads) (choose-a-signal-to-be-absent))]
+              (add-signal-waiter! a-signal the-thread resp-chan)]
              [#f
               (channel-put resp-chan #f)]
              [#t
