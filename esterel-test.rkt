@@ -141,3 +141,13 @@
                          (par (pause)
                               (pause)))))))
  (hash))
+
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (let ([s1 (signal)])
+     (react!
+      (reaction
+       (if (signal-value s1)
+           (void)
+           (emit s1)))))))

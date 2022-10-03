@@ -132,6 +132,8 @@
   (channel-put (signal-table-instant-chan signal-table) instant-complete-chan)
   (define maybe-signals (channel-get instant-complete-chan))
   (cond
+    [(equal? maybe-signals 'non-constructive)
+     (error 'react! "the program is not constructive")]
     [maybe-signals
      ;; copy the hash to an immutable one to hand out
      (for/hash ([(k v) (in-hash maybe-signals)])
@@ -157,6 +159,8 @@
                               pause-chan instant-chan
                               react-thread-done-chan)
     the-signal-table)
+
+  (define non-constructive-program? #f)
 
   ;; if a signal isn't mapped, its value isn't yet known
   (define/contract signals
@@ -236,22 +240,28 @@
         [wrong-guess?
          (set! wrong-guess? #f)
          (define-values (rollback-point choice) (fail! se-st))
-         (unless choice
-           (error 'esterel.rkt "non constructive program"))
-         (rollback! rollback-point)
-         choice]
+         (cond
+           [choice
+            (rollback! rollback-point)
+            choice]
+           [else
+            ;; after this function returns, we always go back to the
+            ;; main loop in the handler thread; with this flag set
+            ;; it always just disables everything
+            (set! non-constructive-program? #t)])]
         [else
          (continue! se-st
                     (current-rollback-point)
                     (hash-keys signals)
                     (hash-keys signal-waiters))]))
-    (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
-    (set! signals (hash-set signals signal-to-be-absent #f))
-    (set! signal-waiters (hash-remove signal-waiters signal-to-be-absent))
-    (for ([a-blocked-thread (in-list blocked-threads)])
-      (match-define (blocked-thread thread resp-chan) a-blocked-thread)
-      (channel-put resp-chan #f)
-      (add-running-thread thread)))
+    (unless non-constructive-program?
+      (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
+      (set! signals (hash-set signals signal-to-be-absent #f))
+      (set! signal-waiters (hash-remove signal-waiters signal-to-be-absent))
+      (for ([a-blocked-thread (in-list blocked-threads)])
+        (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+        (channel-put resp-chan #f)
+        (add-running-thread thread))))
 
   ;; rb-tree : rb-tree?
   ;; signals : (hash/c signal? boolean? #:flat? #t #:immutable #t)
@@ -343,6 +353,10 @@
 
   (let loop ()
     (cond
+      [non-constructive-program?
+       (channel-put instant-complete-chan 'non-constructive)
+       (loop)]
+
       ;; the instant is over
       [(and (= 0 (hash-count signal-waiters))
             (set-empty? running-threads)

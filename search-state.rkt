@@ -2,69 +2,125 @@
 (require "structs.rkt")
 (module+ test (require rackunit))
 
-#|
-
-This provides an API to select a set from a
-powerset of some given elements. The elements
-are specified with `add-element!`. The choose
-operation returns a subset of the elements with
-the constraint that it is not a super set of
-any of the sets that have been passed to
-`add-subset`. If there is no such subset,
-it returns #f.
-
-Currently the implementation considers only
-singletons and returns #f when it cannot find
-one of those.
-
-idea:
- - take the smallest subset that's known to not fail and add one element to it...after a failure
- - after a success, just add one element to the previous success
-
-|#
-
-
 (provide
  (contract-out
   [new-search-state (-> search-state?)]
+
+  ;; we need to choose a signal to be absent when `continue!`
+  ;; is invoked; make the choice, note the rollback point
+  ;; and return the choice
   [continue! (->i ([s search-state?]
                    [rollback any/c]
-                   [determined (listof signal?)]
+                   [known-signals (listof signal?)]
                    [choices (non-empty-listof signal?)])
                   [choice signal?])]
+
+  ;; when `fail!` is invoked, we know the last choice that was made didn't work
+  ;; out (but we don't know which signal that was chosen was the wrong choice, sadly).
+  ;; The result should be a place to roll back to (one of the arguments passed to
+  ;; `continue!` in the past) and a new signal to try from that state. Or, if the
+  ;; search space has been exhaused, the `choice` result should be #f.
   [fail! (->i ([s search-state?])
               (values [rollback any/c] [choice (or/c #f signal?)]))]
   ))
 
-(struct choice-point (rollback determined choices choice))
-;; successes : (listof (cons/c rollback (listof signal?)))
-(struct search-state (successes) #:mutable)
-(define (new-search-state) (search-state (set)))
+;; search-tree : search-tree
+;; latest-leaf : #f or search-tree   -- only #f when we've not yet started the search
+(struct search-state (root latest-leaf) #:mutable)
 
-(define (continue! se-st rollback determined choices)
-  (set-search-state-successes!
-   se-st
-   (cons (choice-point rollback determined choices (car choices))
-         (search-state-successes se-st)))
-  (car choices))
+;; search-tree = one of:
+;;   'unk  -- means that we have not explored here
+;;   'fail -- means that this was a failure
+;;   node  -- means that there is more structure here
+
+;; children : (listof link?)
+(struct node (rollback known-signals choices children) #:transparent)
+
+;; choice : signal -- this is the signal we chose to not emit
+;; subtree : search-tree -- this is what happened when we explored it
+(struct link (choice [subtree #:mutable]) #:transparent)
+
+
+(define (new-search-state) (search-state 'unk #f))
+
+(define (continue! se-st rollback known-signals choices)
+  (cond
+    [(equal? (search-state-root se-st) 'unk)
+     (define root-node
+       (node rollback known-signals choices
+             (for/list ([choice (in-list choices)])
+               (link choice 'unk))))
+     (set-search-state-root! se-st root-node)
+     (set-search-state-latest-leaf! se-st (car (node-children root-node)))]
+    [else
+     (define latest-leaf (search-state-latest-leaf se-st))
+     (define new-children
+       (for/list ([choice (in-list choices)])
+         (link choice 'unk)))
+     (define new-node
+       (node rollback known-signals choices new-children))
+     (set-link-subtree! latest-leaf new-node)
+     (set-search-state-latest-leaf! se-st (car new-children))])
+  (link-choice (search-state-latest-leaf se-st)))
+
 
 (define (fail! se-st)
-  (void))
+  ;; note that the current leaf failed
+  (set-link-subtree! (search-state-latest-leaf se-st) 'fail)
+
+  (let/ec escape
+    (define root (search-state-root se-st))
+
+    ;; check if any of the children of the root are unexplored; if so use it
+    (for ([child (in-list (node-children (search-state-root se-st)))])
+      (when (equal? 'unk (link-subtree child))
+        (set-search-state-latest-leaf! se-st child)
+        (escape (node-rollback root)
+                (link-choice child))))
+
+    ;; if all of the root's children are explored, see if they all failed;
+    ;; if so we know that this is a non-constructive program
+    (define all-failures?
+      (for/and ([child (in-list (node-children (search-state-root se-st)))])
+        (equal? 'fail (link-subtree child))))
+    (when all-failures?
+      (escape #f #f))
+
+    ;; here we need to do some more searching, but I don't have an algorithm
+    ;; for that yet.....
+    (error 'fail! "I'm not sure what to do...")))
 
 (module+ test
   (define s1 (signal))
   (define s2 (signal))
-  
+
   (check-equal?
    (let ([se-st (new-search-state)])
      (continue! se-st 1 '() (list s1)))
    s1)
+  (check-equal?
+   (let ([se-st (new-search-state)])
+     (continue! se-st 1 '() (list s1 s2)))
+   s1)
+  (check-equal?
+   (let ([se-st (new-search-state)])
+     (continue! se-st 1 '() (list s1 s2))
+     (continue! se-st 1 '() (list s2)))
+   s2)
 
   (check-equal?
-   (call-with-values
-    (λ ()
-      (let ([state (new-search-state)])
-        (fail! (list s1))))
-    list)
-   (list s1)))
+   (let ([se-st (new-search-state)])
+     (continue! se-st 1 '() (list s1 s2))
+     (call-with-values
+      (λ () (fail! se-st))
+      list))
+   (list 1 s2))
 
+  (check-equal?
+   (let ([se-st (new-search-state)])
+     (continue! se-st 1 '() (list s1 s2))
+     (fail! se-st)
+     (call-with-values
+      (λ () (fail! se-st))
+      list))
+   (list #f #f)))
