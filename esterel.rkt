@@ -17,6 +17,8 @@
              void?)]
   [pause (->* () #:pre (in-reaction?) void?)]))
 
+(define-logger esterel)
+
 (struct checkpoint-request (resp-chan))
 (define reaction-prompt-tag (make-continuation-prompt-tag 'reaction))
 
@@ -357,6 +359,7 @@
   (let loop ()
     (cond
       [non-constructive-program?
+       (log-esterel-debug "~a: non constructive program" (eq-hash-code (current-thread)))
        (channel-put instant-complete-chan 'non-constructive)
        (loop)]
 
@@ -364,6 +367,7 @@
       [(and (= 0 (hash-count signal-waiters))
             (set-empty? running-threads)
             instant-complete-chan)
+       (log-esterel-debug "~a: instant is over: ~s" (eq-hash-code (current-thread)) wrong-guess?)
        (cond
          [wrong-guess?
           ;; although we got to the end of the instant, we did so with
@@ -379,6 +383,7 @@
 
       ;; an instant is not runnning, wait for one to start (but don't wait for other stuff)
       [(not instant-complete-chan)
+       (log-esterel-debug "~a: waiting for an instant to start" (eq-hash-code (current-thread)))
        (sync
         (handle-evt
          instant-chan
@@ -401,6 +406,11 @@
          signal-chan
          (λ (s+resp)
            (match-define (vector a-signal the-thread resp-chan) s+resp)
+           (log-esterel-debug "~a: waiting on a signal ~s ~s ~s"
+                              (eq-hash-code (current-thread))
+                              (eq-hash-code a-signal)
+                              (hash-ref signals a-signal 'unknown)
+                              the-thread)
            (match (hash-ref signals a-signal 'unknown)
              ['unknown
               (remove-running-thread the-thread)
@@ -414,6 +424,10 @@
         (handle-evt
          emit-chan
          (λ (a-signal)
+           (log-esterel-debug "~a: emitting ~s ~s"
+                              (eq-hash-code (current-thread))
+                              (eq-hash-code a-signal)
+                              (hash-ref signals a-signal 'unknown))
            (match (hash-ref signals a-signal 'unknown)
              ['unknown
               (set! signals (hash-set signals a-signal #t))
@@ -432,6 +446,9 @@
          (λ (checkpoint-chan+parent+children-threads)
            (match-define (vector checkpoint-chan parent-thread children-threads)
              checkpoint-chan+parent+children-threads)
+           (log-esterel-debug "~a: starting a par ~s ~s"
+                              (eq-hash-code (current-thread))
+                              parent-thread children-threads)
            (add-running-threads children-threads)
            (remove-running-thread parent-thread)
            (set! par-children (hash-set par-children parent-thread children-threads))
@@ -441,6 +458,9 @@
          par-partly-done-chan
          (λ (parent-thread+done-thread)
            (match-define (cons parent-thread done-thread) parent-thread+done-thread)
+           (log-esterel-debug "~a: one thread in a par finished ~s"
+                              (eq-hash-code (current-thread))
+                              done-thread)
            (remove-running-thread done-thread)
            (define parents-new-children
              (set-remove (hash-ref par-children parent-thread) done-thread))
@@ -456,6 +476,7 @@
          pause-chan
          (λ (thread+resp-chan)
            (match-define (cons paused-thread resp-chan) thread+resp-chan)
+           (log-esterel-debug "~a: paused ~s" (eq-hash-code (current-thread)) paused-thread)
            (remove-running-thread paused-thread)
            (set! paused-threads (hash-set paused-threads paused-thread resp-chan))
            (loop)))
@@ -469,6 +490,7 @@
         (handle-evt
          react-thread-done-chan
          (λ (_)
+           (log-esterel-debug "~a: main reaction thread done" (eq-hash-code (current-thread)))
            (remove-running-thread reaction-thread)
            (loop)))
         )])))
