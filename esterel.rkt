@@ -67,7 +67,8 @@
   (define checkpoint-chan (make-channel))
   (channel-put (signal-table-par-start-chan signal-table)
                (vector checkpoint-chan (current-thread) children-threads))
-  (let loop ([pending-par-threads children-threads])
+  (let loop ([pending-par-threads children-threads]
+             [checkpoint-chan checkpoint-chan])
     (cond
       [(set-empty? pending-par-threads) (void)]
       [else
@@ -76,19 +77,21 @@
         (handle-evt
          checkpoint-chan
          (λ (resp-chan)
-           (loop
-            (call/cc
-             (λ (k)
-               (channel-put resp-chan k)
-               pending-par-threads)
-             reaction-prompt-tag))))
+           (define-values (new-pending-par-threads new-checkpoint-chan)
+             (call/cc
+              (λ (k)
+                (channel-put resp-chan k)
+                (values pending-par-threads checkpoint-chan))
+              reaction-prompt-tag))
+           (loop new-pending-par-threads new-checkpoint-chan)))
         (for/list ([pending-par-thread (in-set pending-par-threads)])
           (handle-evt
            pending-par-thread
            (λ (_)
              (channel-put (signal-table-par-partly-done-chan signal-table)
                           (cons (current-thread) pending-par-thread))
-             (loop (set-remove pending-par-threads pending-par-thread))))))])))
+             (loop (set-remove pending-par-threads pending-par-thread)
+                   checkpoint-chan)))))])))
 
 (define (pause)
   (define signal-table (current-signal-table))
@@ -167,14 +170,18 @@
   (define/contract signal-waiters
     (hash/c signal? (listof blocked-thread?) #:flat? #t #:immutable #t)
     (hash))
+  (define (add-signal-waiter! a-signal the-thread resp-chan)
+    (define a-blocked-thread (blocked-thread the-thread resp-chan))
+    (define new-waiters (cons a-blocked-thread (hash-ref signal-waiters a-signal '())))
+    (set! signal-waiters (hash-set signal-waiters a-signal new-waiters)))
 
-  ;; find-signal : thread -> blocked-thread or #f
+  ;; find-signal : thread -> (cons signal blocked-thread) or #f
   ;; returns the signal that `thread` is blocked on, or #f it is isn't blocked on a signal
   (define (find-signal thread)
     (for*/or ([(signal blocked-threads) (in-hash signal-waiters)]
               [a-blocked-thread (in-list blocked-threads)])
       (and (equal? (blocked-thread-thread a-blocked-thread) thread)
-           a-blocked-thread)))
+           (cons signal a-blocked-thread))))
 
   ;; each paused thread is blocked on the corresponding channel
   (define/contract paused-threads
@@ -184,6 +191,7 @@
   ;; (set/c hash)
   ;; all of the threads in the reaction that aren't
   ;;    blocked on a signal and have not paused
+  ;;    and are not a par-parent thread
   (define running-threads (set reaction-thread))
   (define/contract (add-running-thread t)
     (-> thread? void?)
@@ -248,8 +256,15 @@
   ;; rb-tree : rb-tree?
   ;; signals : (hash/c signal? boolean? #:flat? #t #:immutable #t)
   (struct rollback-point (rb-tree signals))
-  (define (rollback! a-rollback-point) (void))
-  (define (current-rollback-point) (rollback-point (collect-rollback-points) signals))
+  (define (rollback! a-rollback-point)
+    (match-define (rollback-point rb-tree rb-signals) a-rollback-point)
+    (set! signals rb-signals)
+    (set! signal-waiters (hash))
+    (set! paused-threads (hash))
+    (set! par-children (hash))
+    (set! par-checkpoint-chans (hash))
+    (set! reaction-thread (rebuild-threads-from-rb-tree rb-tree)))
+  (define (current-rollback-point) (rollback-point (build-rb-tree-from-current-state) signals))
 
   (struct rb-tree ())
 
@@ -261,10 +276,10 @@
   (struct rb-paused rb-tree (cont))
 
   ;; cont : continuation[channel]
-  (struct rb-blocked rb-tree (cont))
+  (struct rb-blocked rb-tree (signal cont))
 
-  ;; collect-rollback-points : -> rb-tree?
-  (define (collect-rollback-points)
+  ;; build-rb-tree-from-current-state : -> rb-tree?
+  (define (build-rb-tree-from-current-state)
     (define k-chan (make-channel))
     (define a-checkpoint-request (checkpoint-request k-chan))
     (let loop ([thread reaction-thread])
@@ -287,22 +302,63 @@
          (rb-paused (channel-get k-chan))]
         [(find-signal thread)
          =>
-         (λ (a-blocked-thread)
-           (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+         (λ (signal+blocked-thread)
+           (match-define (cons signal (blocked-thread thread resp-chan)) signal+blocked-thread)
            (channel-put resp-chan a-checkpoint-request)
-           (rb-blocked (channel-get k-chan)))]
+           (rb-blocked signal (channel-get k-chan)))]
         [else (error 'collect-rollback-points "lost a thread ~s" thread)])))
+
+  ;; rebuild-threads-from-rb-tree : rb-tree? -> thread
+  ;; returns the new reaction thread
+  (define (rebuild-threads-from-rb-tree rb-tree)
+    (let loop ([rb-tree rb-tree])
+      (match rb-tree
+        [(rb-par par-cont rb-children)
+         (define children-threads
+           (for/set ([child (in-set rb-children)])
+             (loop child)))
+         (define checkpoint-chan (make-channel))
+         (define par-thread
+           (thread
+            (λ ()
+              (par-cont children-threads checkpoint-chan))))
+         (set! par-children (hash-set par-children par-thread children-threads))
+         (set! par-checkpoint-chans (hash-set par-checkpoint-chans checkpoint-chan))]
+        [(rb-paused cont)
+         (define pause-chan (make-channel))
+         (define paused-thread
+           (thread
+            (λ ()
+              (cont pause-chan))))
+         (set! paused-threads (hash-set paused-threads paused-thread pause-chan))
+         paused-thread]
+        [(rb-blocked a-signal cont)
+         (define resp-chan (make-channel))
+         (define blocked-thread
+           (thread
+            (λ ()
+              (cont resp-chan))))
+         (add-signal-waiter! a-signal blocked-thread resp-chan)
+         blocked-thread])))
 
   (let loop ()
     (cond
-      ;; the instant is over, close it down and let `react!` know
+      ;; the instant is over
       [(and (= 0 (hash-count signal-waiters))
             (set-empty? running-threads)
             instant-complete-chan)
-       (channel-put instant-complete-chan signals)
-       (set! instant-complete-chan #f)
-       (set! signals (hash)) ;; reset the signals in preparation for the next instant
-       (loop)]
+       (cond
+         [wrong-guess?
+          ;; although we got to the end of the instant, we did so with
+          ;; a wrong guess for signal absence; go back and try again
+          (choose-a-signal-to-be-absent)
+          (loop)]
+         [else
+          ;; close the instant down and let `react!` know
+          (channel-put instant-complete-chan signals)
+          (set! instant-complete-chan #f)
+          (set! signals (hash)) ;; reset the signals in preparation for the next instant
+          (loop)])]
 
       ;; an instant is not runnning, wait for one to start (but don't wait for other stuff)
       [(not instant-complete-chan)
@@ -331,9 +387,7 @@
            (match (hash-ref signals a-signal 'unknown)
              ['unknown
               (remove-running-thread the-thread)
-              (define a-blocked-thread (blocked-thread the-thread resp-chan))
-              (define new-waiters (cons a-blocked-thread (hash-ref signal-waiters a-signal '())))
-              (set! signal-waiters (hash-set signal-waiters a-signal new-waiters))
+              (add-signal-waiter! a-signal the-thread resp-chan)
               (when (set-empty? running-threads) (choose-a-signal-to-be-absent))]
              [#f
               (channel-put resp-chan #f)]
