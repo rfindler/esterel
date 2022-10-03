@@ -78,17 +78,24 @@
         (escape (node-rollback root)
                 (link-choice child))))
 
-    ;; if all of the root's children are explored, see if they all failed;
-    ;; if so we know that this is a non-constructive program
-    (define all-failures?
-      (for/and ([child (in-list (node-children (search-state-root se-st)))])
-        (equal? 'fail (link-subtree child))))
-    (when all-failures?
+    ;; if everything is failed, we know
+    ;; this is a non-constructive program
+    (when (search-tree-is-all-failed? (search-state-root se-st))
       (escape #f #f))
 
     ;; here we need to do some more searching, but I don't have an algorithm
     ;; for that yet.....
+    (pretty-write (search-state-root se-st))
     (error 'fail! "I'm not sure what to do...")))
+
+(define (search-tree-is-all-failed? st)
+  (let loop ([st st])
+    (match st
+      ['fail #t]
+      ['unk #f]
+      [(node rollback know-signals choices children)
+       (for/and ([child (in-list children)])
+         (loop (link-subtree child)))])))
 
 (module+ test
   (define s1 (signal))
