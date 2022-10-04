@@ -289,3 +289,14 @@
        (par (when (signal-value sl1) (emit sl2))
             (begin (when (signal-value sl2) pause)
                    (emit sl1))))))))
+
+;; popl 2019, figure 25
+(let ([s-outer (signal)]
+      [s-inner (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (begin
+       (signal-value s-outer)
+       (when (signal-value s-inner) (emit s-outer)))))
+   (hash s-outer #f s-inner #f)))
