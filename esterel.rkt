@@ -5,6 +5,7 @@
  (rename-out [-reaction reaction])
  (rename-out [-signal signal])
  par
+ suspend
  (contract-out
   [react! (-> reaction? (hash/c signal? boolean? #:immutable #t #:flat? #t))]
   [in-reaction? (-> boolean?)]
@@ -125,8 +126,31 @@
            (channel-put val k)
            resp-chan)
          reaction-prompt-tag))]
-      [else val])))
+      [else
+       (define iter
+         (continuation-mark-set->iterator
+          (current-continuation-marks)
+          (list suspend-mark)))
+       (let loop ([iter iter])
+         (define-values (next-val next-iter) (iter))
+         (when next-val
+           (when (signal-value (vector-ref next-val 0)) (pause))
+           (loop next-iter)))
+       val])))
 
+(define-syntax (suspend stx)
+  (syntax-case stx ()
+    [(_ e s)
+     #'(suspend/proc (λ () e) s)]))
+
+(define suspend-mark (gensym 'suspend))
+(define (suspend/proc body signal)
+  (unless (in-reaction?) (error 'suspend "not in a reaction"))
+  (with-continuation-mark suspend-mark signal
+    ;; we don't want the body to be in tail position
+    (begin0
+      (body)
+      (void))))
 
 (struct signal-table (signal-chan
                       emit-chan

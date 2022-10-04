@@ -142,6 +142,20 @@
                               (pause)))))))
  (hash))
 
+(let ()
+  (define s1 (signal))
+  (define s2 (signal))
+  (define r
+    (reaction
+     (par
+      (let loop () (suspend (begin (pause) (emit s2)) s1) (loop))
+      (begin (emit s1) (pause) (emit s1)))))
+  (check-equal? (react! r) (hash s1 #t))
+  (check-equal? (react! r) (hash s1 #t))
+  (check-equal? (react! r) (hash s1 #f s2 #t))
+  (check-equal? (react! r) (hash s1 #f s2 #t)))
+
+
 ;; popl 2019 figure 2
 (let ([sl (signal)]
       [so1 (signal)]
