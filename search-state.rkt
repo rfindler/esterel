@@ -98,8 +98,8 @@
          (loop (link-subtree child)))])))
 
 (module+ test
-  (define s1 (signal))
-  (define s2 (signal))
+  (define s1 (signal "s1"))
+  (define s2 (signal "s2"))
 
   (check-equal?
    (let ([se-st (new-search-state)])
