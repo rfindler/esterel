@@ -155,6 +155,17 @@
   (check-equal? (react! r) (hash s1 #f s2 #t))
   (check-equal? (react! r) (hash s1 #f s2 #t)))
 
+(let ([s1 (signal)]
+      [s2 (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (with-trap t
+       (emit s1)
+       (exit-trap t)
+       (emit s2))))
+   (hash s1 #t)))
+
 ;                                                                                                            
 ;                                                                                                            
 ;                                                                                                            

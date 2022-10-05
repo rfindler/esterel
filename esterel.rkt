@@ -1,11 +1,13 @@
 #lang racket
-(require "structs.rkt" "search-state.rkt")
+(require "structs.rkt" "search-state.rkt"
+         (for-syntax syntax/parse))
 
 (provide
  (rename-out [-reaction reaction])
  (rename-out [-signal signal])
  par
  suspend
+ with-trap exit-trap
  (contract-out
   [react! (-> reaction? (hash/c signal? boolean? #:immutable #t #:flat? #t))]
   [in-reaction? (-> boolean?)]
@@ -72,12 +74,16 @@
 (define (par/proc thunks)
   (unless (in-reaction?) (error 'par "not in a reaction"))
   (define s (make-semaphore 0))
+  (define current-trap-counter (get-current-trap-counter))
   (define children-threads
     (for/set ([thunk (in-list thunks)])
       (define (thunk-to-run)
         (semaphore-wait s)
         (call-with-continuation-prompt
-         thunk
+         (λ ()
+           (with-continuation-mark trap-start-of-par-mark current-trap-counter
+             (with-continuation-mark trap-counter-mark current-trap-counter
+               (thunk))))
          reaction-prompt-tag))
       (thread (procedure-rename thunk-to-run (object-name thunk)))))
   (define signal-table (current-signal-table))
@@ -151,6 +157,45 @@
     (begin0
       (body)
       (void))))
+
+(define-syntax (with-trap stx)
+  (syntax-parse stx
+    [(_ t:identifier body1 body ...)
+     #'(let/ec escape
+         (let ([t (build-trap 't escape)])
+           (with-trap/proc t (λ () body1 body ...))))]))
+
+(define (build-trap name escape)
+  (trap name (get-current-trap-counter) escape))
+
+(define (get-current-trap-counter) (or (continuation-mark-set-first #f trap-counter-mark) 0))
+(define (get-start-of-par-counter) (continuation-mark-set-first #f trap-start-of-par-mark))
+(define trap-counter-mark (gensym 'trap-counter))
+(define trap-start-of-par-mark (gensym 'trap-counter))
+
+(define (with-trap/proc trap body)
+  (define counter (trap-counter trap))
+  (with-continuation-mark trap-counter-mark (+ counter 1)
+    ;; we don't need to add something to block
+    ;; multiple uses of the mark because the let/ec
+    ;; introduces a non-tail context (for repeated
+    ;; `with-mark`s).
+    (body)))
+
+(define (exit-trap trap)
+  (define start-of-par-counter (get-start-of-par-counter))
+  (cond
+    [(or (not start-of-par-counter)
+         ;; the start of the par value will be the same as
+         ;; the counter used for the first trap inside the par
+         ;; so this should be an inclusive comparison
+         (<= start-of-par-counter (trap-counter trap)))
+     ((trap-escape trap) (void))]
+    [else
+     ;; here we need to communicate with the instant loop
+     ;; to drop sibling pauses and then
+     ;; end this branch of the par
+     (printf "trap exits the par...\n")]))
 
 (struct signal-table (signal-chan
                       emit-chan
@@ -603,3 +648,4 @@
            (remove-running-thread reaction-thread)
            (loop)))
         )])))
+
