@@ -229,6 +229,16 @@
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash s3 #t)))
 
+(let ()
+  (define r
+    (reaction
+     (with-trap T1
+       (par (exit-trap T1)))
+     (par (pause)
+          (pause))))
+
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash)))
 
 
 

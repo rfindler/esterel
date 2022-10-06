@@ -735,6 +735,7 @@
              [(set-empty? parents-new-children)
               (set! par-children (hash-remove par-children parent-thread))
               (set! par-checkpoint-chans (hash-remove par-checkpoint-chans parent-thread))
+              (set! par-trap (hash-remove par-trap parent-thread))
               (add-running-thread parent-thread)]
              [else
               (set! par-children (hash-set par-children parent-thread parents-new-children))])
@@ -767,4 +768,3 @@
            (remove-running-thread reaction-thread)
            (loop)))
         )])))
-
