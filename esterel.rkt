@@ -81,7 +81,7 @@
       ;; result-chan : channel[(or/c #f trap?)]
       (define par-child-result-chan (make-channel))
       (define par-child-thread
-        (make-rebuilt-thread
+        (make-esterel-thread
          #:parent-thread parent-thread
          #:before-par-trap-counter before-par-trap-counter
          #:par-child-result-chan par-child-result-chan
@@ -126,7 +126,16 @@
 
 ;; we didn't save the parameterization at the point of the pause/signal-value/par
 ;; and so we cannot restore it here; not sure if this is important or not, tho!
-(define (make-rebuilt-thread #:parent-thread parent-thread
+;; this function creates the par children thread when a par is first encountered
+;; and it also creates the threads for when we fall back to a previous state
+;; in the search for which signals to be absent. It doesn't create the main
+;; reaction thread but probably things should be cleaned up a bit so it can
+;; if before-par-trap-counter isn't #f, then we know we're creating a par child
+;; thread and we set up that machinery; we don't need the marks it the thread is
+;; the outermost thread because the code that looks up the marks knows what to
+;; do when it does not find the mark there (this might also be something to clean
+;; up and make more uniform)
+(define (make-esterel-thread #:parent-thread parent-thread
                              #:before-par-trap-counter before-par-trap-counter
                              #:par-child-result-chan par-child-result-chan
                              thunk)
@@ -519,7 +528,7 @@
          (define sema (make-semaphore))
          (define par-parent-thread
            (parameterize ([current-signal-table the-signal-table])
-             (make-rebuilt-thread
+             (make-esterel-thread
               #:parent-thread parent-thread
               #:before-par-trap-counter parent-before-par-trap-counter
               #:par-child-result-chan par-child-result-chan
@@ -547,7 +556,7 @@
          (define pause-chan (make-channel))
          (define paused-thread
            (parameterize ([current-signal-table the-signal-table])
-             (make-rebuilt-thread
+             (make-esterel-thread
               #:parent-thread parent-thread
               #:before-par-trap-counter parent-before-par-trap-counter
               #:par-child-result-chan par-child-result-chan
@@ -558,7 +567,7 @@
          (define resp-chan (make-channel))
          (define blocked-thread
            (parameterize ([current-signal-table the-signal-table])
-             (make-rebuilt-thread
+             (make-esterel-thread
               #:parent-thread parent-thread
               #:before-par-trap-counter parent-before-par-trap-counter
               #:par-child-result-chan par-child-result-chan
