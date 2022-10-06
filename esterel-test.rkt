@@ -166,6 +166,73 @@
        (emit s2))))
    (hash s1 #t)))
 
+(let ([s1 (signal)]
+      [s2 (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (with-trap t
+       (par (emit s1)
+            (exit-trap t))
+       (emit s2))))
+   (hash s1 #t)))
+
+(let ([s1 (signal)]
+      [s2 (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (with-trap t1
+       (with-trap t2
+         (par (exit-trap t1)
+              (exit-trap t2))
+         (emit s1))
+       (emit s2))))
+   (hash)))
+
+(let ([s1 (signal)]
+      [s2 (signal)])
+  (check-equal?
+   (react!
+    (reaction
+     (with-trap t1
+       (with-trap t2
+         (with-trap t3
+           (with-trap t4
+             (par (par (exit-trap t1)
+                       (exit-trap t4))
+                  (par (exit-trap t2)
+                       (emit s1))))))
+       (emit s2))))
+   (hash s1 #t)))
+
+(let ([s1 (signal)]
+      [s2 (signal)])
+  (define r
+    (reaction
+     (with-trap t1
+       (par (begin (pause) (emit s1))
+            (exit-trap t1)))))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash)))
+
+(let ([s1 (signal)]
+      [s2 (signal)]
+      [s3 (signal)])
+  (define r
+    (reaction
+     (with-trap t1
+       (par (begin (pause) (emit s1))
+            (exit-trap t1)))
+     (pause)
+     (emit s3)))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash s3 #t)))
+
+
+
+
+
 ;                                                                                                            
 ;                                                                                                            
 ;                                                                                                            
