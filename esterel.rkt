@@ -85,6 +85,7 @@
          #:parent-thread parent-thread
          #:before-par-trap-counter before-par-trap-counter
          #:par-child-result-chan par-child-result-chan
+         #:wait-on-sema s
          thunk))
       (cons par-child-result-chan par-child-thread)))
   (define signal-table (current-signal-table))
@@ -138,11 +139,13 @@
 (define (make-esterel-thread #:parent-thread parent-thread
                              #:before-par-trap-counter before-par-trap-counter
                              #:par-child-result-chan par-child-result-chan
+                             #:wait-on-sema [s #f]
                              thunk)
   (define thunk-to-run
     (cond
       [before-par-trap-counter
        (λ ()
+         (when s (semaphore-wait s))
          (channel-put
           par-child-result-chan
           (let/ec escape
