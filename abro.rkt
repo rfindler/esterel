@@ -1,6 +1,13 @@
 #lang racket
 (require "esterel.rkt")
 
+#|
+
+This is a translation of the code in 1.6 of
+_Compiling Esterel_; the test cases are as
+given in figure 1.2
+
+|#
 
 (define A (signal))
 (define B (signal))
@@ -40,7 +47,7 @@
                 (emit O))
          R)
         (begin
-          (pause)
+          #;0 (pause)
           #;1 (emit A) (emit B) (pause)
           #;2 (emit A) (pause)
           #;3 (emit R) (pause)
