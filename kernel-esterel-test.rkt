@@ -1,5 +1,5 @@
 #lang racket
-(require "esterel.rkt" rackunit)
+(require "kernel-esterel.rkt" rackunit)
 
 (check-equal?
  (react!
@@ -241,6 +241,22 @@
   (check-equal? (react! r) (hash)))
 
 
+(let ()
+  (define i (signal))
+  (define o (signal))
+  (define r
+    (reaction
+     (let loop ()
+       (when (signal-value i)
+         (emit o))
+       (pause)
+       (loop))))
+  (check-equal? (react! r) (hash i #f))
+  (check-equal? (react! r) (hash i #f))
+  (check-equal? (react! r #:emit (list i)) (hash i #t o #t))
+  (check-equal? (react! r #:emit (list i)) (hash i #t o #t))
+  (check-equal? (react! r) (hash i #f))
+  (check-equal? (react! r #:emit (list i)) (hash i #t o #t)))
 
 
 ;                                                                                                            
