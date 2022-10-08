@@ -33,6 +33,7 @@
 (define-syntax (-signal stx)
   (syntax-case stx ()
     [(_) #`(mk-signal.1 '#,(syntax-local-name))]
+    [(_ #:name n) #`(mk-signal.1 n)]
     [x (identifier? #'x) #`mk-signal.0]))
 
 (define mk-signal.0
