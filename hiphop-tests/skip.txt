@@ -1,0 +1,30 @@
+abortpre		pre
+atom-dep-par		atom
+atom-exprs		atom
+atom			atom
+await-count-pre		pre
+await-valued		embedded JS
+await-valued2		embedded JS
+emitnovalue		embedded JS
+emitvaluedlocal1	embedded JS
+emitvaluedlocal2	embedded JS
+example-json		embedded JS
+if1			embedded JS
+incr-type		embedded JS
+incr			embedded JS
+mirror			embedded JS
+p18valued		embedded JS
+parvalued		embedded JS
+parvalued2		embedded JS
+prepure			pre
+prepure2		pre
+reactfunc		embedded JS
+reincar2-untyped	embedded JS
+reincar2		embedded JS
+stopprop		embedded JS
+toogle-untyped		embedded JS
+toogle			embedded JS
+value1			embedded JS
+value2-untyped		embedded JS
+valuepre1		embedded JS
+p19		pre
