@@ -375,8 +375,14 @@
   (define (remove-running-thread t)
     (set! running-threads (set-remove running-threads t)))
 
+  ;; a parent thread (of a par) points to a set of its paused children
+  (define/contract par-paused-children
+    (hash/c thread? (set/c thread?) #:flat? #t #:immutable #t)
+    (hash))
+
   ;; a parent thread (of a par) points to a set of its children
-  (define/contract par-children
+  ;; that are either still running or are blocked on signal-value
+  (define/contract par-active-children
     (hash/c thread? (set/c thread?) #:flat? #t #:immutable #t)
     (hash))
 
@@ -468,7 +474,8 @@
     (set! signals rb-signals)
     (set! signal-waiters (hash))
     (set! paused-threads (hash))
-    (set! par-children (hash))
+    (set! par-paused-children (hash))
+    (set! par-active-children (hash))
     (set! par-checkpoint-chans (hash))
     (set! reaction-thread (rebuild-threads-from-rb-tree rb-tree)))
   (define (current-rollback-point) (rollback-point (build-rb-tree-from-current-state) signals))
@@ -477,7 +484,7 @@
 
   ;; cont : continuation[listof thread]
   ;; children : (set/c rb?)
-  (struct rb-par rb-tree (cont children current-trap before-par-trap-counter))
+  (struct rb-par rb-tree (cont paused-children active-children current-trap before-par-trap-counter))
 
   ;; cont : continuation[channel]
   (struct rb-paused rb-tree (cont))
@@ -491,7 +498,8 @@
     (define a-checkpoint-request (checkpoint-request k-chan))
     (let loop ([thread reaction-thread])
       (cond
-        [(hash-has-key? par-children thread)
+        [(or (hash-has-key? par-paused-children thread)
+             (hash-has-key? par-active-children thread))
          (define checkpoint-chan (hash-ref par-checkpoint-chans thread))
          (channel-put checkpoint-chan k-chan)
          ;; these continuations accept a list of threads to wait for and
@@ -502,7 +510,10 @@
            (channel-get k-chan))
          (rb-par
           par-continuation
-          (for/set ([child (in-set (hash-ref par-children thread))])
+          (for/set ([child (in-set (hash-ref par-paused-children thread set))])
+            (define chan (make-channel))
+            (loop child))
+          (for/set ([child (in-set (hash-ref par-active-children thread set))])
             (define chan (make-channel))
             (loop child))
           current-trap
@@ -527,7 +538,7 @@
                [par-child-result-chan #f]
                [parent-before-par-trap-counter #f])
       (match rb-tree
-        [(rb-par par-cont rb-children current-trap before-par-trap-counter)
+        [(rb-par par-cont rb-paused-children rb-active-children current-trap before-par-trap-counter)
          ;; we have to do this strange dance with `sema` in order to make
          ;; the recursive call to `loop`, as we need the par parent
          ;; thread to make the call. So we avoid race
@@ -542,7 +553,7 @@
               #:par-child-result-chan par-child-result-chan
               (λ ()
                 (define par-thread (current-thread))
-                (define result-chans+children-threads
+                (define (get-result-chans+par-children rb-children)
                   (for/set ([child (in-set rb-children)])
                     (define par-child-result-chan (make-channel))
                     (cons par-child-result-chan
@@ -550,26 +561,35 @@
                                 par-thread
                                 par-child-result-chan
                                 before-par-trap-counter))))
-                (define this-par-children
+                (define this-par-result-chans+paused-children
+                  (get-result-chans+par-children rb-paused-children))
+                (define this-par-result-chans+active-children
+                  (get-result-chans+par-children rb-active-children))
+                (define (drop-result-chans result-chans+children-threads)
                   (for/set ([result-chan+children-thread (in-set result-chans+children-threads)])
                     (cdr result-chan+children-thread)))
                 (define checkpoint-chan (make-channel))
-                (set! par-children (hash-set par-children par-thread this-par-children))
+                (set! par-paused-children (hash-set par-paused-children par-thread
+                                                    (drop-result-chans this-par-result-chans+paused-children)))
+                (set! par-active-children (hash-set par-active-children par-thread
+                                                    (drop-result-chans this-par-result-chans+active-children)))
                 (set! par-checkpoint-chans (hash-set par-checkpoint-chans par-thread checkpoint-chan))
                 (semaphore-post sema)
-                (par-cont result-chans+children-threads checkpoint-chan current-trap)))))
+                (par-cont (set-union this-par-result-chans+paused-children
+                                     this-par-result-chans+active-children)
+                          checkpoint-chan current-trap)))))
          (semaphore-wait sema)
          par-parent-thread]
         [(rb-paused cont)
-         (define pause-chan (make-channel))
+         (define resp-chan (make-channel))
          (define paused-thread
            (parameterize ([current-signal-table the-signal-table])
              (make-esterel-thread
               #:parent-thread parent-thread
               #:before-par-trap-counter parent-before-par-trap-counter
               #:par-child-result-chan par-child-result-chan
-              (λ () (cont pause-chan)))))
-         (set! paused-threads (hash-set paused-threads paused-thread pause-chan))
+              (λ () (cont resp-chan)))))
+         (set! paused-threads (hash-set paused-threads paused-thread resp-chan))
          paused-thread]
         [(rb-blocked a-signal cont)
          (define resp-chan (make-channel))
@@ -648,6 +668,15 @@
              (channel-put resp-chan (void))
              (add-running-thread paused-thread))
            (set! paused-threads (hash))
+           (for ([(parent-thread children) (in-hash par-paused-children)])
+             (set! par-active-children
+                   (hash-set
+                    par-active-children
+                    parent-thread
+                    (set-union
+                     (hash-ref par-active-children parent-thread set)
+                     children))))
+           (set! par-paused-children (hash))
            (loop))))]
 
       ;; everyone's blocked on signals or paused; pick a signal to set to be absent
@@ -709,7 +738,8 @@
                               parent-thread children-threads)
            (add-running-threads children-threads)
            (remove-running-thread parent-thread)
-           (set! par-children (hash-set par-children parent-thread children-threads))
+           (set! par-active-children (hash-set par-active-children parent-thread children-threads))
+           (set! par-paused-children (hash-set par-paused-children parent-thread (set)))
            (set! par-checkpoint-chans (hash-set par-checkpoint-chans parent-thread checkpoint-chan))
            (loop)))
         (handle-evt
@@ -724,8 +754,8 @@
            (define children-to-remove (set done-thread))
            (define current-trap (hash-ref par-trap parent-thread #f))
 
-           (define parents-new-children
-             (set-remove (hash-ref par-children parent-thread) done-thread))
+           (define parents-new-active-children
+             (set-remove (hash-ref par-active-children parent-thread) done-thread))
 
            (when (and (not current-trap) new-trap)
              ;; abort paused sibling threads if this is the first
@@ -733,25 +763,37 @@
              ;; we abort them by telling the pause to wake up and
              ;;   become a trap; we need to restore the instant
              ;;   loop's state to do so (running threads and par children)
-             (for ([child-thread (in-set (hash-ref par-children parent-thread))])
+             (define paused-children (hash-ref par-paused-children parent-thread))
+             (set! par-paused-children (hash-remove par-paused-children parent-thread))
+             (set! parents-new-active-children
+                   (set-union
+                    parents-new-active-children
+                    paused-children))
+             (for ([child-thread (in-set paused-children)])
                (define resp-chan (hash-ref paused-threads child-thread #f))
-               (when resp-chan
-                 (channel-put resp-chan new-trap)
-                 (set! parents-new-children (set-add parents-new-children child-thread))
-                 (add-running-thread child-thread)
-                 (set! paused-threads (hash-remove paused-threads child-thread)))))
+               (unless resp-chan
+                 (error 'kernel-esterel.rkt::paused-threads
+                        "did not find chan for supposedly paused thread ~s" child-thread))
+               (channel-put resp-chan new-trap)
+               (add-running-thread child-thread)
+               (set! paused-threads (hash-remove paused-threads child-thread))))
 
            (when new-trap
              (set! par-trap
                    (hash-set par-trap parent-thread (outermost-trap current-trap new-trap))))
            (cond
-             [(set-empty? parents-new-children)
-              (set! par-children (hash-remove par-children parent-thread))
+             [(and (set-empty? parents-new-active-children)
+                   (set-empty? (hash-ref par-paused-children parent-thread set)))
+              (set! par-active-children (hash-remove par-active-children parent-thread))
+              (set! par-paused-children (hash-remove par-paused-children parent-thread))
               (set! par-checkpoint-chans (hash-remove par-checkpoint-chans parent-thread))
               (set! par-trap (hash-remove par-trap parent-thread))
               (add-running-thread parent-thread)]
              [else
-              (set! par-children (hash-set par-children parent-thread parents-new-children))])
+              (if (set-empty? parents-new-active-children)
+                  (set! par-active-children (hash-remove par-active-children parent-thread))
+                  (set! par-active-children
+                        (hash-set par-active-children parent-thread parents-new-active-children)))])
            (loop)))
         (handle-evt
          pause-chan
@@ -765,6 +807,13 @@
                 (channel-put resp-chan a-trap))]
              [else
               (remove-running-thread paused-thread)
+              (when parent-thread
+                (set! par-active-children (hash-set par-active-children parent-thread
+                                                    (set-remove (hash-ref par-active-children parent-thread)
+                                                                paused-thread)))
+                (set! par-paused-children (hash-set par-paused-children parent-thread
+                                                    (set-add (hash-ref par-paused-children parent-thread set)
+                                                             paused-thread))))
               (set! paused-threads (hash-set paused-threads paused-thread resp-chan))])
            (loop)))
         (handle-evt
