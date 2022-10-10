@@ -450,6 +450,7 @@
                     (current-rollback-point)
                     (hash-keys signals)
                     (hash-keys signal-waiters))]))
+    (log-esterel-debug "~a: chose ~a to be absent" (eq-hash-code (current-thread)) signal-to-be-absent)
     (unless non-constructive-program?
       (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
       (set! signals (hash-set signals signal-to-be-absent #f))
@@ -516,7 +517,7 @@
            (match-define (cons signal (blocked-thread thread resp-chan)) signal+blocked-thread)
            (channel-put resp-chan a-checkpoint-request)
            (rb-blocked signal (channel-get k-chan)))]
-        [else (error 'collect-rollback-points "lost a thread ~s" thread)])))
+        [else (error 'kernel-esterel.rkt::collect-rollback-points "lost a thread ~s" thread)])))
 
   ;; rebuild-threads-from-rb-tree : rb-tree? -> thread
   ;; returns the new reaction thread
@@ -652,7 +653,7 @@
       ;; everyone's blocked on signals or paused; pick a signal to set to be absent
       [(set-empty? running-threads)
        (when (= 0 (hash-count signal-waiters))
-         (error 'esterel.rkt "internal error; expected someone to be blocked on a signal"))
+         (error 'kernel-esterel.rkt "internal error; expected someone to be blocked on a signal"))
        (choose-a-signal-to-be-absent)
        (loop)]
 
@@ -665,7 +666,7 @@
            (match-define (vector a-signal the-thread resp-chan) s+resp)
            (log-esterel-debug "~a: waiting on a signal ~s ~s ~s"
                               (eq-hash-code (current-thread))
-                              (eq-hash-code a-signal)
+                              a-signal
                               (hash-ref signals a-signal 'unknown)
                               the-thread)
            (match (hash-ref signals a-signal 'unknown)
@@ -682,7 +683,7 @@
          (λ (a-signal)
            (log-esterel-debug "~a: emitting ~s ~s"
                               (eq-hash-code (current-thread))
-                              (eq-hash-code a-signal)
+                              a-signal
                               (hash-ref signals a-signal 'unknown))
            (match (hash-ref signals a-signal 'unknown)
              ['unknown
