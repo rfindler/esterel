@@ -78,14 +78,12 @@
   (unless (in-reaction?) (error 'par "not in a reaction"))
   (define s (make-semaphore 0))
   (define before-par-trap-counter (get-current-trap-counter))
-  (define parent-thread (current-thread))
   (define result-chans+children-threads
     (for/set ([thunk (in-list thunks)])
       ;; result-chan : channel[(or/c #f trap?)]
       (define par-child-result-chan (make-channel))
       (define par-child-thread
         (make-esterel-thread
-         #:parent-thread parent-thread
          #:before-par-trap-counter before-par-trap-counter
          #:par-child-result-chan par-child-result-chan
          #:wait-on-sema s
@@ -123,7 +121,7 @@
            result-chan
            (λ (new-trap)
              (channel-put (signal-table-par-partly-done-chan signal-table)
-                          (vector (current-thread) pending-par-thread new-trap))
+                          (vector pending-par-thread new-trap))
              (loop (set-remove pending-result-chans+par-threads result-chan+pending-par-thread)
                    checkpoint-chan
                    (outermost-trap new-trap current-trap))))))])))
@@ -139,8 +137,7 @@
 ;; the outermost thread because the code that looks up the marks knows what to
 ;; do when it does not find the mark there (this might also be something to clean
 ;; up and make more uniform)
-(define (make-esterel-thread #:parent-thread parent-thread
-                             #:before-par-trap-counter before-par-trap-counter
+(define (make-esterel-thread #:before-par-trap-counter before-par-trap-counter
                              #:par-child-result-chan par-child-result-chan
                              #:wait-on-sema [s #f]
                              thunk)
@@ -153,7 +150,7 @@
           par-child-result-chan
           (let/ec escape
             (with-continuation-mark trap-start-of-par-mark
-              (vector parent-thread escape before-par-trap-counter)
+              (vector escape before-par-trap-counter)
               (with-continuation-mark trap-counter-mark before-par-trap-counter
                 (begin
                   (call-with-continuation-prompt
@@ -180,10 +177,8 @@
 (define (pause)
   (define signal-table (current-signal-table))
   (define resp-chan (make-channel))
-  (define par-info (continuation-mark-set-first #f trap-start-of-par-mark))
-  (define parent-thread (and par-info (vector-ref par-info 0)))
   (channel-put (signal-table-pause-chan signal-table)
-               (vector parent-thread (current-thread) resp-chan))
+               (vector (current-thread) resp-chan))
   (let loop ([resp-chan resp-chan])
     (define val (channel-get resp-chan))
     (cond
@@ -252,12 +247,12 @@
          ;; the start of the par value will be the same as
          ;; the counter used for the first trap inside the par
          ;; so this should be an inclusive comparison
-         (<= (vector-ref start-of-par-counter 2) (trap-counter trap)))
+         (<= (vector-ref start-of-par-counter 1) (trap-counter trap)))
      ;; here the trap doesn't span a par, so we can just escape
      ((trap-escape trap) (void))]
     [else
      ;; here we tell the enclosing par that a trap has happened
-     ((vector-ref start-of-par-counter 1) trap)]))
+     ((vector-ref start-of-par-counter 0) trap)]))
 
 (struct signal-table (signal-chan
                       emit-chan
@@ -386,6 +381,10 @@
     (hash/c thread? (set/c thread?) #:flat? #t #:immutable #t)
     (hash))
 
+  (define/contract par-parents
+    (hash/c thread? thread? #:flat? #t #:immutable #t)
+    (hash))
+
   ;; each parent thread (of a par) points to the channel
   ;;    that it listens for checkpoint requests on
   ;; the domain of this map is the set of threads that
@@ -476,6 +475,7 @@
     (set! paused-threads (hash))
     (set! par-paused-children (hash))
     (set! par-active-children (hash))
+    (set! par-parents (hash))
     (set! par-checkpoint-chans (hash))
     (set! reaction-thread (rebuild-threads-from-rb-tree rb-tree)))
   (define (current-rollback-point) (rollback-point (build-rb-tree-from-current-state) signals))
@@ -534,7 +534,6 @@
   ;; returns the new reaction thread
   (define (rebuild-threads-from-rb-tree rb-tree)
     (let loop ([rb-tree rb-tree]
-               [parent-thread #f]
                [par-child-result-chan #f]
                [parent-before-par-trap-counter #f])
       (match rb-tree
@@ -548,17 +547,15 @@
          (define par-parent-thread
            (parameterize ([current-signal-table the-signal-table])
              (make-esterel-thread
-              #:parent-thread parent-thread
               #:before-par-trap-counter parent-before-par-trap-counter
               #:par-child-result-chan par-child-result-chan
               (λ ()
-                (define par-thread (current-thread))
+                (define parent-thread (current-thread))
                 (define (get-result-chans+par-children rb-children)
                   (for/set ([child (in-set rb-children)])
                     (define par-child-result-chan (make-channel))
                     (cons par-child-result-chan
                           (loop child
-                                par-thread
                                 par-child-result-chan
                                 before-par-trap-counter))))
                 (define this-par-result-chans+paused-children
@@ -569,11 +566,15 @@
                   (for/set ([result-chan+children-thread (in-set result-chans+children-threads)])
                     (cdr result-chan+children-thread)))
                 (define checkpoint-chan (make-channel))
-                (set! par-paused-children (hash-set par-paused-children par-thread
+                (set! par-paused-children (hash-set par-paused-children parent-thread
                                                     (drop-result-chans this-par-result-chans+paused-children)))
-                (set! par-active-children (hash-set par-active-children par-thread
+                (set! par-active-children (hash-set par-active-children parent-thread
                                                     (drop-result-chans this-par-result-chans+active-children)))
-                (set! par-checkpoint-chans (hash-set par-checkpoint-chans par-thread checkpoint-chan))
+                (for ([result-chan+child-thread
+                       (in-set (set-union this-par-result-chans+active-children
+                                          this-par-result-chans+paused-children))])
+                  (set! par-parents (hash-set par-parents (cdr result-chan+child-thread) parent-thread)))
+                (set! par-checkpoint-chans (hash-set par-checkpoint-chans parent-thread checkpoint-chan))
                 (semaphore-post sema)
                 (par-cont (set-union this-par-result-chans+paused-children
                                      this-par-result-chans+active-children)
@@ -585,7 +586,6 @@
          (define paused-thread
            (parameterize ([current-signal-table the-signal-table])
              (make-esterel-thread
-              #:parent-thread parent-thread
               #:before-par-trap-counter parent-before-par-trap-counter
               #:par-child-result-chan par-child-result-chan
               (λ () (cont resp-chan)))))
@@ -596,7 +596,6 @@
          (define blocked-thread
            (parameterize ([current-signal-table the-signal-table])
              (make-esterel-thread
-              #:parent-thread parent-thread
               #:before-par-trap-counter parent-before-par-trap-counter
               #:par-child-result-chan par-child-result-chan
               (λ () (cont resp-chan)))))
@@ -741,11 +740,14 @@
            (set! par-active-children (hash-set par-active-children parent-thread children-threads))
            (set! par-paused-children (hash-set par-paused-children parent-thread (set)))
            (set! par-checkpoint-chans (hash-set par-checkpoint-chans parent-thread checkpoint-chan))
+           (for ([child-thread (in-set children-threads)])
+             (set! par-parents (hash-set par-parents child-thread parent-thread)))
            (loop)))
         (handle-evt
          par-partly-done-chan
-         (λ (parent-thread+done-thread+trap)
-           (match-define (vector parent-thread done-thread new-trap) parent-thread+done-thread+trap)
+         (λ (done-thread+trap)
+           (match-define (vector done-thread new-trap) done-thread+trap)
+           (define parent-thread (hash-ref par-parents done-thread))
            (log-esterel-debug "~a: one thread in a par finished ~s trap ~s"
                               (eq-hash-code (current-thread))
                               done-thread
@@ -781,6 +783,9 @@
            (when new-trap
              (set! par-trap
                    (hash-set par-trap parent-thread (outermost-trap current-trap new-trap))))
+
+           (set! par-parents (hash-remove par-parents done-thread))
+
            (cond
              [(and (set-empty? parents-new-active-children)
                    (set-empty? (hash-ref par-paused-children parent-thread set)))
@@ -797,8 +802,9 @@
            (loop)))
         (handle-evt
          pause-chan
-         (λ (parent-thread+thread+resp-chan)
-           (match-define (vector parent-thread paused-thread resp-chan) parent-thread+thread+resp-chan)
+         (λ (thread+resp-chan)
+           (match-define (vector paused-thread resp-chan) thread+resp-chan)
+           (define parent-thread (hash-ref par-parents paused-thread #f))
            (log-esterel-debug "~a: paused ~s" (eq-hash-code (current-thread)) paused-thread)
            (cond
              [(and parent-thread (hash-ref par-trap parent-thread #f))
