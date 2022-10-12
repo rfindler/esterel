@@ -4,12 +4,12 @@
   (match test
     [`(test-case
        ,fn
-       (define-esterel-machine ,_ #:inputs (,si ...) #:outputs (,so ...) #:input/outputs (,s ...) ,expr)
+       (define-esterel-machine ,_ #:inputs (,si ...) #:outputs (,so ...) #:input/outputs (,sio ...) ,expr)
        (test-seq
         ,_
         ,input-outputs ...))
      (define signals
-       (for/hash ([name (in-list (append si so s))])
+       (for/hash ([name (in-list (append si so sio))])
          (values name (signal #:name name))))
      (define r (build-reaction signals expr))
      (let/ec escape
@@ -25,13 +25,15 @@
          (define expected-outputs
            (for/set ([s-emitted (in-list s-emitteds)])
              (hash-ref signals s-emitted)))
-         (define (input-signal? s)
-           (for/or ([si (in-list si)])
-             (equal? (hash-ref signals si) s)))
+         (define (output-signal? s)
+           (or (for/or ([si (in-list so)])
+                 (equal? (hash-ref signals si) s))
+               (for/or ([sio (in-list sio)])
+                 (equal? (hash-ref signals sio) s))))
          (define actual-outputs
            (for/set ([(signal emitted?) (in-hash result)]
                      #:when emitted?
-                     #:unless (input-signal? signal))
+                     #:when (output-signal? signal))
              signal))
          (unless (equal? expected-outputs actual-outputs)
            (eprintf "reaction ~a (counting from 0):\n  file ~a\n  expected ~s\n       got ~s\n"
@@ -40,25 +42,34 @@
 
 (define (build-reaction signals expr)
   (reaction
-   (let loop ([expr expr])
+   (let loop ([expr expr]
+              [signals signals])
      (match expr
-       [`(seq& ,es ...) (for ([e (in-list es)]) (loop e))]
+       [`(signal& ,s ,body)
+        (loop body (hash-set signals s (signal #:name s)))]
+       [`(seq& ,es ...) (for ([e (in-list es)]) (loop e signals))]
        [`(loop-each& ,r ,e1 ,e2s ...)
         (loop-each
          (for ([e (in-list (cons e1 e2s))])
-           (loop e))
+           (loop e signals))
          (hash-ref signals r))]
+       [`(loop& ,e1 ,e2s ...)
+        (let loop-loop ()
+          (for ([e (in-list (cons e1 e2s))])
+            (loop e signals))
+          (loop-loop))]
        [`(par& ,es ...)
         (let p-loop ([es es])
           (cond
-            [(null? (cdr es)) (loop (car es))]
-            [else (par (loop (car es))
+            [(null? (cdr es)) (loop (car es) signals)]
+            [else (par (loop (car es) signals)
                        (p-loop (cdr es)))]))]
        [`(await& ,s) (await (hash-ref signals s))]
-       [`(emit& ,s) (emit (hash-ref signals s))]))))
-           
+       [`(abort& ,s ,body) (abort-when (loop body signals) (hash-ref signals s))]
+       [`(emit& ,s) (emit (hash-ref signals s))]
+       [`pause& (pause)]))))
 
 (module+ main
   (require "parse.rkt" "find.rkt")
   (run-hiphop-test
-   (load-hiphop-test (hiphop-test-name->path "abcro"))))
+   (load-hiphop-test (hiphop-test-name->path "abort-par-implicit-seq"))))
