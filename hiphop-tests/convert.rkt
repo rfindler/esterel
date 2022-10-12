@@ -34,8 +34,8 @@
                      #:unless (input-signal? signal))
              signal))
          (unless (equal? expected-outputs actual-outputs)
-           (eprintf "reaction ~a (counting from 0):\n  expected ~s\n       got ~s\n"
-                    i expected-outputs actual-outputs)
+           (eprintf "reaction ~a (counting from 0):\n  file ~a\n  expected ~s\n       got ~s\n"
+                    i fn expected-outputs actual-outputs)
            (escape (void)))))]))
 
 (define (build-reaction signals expr)
