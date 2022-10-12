@@ -227,7 +227,6 @@
   (trap name (get-current-trap-counter) escape))
 
 (define (get-current-trap-counter) (or (continuation-mark-set-first #f trap-counter-mark) 0))
-(define (get-start-of-par-counter) (continuation-mark-set-first #f trap-start-of-par-mark))
 (define trap-counter-mark (gensym 'trap-counter))
 (define trap-start-of-par-mark (gensym 'trap-counter))
 
@@ -241,7 +240,7 @@
     (body)))
 
 (define (exit-trap trap)
-  (define start-of-par-counter (get-start-of-par-counter))
+  (define start-of-par-counter (continuation-mark-set-first #f trap-start-of-par-mark))
   (cond
     [(or (not start-of-par-counter)
          ;; the start of the par value will be the same as
@@ -357,9 +356,10 @@
     (hash))
 
   ;; (set/c hash)
-  ;; all of the threads in the reaction that aren't
-  ;;    blocked on a signal and have not paused
-  ;;    and are not a par-parent thread
+  ;; all of the threads in the reaction that are none of"
+  ;;    - blocked on a signal
+  ;;    - have not paused
+  ;;    - are not a par-parent thread
   (define running-threads (set reaction-thread))
   (define/contract (add-running-thread t)
     (-> thread? void?)
@@ -370,12 +370,7 @@
   (define (remove-running-thread t)
     (set! running-threads (set-remove running-threads t)))
 
-  ;; a parent thread (of a par) points to a set of its children
-  ;; that are either still running or are blocked on signal-value
-  (define/contract par-active-children
-    (hash/c thread? (set/c thread?) #:flat? #t #:immutable #t)
-    (hash))
-
+  ;; a child thread (of a par) points to its parent
   (define/contract par-parents
     (hash/c thread? thread? #:flat? #t #:immutable #t)
     (hash))
@@ -386,6 +381,12 @@
   ;;    are currently parents of a `par`
   (define/contract par-checkpoint-chans
     (hash/c thread? channel? #:flat? #t #:immutable #t)
+    (hash))
+
+  ;; a parent thread (of a par) points to a set of its children
+  ;; that are either still running or are blocked on signal-value
+  (define/contract par-active-children
+    (hash/c thread? (set/c thread?) #:flat? #t #:immutable #t)
     (hash))
 
   ;; each parent thread (of a par) points to the outermost
@@ -555,7 +556,6 @@
               #:before-par-trap-counter parent-before-par-trap-counter
               #:par-child-result-chan par-child-result-chan
               (λ ()
-                (define parent-thread (current-thread))
                 (define (get-result-chans+par-children rb-children)
                   (for/set ([child (in-set rb-children)])
                     (define par-child-result-chan (make-channel))
