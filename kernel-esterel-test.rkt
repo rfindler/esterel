@@ -258,6 +258,52 @@
   (check-equal? (react! r) (hash i #f))
   (check-equal? (react! r #:emit (list i)) (hash i #t o #t)))
 
+(let ()
+  (define O (signal))
+  (define t
+    (reaction
+     (with-trap T
+       (par (pause)
+            (exit-trap T)))
+     (emit O)))
+
+  (check-equal? (react! t) (hash O #t)))
+
+(let ()
+  (define O (signal))
+  (define t
+    (reaction
+     (with-trap T
+       (par (par (pause))
+            (exit-trap T)))
+     (emit O)))
+
+  (check-equal? (react! t) (hash O #t)))
+
+(let ()
+  (define O (signal))
+  (define t
+    (reaction
+     (with-trap T
+       (par (par (pause)
+                 (pause))
+            (exit-trap T)))
+     (emit O)))
+
+  (check-equal? (react! t) (hash O #t)))
+
+(let ()
+  (define O (signal))
+  (define t
+    (reaction
+     (with-trap T
+       (par (par (pause)
+                 (void))
+            (exit-trap T)))
+     (emit O)))
+
+  (check-equal? (react! t) (hash O #t)))
+
 
 ;                                                                                                            
 ;                                                                                                            

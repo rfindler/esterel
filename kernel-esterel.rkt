@@ -364,6 +364,8 @@
            (cons signal a-blocked-thread))))
 
   ;; each paused thread is blocked on the corresponding channel
+  ;; when a par's threads are all paused, the parent thread does
+  ;; *not* end up here (even though it is morally paused)
   (define/contract paused-threads
     (hash/c thread? channel? #:flat? #t #:immutable #t)
     (hash))
@@ -644,6 +646,46 @@
 ;                                                                               
 ;                                                                               
 
+
+  (define (possibly-propagate-traps)
+    (define the-outermost-trap
+      (let loop ([parent-thread reaction-thread])
+        (define active-children (hash-ref par-active-children parent-thread set))
+        (define paused-children-or-trap (hash-ref par-paused-children-or-trap parent-thread #f))
+        (outermost-trap
+         (and (trap? paused-children-or-trap) paused-children-or-trap)
+         (for/fold ([trap #f])
+                   ([child (in-set active-children)])
+           (outermost-trap (loop child) trap)))))
+    (define told-a-thread-to-unpause? #f)
+    (when the-outermost-trap
+      (let loop ([parent-thread reaction-thread])
+        (define active-children (hash-ref par-active-children parent-thread set))
+        (define paused-children-or-trap (hash-ref par-paused-children-or-trap parent-thread #f))
+        (when (set? paused-children-or-trap)
+          (set! told-a-thread-to-unpause? #t)
+          (paused-children-superceded-by-a-trap parent-thread the-outermost-trap))
+        (for ([active-child (in-set active-children)])
+          (loop active-child))))
+    told-a-thread-to-unpause?)
+
+  (define (paused-children-superceded-by-a-trap parent-thread the-trap)
+    (define paused-children-or-trap
+      (hash-ref par-paused-children-or-trap parent-thread))
+    (set! par-paused-children-or-trap
+          (hash-set par-paused-children-or-trap parent-thread the-trap))
+    (set! par-active-children
+          (hash-set par-active-children parent-thread
+                    (set-union (hash-ref par-active-children parent-thread)
+                               paused-children-or-trap)))
+    (for ([child-thread (in-set paused-children-or-trap)])
+      (define resp-chan (hash-ref paused-threads child-thread #f))
+      (unless resp-chan
+        (error 'kernel-esterel.rkt::paused-threads.1
+               "did not find chan for supposedly paused thread ~s" child-thread))
+      (channel-put resp-chan the-trap)
+      (add-running-thread child-thread)
+      (set! paused-threads (hash-remove paused-threads child-thread))))
   
   (let loop ()
     (cond
@@ -658,6 +700,12 @@
             instant-complete-chan)
        (log-esterel-debug "~a: instant is over: ~s" (eq-hash-code (current-thread)) wrong-guess?)
        (cond
+         [(possibly-propagate-traps)
+          ;; sometimes there are some pauses left over that should turn into traps;
+          ;; here we check them and, if needed, turn them into traps. If some traps
+          ;; were propagated, we go back around and wait for all that to finish
+          ;; before coming here (this should need to happen at most once)
+          (loop)]
          [wrong-guess?
           ;; although we got to the end of the instant, we did so with
           ;; a wrong guess for signal absence; go back and try again
@@ -786,9 +834,9 @@
            (define children-to-remove (set done-thread))
            (define paused-children-or-trap (hash-ref par-paused-children-or-trap parent-thread))
 
-           (define parents-new-active-children
-             (set-remove (hash-ref par-active-children parent-thread) done-thread))
-
+           (set! par-active-children
+                 (hash-set par-active-children parent-thread
+                           (set-remove (hash-ref par-active-children parent-thread) done-thread)))
            (cond
              [(set? paused-children-or-trap)
               (when new-trap
@@ -797,18 +845,7 @@
                 ;; we abort them by telling the pause to wake up and
                 ;;   become a trap; we need to restore the instant
                 ;;   loop's state to do so (running threads and par children)
-                (set! par-paused-children-or-trap
-                      (hash-set par-paused-children-or-trap parent-thread new-trap))
-                (set! parents-new-active-children
-                      (set-union parents-new-active-children paused-children-or-trap))
-                (for ([child-thread (in-set paused-children-or-trap)])
-                  (define resp-chan (hash-ref paused-threads child-thread #f))
-                  (unless resp-chan
-                    (error 'kernel-esterel.rkt::paused-threads
-                           "did not find chan for supposedly paused thread ~s" child-thread))
-                  (channel-put resp-chan new-trap)
-                  (add-running-thread child-thread)
-                  (set! paused-threads (hash-remove paused-threads child-thread))))]
+                (paused-children-superceded-by-a-trap parent-thread new-trap))]
              [(trap? paused-children-or-trap)
               ;; we already had a trap in this par, but the new trap may supercede the
               ;; previous one; note that traps that appear here always exit the
@@ -822,25 +859,19 @@
            (set! par-parents (hash-remove par-parents done-thread))
 
            (define par-children-all-stopped?
-             (and (set-empty? parents-new-active-children)
+             (and (set-empty? (hash-ref par-active-children parent-thread))
                   (let ([paused-children-or-trap
                          (hash-ref par-paused-children-or-trap parent-thread set)])
                     (or (trap? paused-children-or-trap)
                         (set-empty? paused-children-or-trap)))))
-           (cond
-             [par-children-all-stopped?
-              (define paused-children-or-trap (hash-ref par-paused-children-or-trap parent-thread))
-              (channel-put (hash-ref par-checkpoint-or-result-chans parent-thread)
-                           (and (trap? paused-children-or-trap) paused-children-or-trap))
-              (set! par-active-children (hash-remove par-active-children parent-thread))
-              (set! par-paused-children-or-trap (hash-remove par-paused-children-or-trap parent-thread))
-              (set! par-checkpoint-or-result-chans (hash-remove par-checkpoint-or-result-chans parent-thread))
-              (add-running-thread parent-thread)]
-             [else
-              (if (set-empty? parents-new-active-children)
-                  (set! par-active-children (hash-remove par-active-children parent-thread))
-                  (set! par-active-children
-                        (hash-set par-active-children parent-thread parents-new-active-children)))])
+           (when par-children-all-stopped?
+             (define paused-children-or-trap (hash-ref par-paused-children-or-trap parent-thread))
+             (channel-put (hash-ref par-checkpoint-or-result-chans parent-thread)
+                          (and (trap? paused-children-or-trap) paused-children-or-trap))
+             (set! par-active-children (hash-remove par-active-children parent-thread))
+             (set! par-paused-children-or-trap (hash-remove par-paused-children-or-trap parent-thread))
+             (set! par-checkpoint-or-result-chans (hash-remove par-checkpoint-or-result-chans parent-thread))
+             (add-running-thread parent-thread))
            (loop)))
         (handle-evt
          pause-chan
