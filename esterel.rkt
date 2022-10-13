@@ -39,7 +39,8 @@
     (let loop ()
       (when (signal-value s)
         (exit-trap T))
-      (pause))))
+      (pause)
+      (loop))))
 
 (define-syntax-rule
   (every s p)
