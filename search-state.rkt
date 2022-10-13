@@ -65,28 +65,35 @@
 
 
 (define (fail! se-st)
-  ;; note that the current leaf failed
-  (set-link-subtree! (search-state-latest-leaf se-st) 'fail)
+  (cond
+    [(search-state-latest-leaf se-st)
+     ;; note that the current leaf failed
+     (set-link-subtree! (search-state-latest-leaf se-st) 'fail)
 
-  (let/ec escape
-    (define root (search-state-root se-st))
+     (let/ec escape
+       (define root (search-state-root se-st))
 
-    ;; check if any of the children of the root are unexplored; if so use it
-    (for ([child (in-list (node-children (search-state-root se-st)))])
-      (when (equal? 'unk (link-subtree child))
-        (set-search-state-latest-leaf! se-st child)
-        (escape (node-rollback root)
-                (link-choice child))))
+       ;; check if any of the children of the root are unexplored; if so use it
+       (for ([child (in-list (node-children (search-state-root se-st)))])
+         (when (equal? 'unk (link-subtree child))
+           (set-search-state-latest-leaf! se-st child)
+           (escape (node-rollback root)
+                   (link-choice child))))
 
-    ;; if everything is failed, we know
-    ;; this is a non-constructive program
-    (when (search-tree-is-all-failed? (search-state-root se-st))
-      (escape #f #f))
+       ;; if everything is failed, we know
+       ;; this is a non-constructive program
+       (when (search-tree-is-all-failed? (search-state-root se-st))
+         (escape #f #f))
 
-    ;; here we need to do some more searching, but I don't have an algorithm
-    ;; for that yet.....
-    (pretty-write (search-state-root se-st))
-    (error 'fail! "I'm not sure what to do...")))
+       ;; here we need to do some more searching, but I don't have an algorithm
+       ;; for that yet.....
+       (pretty-write (search-state-root se-st))
+       (error 'fail! "I'm not sure what to do..."))]
+    [else
+     ;; here we fail even on the first attempt with no choices made
+     ;; (this can happen when an exn is raised without looking at
+     ;; a signal)
+     (values #f #f)]))
 
 (define (search-tree-is-all-failed? st)
   (let loop ([st st])

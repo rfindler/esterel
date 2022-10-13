@@ -7,7 +7,7 @@
  (rename-out [-signal signal])
  par
  suspend
- with-trap exit-trap
+ with-trap
  (contract-out
   [react! (->* (reaction?)
                (#:emit (listof signal?))
@@ -20,7 +20,8 @@
   [emit (->* (signal?)
              #:pre (in-reaction?)
              void?)]
-  [pause (->* () #:pre (in-reaction?) void?)]))
+  [pause (->* () #:pre (in-reaction?) void?)]
+  [exit-trap (-> trap? any)]))
 
 (define-logger esterel)
 
@@ -80,7 +81,7 @@
   (define before-par-trap-counter (get-current-trap-counter))
   (define result-chans+children-threads
     (for/set ([thunk (in-list thunks)])
-      ;; result-chan : channel[(or/c #f trap?)]
+      ;; par-child-result-chan : channel[(or/c #f trap? exn?)]
       (define par-child-result-chan (make-channel))
       (define par-child-thread
         (make-esterel-thread
@@ -115,7 +116,7 @@
            (when (set-empty? pending-result-chans+par-threads)
              (error 'kernel-esterel.rkt "internal error: asked for a par checkpoint with no children"))
            (loop new-pending-result-chans+par-threads new-checkpoint-or-par-result-chan)]
-          [(? trap?)
+          [(? (or/c trap? exn?))
            (unless (set-empty? pending-result-chans+par-threads)
              (error 'kernel-esterel.rkt
                     "internal error: exiting the par but still have children ~s ~s"
@@ -162,14 +163,19 @@
          (channel-put
           par-child-result-chan
           (let/ec escape
-            (with-continuation-mark trap-start-of-par-mark
-              (vector escape before-par-trap-counter)
-              (with-continuation-mark trap-counter-mark before-par-trap-counter
-                (begin
-                  (call-with-continuation-prompt
-                   thunk
-                   reaction-prompt-tag)
-                  #f))))))]
+            (parameterize ([uncaught-exception-handler
+                            (λ (x)
+                              ;; what about breaks?
+                              (escape
+                               (raise-argument->exn x)))])
+              (with-continuation-mark trap-start-of-par-mark
+                (vector escape before-par-trap-counter)
+                (with-continuation-mark trap-counter-mark before-par-trap-counter
+                  (begin
+                    (call-with-continuation-prompt
+                     thunk
+                     reaction-prompt-tag)
+                    #f)))))))]
       [else
        (λ ()
          (call-with-continuation-prompt
@@ -178,9 +184,17 @@
   ;; this renaming doesn't work when rebuilding the threads currently
   (thread (procedure-rename thunk-to-run (object-name thunk))))
 
-;; outermost-trap : (or/c #f trap?) (or/c #f trap?) -> (or/c #f trap?)
+(define (raise-argument->exn x)
+  (if (exn? x)
+      x
+      (make-exn:fail (format "uncaught exn: ~e" x)
+                     (current-continuation-marks))))
+
+;; outermost-trap : (or/c #f trap? exn?) (or/c #f trap? exn?) -> (or/c #f trap? exn?)
 (define (outermost-trap t1 t2)
   (cond
+    [(or (exn? t1) (exn? t2))
+     (if (exn? t1) t1 t2)]
     [(and (trap? t1) (trap? t2))
      (if (< (trap-counter t1) (trap-counter t2))
          t1
@@ -195,6 +209,7 @@
   (let loop ([resp-chan resp-chan])
     (define val (channel-get resp-chan))
     (cond
+      [(exn? val) (raise val)]
       [(trap? val) (exit-trap val)]
       [(channel? val)
        (loop
@@ -252,19 +267,25 @@
     ;; `with-mark`s).
     (body)))
 
-(define (exit-trap trap)
+;; internally, this might be called with an exception, but from the
+;; outside, it is called only with traps (thanks to the contract) and
+;; exceptions have to be `raise`d.
+(define (exit-trap exn-or-trap)
   (define start-of-par-counter (continuation-mark-set-first #f trap-start-of-par-mark))
   (cond
     [(or (not start-of-par-counter)
          ;; the start of the par value will be the same as
          ;; the counter used for the first trap inside the par
          ;; so this should be an inclusive comparison
-         (<= (vector-ref start-of-par-counter 1) (trap-counter trap)))
+         (exn? exn-or-trap)
+         (<= (vector-ref start-of-par-counter 1) (trap-counter exn-or-trap)))
      ;; here the trap doesn't span a par, so we can just escape
-     ((trap-escape trap) (void))]
+     (if (exn? exn-or-trap)
+         (raise exn-or-trap)
+         ((trap-escape exn-or-trap) (void)))]
     [else
      ;; here we tell the enclosing par that a trap has happened
-     ((vector-ref start-of-par-counter 0) trap)]))
+     ((vector-ref start-of-par-counter 0) exn-or-trap)]))
 
 (struct signal-table (signal-chan
                       emit-chan
@@ -272,7 +293,7 @@
                       pause-chan instant-chan
                       react-thread-done-chan))
   
-(struct reaction (signal-table))
+(struct reaction (signal-table) #:mutable)
 (define-syntax-rule (-reaction e1 e2 ...) (reaction/proc (λ () e1 e2 ...)))
 (define (reaction/proc thunk)
   (define the-signal-table
@@ -283,19 +304,27 @@
 
 (define (react! a-reaction #:emit [signals-to-emit '()])
   (define signal-table (reaction-signal-table a-reaction))
-  (define instant-complete-chan (make-channel))
-  (channel-put (signal-table-instant-chan signal-table)
-               (cons signals-to-emit instant-complete-chan))
-  (define maybe-signals (channel-get instant-complete-chan))
-  (cond
-    [(equal? maybe-signals 'non-constructive)
+  (define maybe-signals
+    (cond
+      [(equal? signal-table 'non-constructive)
+       'non-constructive]
+      [(exn? signal-table)
+       signal-table]
+      [else
+       (define instant-complete-chan (make-channel))
+       (channel-put (signal-table-instant-chan signal-table)
+                    (cons signals-to-emit instant-complete-chan))
+       (define maybe-signals (channel-get instant-complete-chan))
+       (when (or (equal? maybe-signals 'non-constructive)
+                 (exn? maybe-signals))
+         (set-reaction-signal-table! a-reaction maybe-signals))
+       maybe-signals]))
+  (match maybe-signals
+    ['non-constructive
      (error 'react! "the program is not constructive")]
-    [maybe-signals
-     ;; copy the hash to an immutable one to hand out
-     (for/hash ([(k v) (in-hash maybe-signals)])
-       (values k v))]
-    [else
-     (error 'react! "a reaction is already running")]))
+    [(? exn?) (raise maybe-signals)]
+    [#f (error 'react! "a reaction is already running")]
+    [else maybe-signals]))
 
 (define (run-reaction-thread thunk the-signal-table)
   (define first-instant-sema (make-semaphore 0))
@@ -306,8 +335,15 @@
           (semaphore-wait first-instant-sema)
           (call-with-continuation-prompt
            (λ ()
-             (thunk)
-             (channel-put (signal-table-react-thread-done-chan the-signal-table) (void)))
+             (define react-thread-done-chan
+               (signal-table-react-thread-done-chan the-signal-table))
+             (let/ec escape
+               (call-with-exception-handler
+                (λ (exn)
+                  (channel-put react-thread-done-chan (raise-argument->exn exn))
+                  (escape (void)))
+                thunk)
+               (channel-put react-thread-done-chan #f)))
            reaction-prompt-tag))
         (thread reaction-thread-thunk))))
   (match-define (signal-table signal-chan emit-chan
@@ -342,6 +378,20 @@
   (define/contract signals
     (hash/c signal? boolean? #:flat? #t #:immutable #t)
     (hash))
+
+  ;; the latest-exn is set to an exception when we just
+  ;; finished a reaction; this might indicate a bad guess
+  ;; so we'll go back and make another guess (until we
+  ;; exhaust all guesses) if this is not #f
+  (define/contract latest-exn
+    (or/c #f exn?)
+    #f)
+
+  ;; this is all of the exceptions that were raised
+  ;; during the guessing when running the current instant
+  (define/contract raised-exns
+    (set/c exn?)
+    (set))
 
   (struct blocked-thread (thread resp-chan) #:transparent)
     
@@ -408,7 +458,7 @@
   ;;    trap that any of its children exited to if they have exited;
   ;;    or, if none of the children have exited, we keep all the paused children
   (define/contract par-paused-children-or-trap
-    (hash/c thread? (or/c trap? (set/c thread?)) #:flat? #t #:immutable #t)
+    (hash/c thread? (or/c trap? exn? (set/c thread?)) #:flat? #t #:immutable #t)
     (hash))
 
   ;; (or/c #f (chan/c (or/c (hash/c signal? boolean?) #f)))
@@ -449,8 +499,11 @@
   (define (choose-a-signal-to-be-absent)
     (define signal-to-be-absent
       (cond
-        [wrong-guess?
+        [(or latest-exn wrong-guess?)
+         (when latest-exn
+           (set! raised-exns (set-add raised-exns latest-exn)))
          (set! wrong-guess? #f)
+         (set! latest-exn #f)
          (define-values (rollback-point choice) (fail! se-st))
          (cond
            [choice
@@ -466,8 +519,8 @@
                     (current-rollback-point)
                     (hash-keys signals)
                     (hash-keys signal-waiters))]))
-    (log-esterel-debug "~a: chose ~a to be absent" (eq-hash-code (current-thread)) signal-to-be-absent)
     (unless non-constructive-program?
+      (log-esterel-debug "~a: chose ~a to be absent" (eq-hash-code (current-thread)) signal-to-be-absent)
       (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
       (set! signals (hash-set signals signal-to-be-absent #f))
       (set! signal-waiters (hash-remove signal-waiters signal-to-be-absent))
@@ -482,6 +535,7 @@
   (define (rollback! a-rollback-point)
     (match-define (rollback-point rb-tree rb-signals) a-rollback-point)
     (set! signals rb-signals)
+    (set! latest-exn #f)
     (set! signal-waiters (hash))
     (set! paused-threads (hash))
     (set! par-paused-children-or-trap (hash))
@@ -523,7 +577,8 @@
          (rb-par
           par-continuation
           (cond
-            [(trap? paused-children-or-trap)
+            [(or (trap? paused-children-or-trap)
+                 (exn? paused-children-or-trap))
              paused-children-or-trap]
             [else
              (for/set ([child (in-set paused-children-or-trap)])
@@ -584,7 +639,8 @@
                                                     (drop-result-chans this-par-result-chans+active-children)))
                 (define-values (this-par-result-chans+paused-children)
                   (cond
-                    [(trap? rb-paused-children-or-trap)
+                    [(or (trap? rb-paused-children-or-trap)
+                         (exn? rb-paused-children-or-trap))
                      (set! par-paused-children-or-trap
                            (hash-set par-paused-children-or-trap parent-thread rb-paused-children-or-trap))
                      (set)]
@@ -653,7 +709,9 @@
         (define active-children (hash-ref par-active-children parent-thread set))
         (define paused-children-or-trap (hash-ref par-paused-children-or-trap parent-thread #f))
         (outermost-trap
-         (and (trap? paused-children-or-trap) paused-children-or-trap)
+         (and (or (trap? paused-children-or-trap)
+                  (exn? paused-children-or-trap))
+              paused-children-or-trap)
          (for/fold ([trap #f])
                    ([child (in-set active-children)])
            (outermost-trap (loop child) trap)))))
@@ -690,15 +748,20 @@
   (let loop ()
     (cond
       [non-constructive-program?
-       (log-esterel-debug "~a: non constructive program" (eq-hash-code (current-thread)))
-       (channel-put instant-complete-chan 'non-constructive)
-       (loop)]
+       (log-esterel-debug "~a: non constructive program ~s" (eq-hash-code (current-thread)) raised-exns)
+       (channel-put instant-complete-chan
+                    (if (set-empty? raised-exns)
+                        'non-constructive
+                        (set-first raised-exns)))
+       ;; when we send back 'non-constructive or an exception, then we will
+       ;; never come back to this thread again, so just let it expire
+       (void)]
 
       ;; the instant is over
       [(and (= 0 (hash-count signal-waiters))
             (set-empty? running-threads)
             instant-complete-chan)
-       (log-esterel-debug "~a: instant is over: ~s" (eq-hash-code (current-thread)) wrong-guess?)
+       (log-esterel-debug "~a: instant is over: ~s" (eq-hash-code (current-thread)) (or latest-exn wrong-guess?))
        (cond
          [(possibly-propagate-traps)
           ;; sometimes there are some pauses left over that should turn into traps;
@@ -706,7 +769,7 @@
           ;; were propagated, we go back around and wait for all that to finish
           ;; before coming here (this should need to happen at most once)
           (loop)]
-         [wrong-guess?
+         [(or latest-exn wrong-guess?)
           ;; although we got to the end of the instant, we did so with
           ;; a wrong guess for signal absence; go back and try again
           (choose-a-signal-to-be-absent)
@@ -716,6 +779,7 @@
           (channel-put instant-complete-chan signals)
           (set! instant-complete-chan #f)
           (set! signals (hash)) ;; reset the signals in preparation for the next instant
+          (set! raised-exns (set)) ;; reset the exns (as they are now defunct; bad guesses)
           (loop)])]
 
       ;; an instant is not runnning, wait for one to start (but don't wait for other stuff)
@@ -751,6 +815,7 @@
            (set! par-paused-children-or-trap
                  (for/hash ([(parent-thread children-or-trap) (in-hash par-paused-children-or-trap)])
                    (cond
+                     [(exn? children-or-trap) (values parent-thread children-or-trap)]
                      [(trap? children-or-trap) (values parent-thread children-or-trap)]
                      [else (values parent-thread (set))])))
            (loop))))]
@@ -846,7 +911,8 @@
                 ;;   become a trap; we need to restore the instant
                 ;;   loop's state to do so (running threads and par children)
                 (paused-children-superceded-by-a-trap parent-thread new-trap))]
-             [(trap? paused-children-or-trap)
+             [(or (exn? paused-children-or-trap)
+                  (trap? paused-children-or-trap))
               ;; we already had a trap in this par, but the new trap may supercede the
               ;; previous one; note that traps that appear here always exit the
               ;; par -- traps that are installed inside the par are handled without
@@ -863,11 +929,14 @@
                   (let ([paused-children-or-trap
                          (hash-ref par-paused-children-or-trap parent-thread set)])
                     (or (trap? paused-children-or-trap)
+                        (exn? paused-children-or-trap)
                         (set-empty? paused-children-or-trap)))))
            (when par-children-all-stopped?
              (define paused-children-or-trap (hash-ref par-paused-children-or-trap parent-thread))
              (channel-put (hash-ref par-checkpoint-or-result-chans parent-thread)
-                          (and (trap? paused-children-or-trap) paused-children-or-trap))
+                          (and (or (exn? paused-children-or-trap)
+                                   (trap? paused-children-or-trap))
+                               paused-children-or-trap))
              (set! par-active-children (hash-remove par-active-children parent-thread))
              (set! par-paused-children-or-trap (hash-remove par-paused-children-or-trap parent-thread))
              (set! par-checkpoint-or-result-chans (hash-remove par-checkpoint-or-result-chans parent-thread))
@@ -883,7 +952,8 @@
              (and parent-thread
                   (hash-ref par-paused-children-or-trap parent-thread set)))
            (cond
-             [(trap? paused-siblings-or-trap)
+             [(or (exn? paused-siblings-or-trap)
+                  (trap? paused-siblings-or-trap))
               ;; when one of the sibling threads has exited to a trap, make this sibling
               ;; also exit to that same trap
               (channel-put resp-chan paused-siblings-or-trap)]
@@ -911,8 +981,9 @@
            (loop)))
         (handle-evt
          react-thread-done-chan
-         (λ (_)
-           (log-esterel-debug "~a: main reaction thread done" (eq-hash-code (current-thread)))
+         (λ (exn)
+           (log-esterel-debug "~a: main reaction thread done, ~s" (eq-hash-code (current-thread)) exn)
+           (set! latest-exn exn)
            (remove-running-thread reaction-thread)
            (loop)))
         )])))

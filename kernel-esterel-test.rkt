@@ -305,6 +305,122 @@
   (check-equal? (react! t) (hash O #t)))
 
 
+;; exception raising
+(check-exn
+ #rx"expected: pair[?].* given: #f"
+ (λ ()
+   (react!
+    (reaction
+     (car #f)))))
+
+(check-exn
+ #rx"expected: pair[?].* given: #f"
+ (λ ()
+   (react!
+    (reaction
+     (par (car #f))))))
+
+(check-exn
+ #rx"expected: pair[?].* given: #f"
+ (λ ()
+   (react!
+    (reaction
+     (par (pause)
+          (car #f))))))
+
+(check-exn
+ #rx"expected: pair[?].* given: #f"
+ (λ ()
+   (react!
+    (reaction
+     (with-trap T
+       (par (exit-trap T)
+            (car #f)))))))
+
+(check-exn
+ #rx"expected: pair[?].* given: #f"
+ (λ ()
+   (react!
+    (reaction
+     (with-trap T
+       (par (par (exit-trap T))
+            (par (car #f))))))))
+
+(let ()
+  (define S (signal))
+  (define r
+    (reaction
+      (with-trap T
+        (par (par (pause) (emit S))
+             (par (car #f))))))
+  (check-exn
+   #rx"expected: pair[?].* given: #f"
+   (λ () (react! r)))
+  (check-exn
+   #rx"expected: pair[?].* given: #f"
+   (λ () (react! r))))
+
+(let ()
+  (define s1 (signal))
+  (define s2 (signal))
+  (check-equal?
+   (react!
+    (reaction
+     (par (if (signal-value s1)
+              (void)
+              (car #f))
+          (if (signal-value s2)
+              (void)
+              (emit s1)))))
+   (hash s1 #t s2 #f)))
+
+(let ()
+  (define s1 (signal))
+  (define s2 (signal))
+  (check-equal?
+   (react!
+    (reaction
+     (par (if (signal-value s2)
+              (void)
+              (emit s1))
+          (if (signal-value s1)
+              (void)
+              (car #f)))))
+   (hash s1 #t s2 #f)))
+
+(let ()
+  (define s1 (signal))
+  (define s2 (signal))
+  (check-equal?
+   (react!
+    (reaction
+     (par (if (signal-value s1)
+              (void)
+              (emit s2))
+          (if (signal-value s2)
+              (void)
+              (car #f)))))
+   (hash s1 #f s2 #t)))
+
+(check-exn
+ #rx"expected: pair[?].* given: #f"
+ (λ ()
+   ;; raising an exception also counts as an incorrect
+   ;; choice for the signal value so this program is
+   ;; non constructive, by that logic but we raise one
+   ;; of the exceptions as that seems more helpful
+   (define s1 (signal))
+   (define s2 (signal))
+   (react!
+    (reaction
+     (par (if (signal-value s1)
+              (void)
+              (car #f))
+          (if (signal-value s2)
+              (void)
+              (car #f)))))))
+
+
 ;                                                                                                            
 ;                                                                                                            
 ;                                                                                                            
