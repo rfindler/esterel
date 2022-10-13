@@ -28,3 +28,4 @@ value1			embedded JS
 value2-untyped		embedded JS
 valuepre1		embedded JS
 p19		pre
+TEST		not really a test case

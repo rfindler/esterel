@@ -43,33 +43,50 @@
 (define (build-reaction signals expr)
   (reaction
    (let loop ([expr expr]
-              [signals signals])
+              [signals signals]
+              [traps (hash)])
      (match expr
        [`(signal& ,s ,body)
-        (loop body (hash-set signals s (signal #:name s)))]
-       [`(seq& ,es ...) (for ([e (in-list es)]) (loop e signals))]
+        (loop body (hash-set signals s (signal #:name s)) traps)]
+       [`(seq& ,es ...) (for ([e (in-list es)]) (loop e signals traps))]
        [`(loop-each& ,r ,e1 ,e2s ...)
         (loop-each
          (for ([e (in-list (cons e1 e2s))])
-           (loop e signals))
+           (loop e signals traps))
          (hash-ref signals r))]
        [`(loop& ,e1 ,e2s ...)
         (let loop-loop ()
           (for ([e (in-list (cons e1 e2s))])
-            (loop e signals))
+            (loop e signals traps))
           (loop-loop))]
        [`(par& ,es ...)
         (let p-loop ([es es])
           (cond
-            [(null? (cdr es)) (loop (car es) signals)]
-            [else (par (loop (car es) signals)
+            [(null? (cdr es)) (loop (car es) signals traps)]
+            [else (par (loop (car es) signals traps)
                        (p-loop (cdr es)))]))]
        [`(await& ,s) (await (hash-ref signals s))]
-       [`(abort& ,s ,body) (abort-when (loop body signals) (hash-ref signals s))]
+       [`(await& ,(? natural? n) ,s)
+        (for ([i (in-range n)])
+          (await (hash-ref signals s)))]
+       [`(abort& ,s ,body1 ,body2 ...)
+        (abort-when (loop `(seq& ,body1 ,@body2) signals traps)
+                    (hash-ref signals s))]
        [`(emit& ,s) (emit (hash-ref signals s))]
-       [`pause& (pause)]))))
+       [`(present& ,s ,thn ,els) (if (signal-value (hash-ref signals s))
+                                     (loop thn signals traps)
+                                     (loop els signals traps))]
+       [`pause& (pause)]
+       [`halt& (halt)]
+       [`(await-immediate& ,i) (await-immediate (hash-ref signals i))]
+       [`(every& ,s ,body) (every (hash-ref signals s) (loop body signals traps))]
+       [`(trap& ,t ,body) (with-trap T (loop body signals (hash-set traps t T)))]
+       [`(exit& ,t) (exit-trap (hash-ref traps t))]
+       ))))
 
 (module+ main
   (require "parse.rkt" "find.rkt")
-  (run-hiphop-test
-   (load-hiphop-test (hiphop-test-name->path "abort-par-implicit-seq"))))
+  (for ([test (in-list (find-all-hiphop-tests))])
+    (printf "running ~a\n" test)
+    (run-hiphop-test
+     (load-hiphop-test test))))
