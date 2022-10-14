@@ -46,8 +46,10 @@
               [signals signals]
               [traps (hash)])
      (match expr
-       [`(signal& ,s ,body)
-        (loop body (hash-set signals s (signal #:name s)) traps)]
+       [`(signal& ,s ,body1 ,body2 ...)
+        (loop `(seq& ,body1 ,@body2)
+              (hash-set signals s (signal #:name s))
+              traps)]
        [`(seq& ,es ...) (for ([e (in-list es)]) (loop e signals traps))]
        [`(loop-each& ,r ,e1 ,e2s ...)
         (loop-each

@@ -1,6 +1,6 @@
 #lang racket
 (require "kernel-esterel.rkt")
-(provide halt loop-each abort-when
+(provide halt loop-each abort-when sustain
          await await-immediate
          every every-immediate
          (all-from-out "kernel-esterel.rkt"))
@@ -34,6 +34,10 @@
         (exit-trap T))
       (loop))))
 
+(define (await-n s n)
+  (error 'await-n
+         "need to think harder about this https://github.com/florence/esterel-calculus/blob/master/front-end.rkt#L797"))
+
 (define (await-immediate s)
   (with-trap T
     (let loop ()
@@ -42,14 +46,24 @@
       (pause)
       (loop))))
 
-(define-syntax-rule
-  (every s p)
-  (every/proc s (λ () p)))
+(define-syntax (every stx)
+  (syntax-case stx ()
+    [(_ s p) #'(every/proc s (λ () p))]
+    [(_ s n p) #'(every-n/proc s n (λ () p))]))
+
 (define (every/proc s thunk)
   (await s)
   (loop-each
    (thunk)
    s))
+
+(define (every-n/proc s n thunk)
+  (let ([every-n (signal)])
+    (par (let loop ()
+           (await n every-n)
+           (emit every-n)
+           (loop))
+         (every s (thunk)))))
 
 (define-syntax-rule
   (every-immediate s p)
@@ -59,3 +73,9 @@
   (loop-each
    (thunk)
    s))
+
+(define (sustain s)
+  (let loop ()
+    (emit s)
+    (pause)
+    (loop)))
