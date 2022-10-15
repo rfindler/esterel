@@ -78,12 +78,18 @@
        [`(present& ,s ,thn ,els) (if (signal-value (hash-ref signals s))
                                      (loop thn signals traps)
                                      (loop els signals traps))]
+       [`(suspend& ,s ,body1 ,body2 ...)
+        (suspend (loop `(seq& ,body1 ,@body2) signals traps)
+                 (hash-ref signals s))]
        [`pause& (pause)]
+       [`nothing& (void)]
        [`halt& (halt)]
        [`(await-immediate& ,i) (await-immediate (hash-ref signals i))]
-       [`(every& ,s ,body) (every (hash-ref signals s) (loop body signals traps))]
+       [`(every& ,(? symbol? s) ,body) (every (hash-ref signals s) (loop body signals traps))]
+       [`(every& ,s #:immediate ,body) (every-immediate (hash-ref signals s) (loop body signals traps))]
        [`(trap& ,t ,body) (with-trap T (loop body signals (hash-set traps t T)))]
        [`(exit& ,t) (exit-trap (hash-ref traps t))]
+       [`(sustain& ,s) (sustain (hash-ref signals s))]
        ))))
 
 (module+ main
