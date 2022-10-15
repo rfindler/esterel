@@ -22,16 +22,17 @@
   (abort-when p d)
   (abort-when/proc (λ () p) d))
 (define (abort-when/proc thunk d)
-  (with-trap T
-    (par (begin (suspend (thunk) d) (exit-trap T))
-         (begin (await d) (exit-trap T)))))
+  (with-trap T-abort-when.1
+    (with-trap T-abort-when.2
+      (par (begin (suspend (thunk) d) (exit-trap T-abort-when.1))
+           (begin (await d) (exit-trap T-abort-when.2))))))
 
 (define (await s)
-  (with-trap T
+  (with-trap T-await
     (let loop ()
       (pause)
       (when (signal-value s)
-        (exit-trap T))
+        (exit-trap T-await))
       (loop))))
 
 (define (await-n s n)
@@ -39,10 +40,10 @@
          "need to think harder about this https://github.com/florence/esterel-calculus/blob/master/front-end.rkt#L797"))
 
 (define (await-immediate s)
-  (with-trap T
+  (with-trap T-await-immediate
     (let loop ()
       (when (signal-value s)
-        (exit-trap T))
+        (exit-trap T-await-immediate))
       (pause)
       (loop))))
 
