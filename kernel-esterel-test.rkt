@@ -304,6 +304,64 @@
 
   (check-equal? (react! t) (hash O #t)))
 
+(let ()
+  (define O (signal))
+  (define r
+    (reaction
+     (par (with-trap T
+            (par (par (pause))
+                 (exit-trap T)))
+          (pause))
+     (emit O)))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash O #t)))
+
+(let ()
+  (define O (signal))
+  (define r
+    (reaction
+     (par (with-trap T1
+            (par (par (pause))
+                 (exit-trap T1)))
+          (pause)
+          (with-trap T2
+            (par (par (pause))
+                 (exit-trap T2))))
+     (emit O)))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash O #t)))
+
+(let ()
+  (define O (signal))
+  (define r
+    (reaction
+     (with-trap T0
+       (par (with-trap T1
+              (par (par (pause))
+                   (exit-trap T1)))
+            (exit-trap T0)
+            (with-trap T2
+              (par (par (pause))
+                   (exit-trap T2))))
+       (emit O))))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash)))
+
+(let ()
+  (define O (signal))
+  (define r
+    (reaction
+     (with-trap T0
+       (par (with-trap T1
+              (par (par (pause))
+                   (exit-trap T1)))
+            (exit-trap T0)
+            (with-trap T2
+              (par (par (pause))
+                   (exit-trap T2)))))
+     (emit O)))
+  (check-equal? (react! r) (hash O #t))
+  (check-equal? (react! r) (hash)))
 
 ;; exception raising
 (check-exn

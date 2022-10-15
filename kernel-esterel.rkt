@@ -450,6 +450,8 @@
 
   ;; a parent thread (of a par) points to a set of its children
   ;; that are either still running or are blocked on signal-value
+  ;; when a par has a par as its child, the child that's a par will
+  ;; also be in this set, even if all of the sub-par's children paused
   (define/contract par-active-children
     (hash/c thread? (set/c thread?) #:flat? #t #:immutable #t)
     (hash))
@@ -703,47 +705,31 @@
 ;                                                                               
 
 
-  (define (possibly-propagate-traps)
-    (define the-outermost-trap
-      (let loop ([parent-thread reaction-thread])
-        (define active-children (hash-ref par-active-children parent-thread set))
-        (define paused-children-or-trap (hash-ref par-paused-children-or-trap parent-thread #f))
-        (outermost-trap
-         (and (or (trap? paused-children-or-trap)
-                  (exn? paused-children-or-trap))
-              paused-children-or-trap)
-         (for/fold ([trap #f])
-                   ([child (in-set active-children)])
-           (outermost-trap (loop child) trap)))))
-    (define told-a-thread-to-unpause? #f)
-    (when the-outermost-trap
-      (let loop ([parent-thread reaction-thread])
-        (define active-children (hash-ref par-active-children parent-thread set))
-        (define paused-children-or-trap (hash-ref par-paused-children-or-trap parent-thread #f))
-        (when (set? paused-children-or-trap)
-          (set! told-a-thread-to-unpause? #t)
-          (paused-children-superceded-by-a-trap parent-thread the-outermost-trap))
-        (for ([active-child (in-set active-children)])
-          (loop active-child))))
-    told-a-thread-to-unpause?)
-
   (define (paused-children-superceded-by-a-trap parent-thread the-trap)
     (define paused-children-or-trap
       (hash-ref par-paused-children-or-trap parent-thread))
     (set! par-paused-children-or-trap
           (hash-set par-paused-children-or-trap parent-thread the-trap))
+    (define original-active-children (hash-ref par-active-children parent-thread))
     (set! par-active-children
           (hash-set par-active-children parent-thread
-                    (set-union (hash-ref par-active-children parent-thread)
-                               paused-children-or-trap)))
-    (for ([child-thread (in-set paused-children-or-trap)])
-      (define resp-chan (hash-ref paused-threads child-thread #f))
+                    (set-union original-active-children paused-children-or-trap)))
+    (for ([paused-child-thread (in-set paused-children-or-trap)])
+      (define resp-chan (hash-ref paused-threads paused-child-thread #f))
       (unless resp-chan
-        (error 'kernel-esterel.rkt::paused-threads.1
-               "did not find chan for supposedly paused thread ~s" child-thread))
+        (error 'kernel-esterel.rkt::paused-threads
+               "did not find chan for supposedly paused thread ~s" paused-child-thread))
       (channel-put resp-chan the-trap)
-      (add-running-thread child-thread)
-      (set! paused-threads (hash-remove paused-threads child-thread))))
+      (add-running-thread paused-child-thread)
+      (set! paused-threads (hash-remove paused-threads paused-child-thread)))
+    (for ([active-child-thread (in-set original-active-children)])
+      (define active-child-thread-paused-children-or-trap
+        (hash-ref par-paused-children-or-trap active-child-thread #f))
+      (when (set? active-child-thread-paused-children-or-trap)
+        ;; here we know that `parent-thread` passed to `paused-children-superceded-by-a-trap`
+        ;; has a child that is also a `par`, and that thread does not yet
+        ;; have a trap (or exn), so we need to propagate `the-trap` downwards
+        (paused-children-superceded-by-a-trap active-child-thread the-trap))))
   
   (let loop ()
     (cond
@@ -763,12 +749,6 @@
             instant-complete-chan)
        (log-esterel-debug "~a: instant is over: ~s" (eq-hash-code (current-thread)) (or latest-exn wrong-guess?))
        (cond
-         [(possibly-propagate-traps)
-          ;; sometimes there are some pauses left over that should turn into traps;
-          ;; here we check them and, if needed, turn them into traps. If some traps
-          ;; were propagated, we go back around and wait for all that to finish
-          ;; before coming here (this should need to happen at most once)
-          (loop)]
          [(or latest-exn wrong-guess?)
           ;; although we got to the end of the instant, we did so with
           ;; a wrong guess for signal absence; go back and try again
@@ -880,7 +860,16 @@
            (add-running-threads children-threads)
            (remove-running-thread parent-thread)
            (set! par-active-children (hash-set par-active-children parent-thread children-threads))
-           (set! par-paused-children-or-trap (hash-set par-paused-children-or-trap parent-thread (set)))
+           (define parent-parent-thread (hash-ref par-parents parent-thread #f))
+           (define parent-parent-paused-children-or-trap
+             (and parent-parent-thread
+                  (hash-ref par-paused-children-or-trap parent-parent-thread)))
+           (set! par-paused-children-or-trap
+                 (hash-set par-paused-children-or-trap parent-thread
+                           (if (or (trap? parent-parent-paused-children-or-trap)
+                                   (exn? parent-parent-paused-children-or-trap))
+                               parent-parent-paused-children-or-trap
+                               (set))))
            (set! par-checkpoint-or-result-chans
                  (hash-set par-checkpoint-or-result-chans parent-thread checkpoint-or-par-result-chan))
            (for ([child-thread (in-set children-threads)])
