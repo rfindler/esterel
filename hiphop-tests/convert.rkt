@@ -96,5 +96,9 @@
   (require "parse.rkt" "find.rkt")
   (for ([test (in-list (find-all-hiphop-tests))])
     (printf "running ~a\n" test)
-    (run-hiphop-test
-     (load-hiphop-test test))))
+    (with-handlers ([exn:fail? (λ (x)
+                                 ((error-display-handler)
+                                  (exn-message x)
+                                  x))])
+      (run-hiphop-test
+       (load-hiphop-test test)))))
