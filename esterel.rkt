@@ -24,7 +24,7 @@
 (define (abort-when/proc thunk d)
   (with-trap T-abort-when.1
     (with-trap T-abort-when.2
-      (par (begin (suspend (thunk) d) (exit-trap T-abort-when.1))
+      (par (begin (suspend (thunk) (signal-value d)) (exit-trap T-abort-when.1))
            (begin (await d) (exit-trap T-abort-when.2))))))
 
 (define (await s)

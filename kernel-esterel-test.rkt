@@ -148,7 +148,7 @@
   (define r
     (reaction
      (par
-      (let loop () (suspend (begin (pause) (emit s2)) s1) (loop))
+      (let loop () (suspend (begin (pause) (emit s2)) (signal-value s1)) (loop))
       (begin (emit s1) (pause) (emit s1)))))
   (check-equal? (react! r) (hash s1 #t))
   (check-equal? (react! r) (hash s1 #t))

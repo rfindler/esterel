@@ -80,7 +80,7 @@
                                      (loop els signals traps))]
        [`(suspend& ,s ,body1 ,body2 ...)
         (suspend (loop `(seq& ,body1 ,@body2) signals traps)
-                 (hash-ref signals s))]
+                 (signal-value (hash-ref signals s)))]
        [`pause& (pause)]
        [`nothing& (void)]
        [`halt& (halt)]
