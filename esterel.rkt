@@ -37,8 +37,17 @@
       (loop))))
 
 (define (await-n s n)
-  (error 'await-n
-         "need to think harder about this https://github.com/florence/esterel-calculus/blob/master/front-end.rkt#L797"))
+  (suspend
+   (repeat n (λ () (pause)))
+   (not (signal-value s))))
+
+(define (repeat n thunk)
+  (with-trap T
+    (thunk)
+    (let loop ([n (- n 1)])
+      (if (> n 0)
+          (begin (thunk) (loop (- n 1)))
+          (exit-trap T)))))
 
 (define (await-immediate s)
   (with-trap T-await-immediate
@@ -62,10 +71,10 @@
 (define (every-n/proc s n thunk)
   (let ([every-n (signal)])
     (par (let loop ()
-           (await n every-n)
+           (await-n s n)
            (emit every-n)
            (loop))
-         (every s (thunk)))))
+         (every every-n (thunk)))))
 
 (define-syntax-rule
   (every-immediate s p)

@@ -29,3 +29,5 @@ value2-untyped		embedded JS
 valuepre1		embedded JS
 p19		pre
 TEST		not really a test case
+run		do not support running a machine inside another one
+run2		do not support running a machine inside another one
