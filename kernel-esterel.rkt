@@ -24,6 +24,52 @@
   [exit-trap (-> trap? any)]
   [exn:fail:not-constructive? (-> any/c boolean?)]))
 
+
+#|
+
+When starting a reaction, we create a new thread that has
+the state of all the emitted signals, the `instant loop` thread.
+Then we also put the argument to `reaction` in its own thread,
+and all of the operations (emit, pause, etc) all communicate
+with the instant loop thread to determine the value of signals
+and to set them.
+
+Each time we do a `with-trap` we bind the variable to a new
+trap value and store, in that value, a natural number. This number
+is the depth of the trap that was just created and is stored
+in a continuation mark (with-trap's body is not in tail position
+wrt to the trap in order to avoid these marks colliding with each
+other). We also stick an escape continuation into the trap
+value. When exiting to a trap (that is not inside a nested par)
+we just jump to the escape continuation in the trap.
+
+Each `par` creates N different racket threads, one for each
+argument of the par. These threads all have a continuation
+mark set at the start with the trap counter at the par, which
+is used to determine if a trap is going to cross the par when
+it is exited. If a trap does have to exit the par, we communicate
+with the instant thread to let it know that this arm of the par
+has finished and it records the fact that this par has exited
+to this trap. If any other arms of the par pause, they get
+turned into traps.
+
+More generally, traps are tracked at four moments in time,
+and there is a mapping from the thread that started the par
+(the par's parent thread) to either a set of paused children
+or to a trap. We use this map at four moments in time:
+- when a par is first created, it checks to see if is in
+  an enclosing par that is already known to trap; if so
+  the par starts out knowing it is going to trap.
+- when a thread exits to a trap, it lets its parent par know
+- when a thread pauses, it checks to see if the parent thread
+  is already known to exit to a trap; if so the pause turns into
+  the corresponding trap
+- when all of the par's children completes, if one of them
+  exited to a trap, the par itself propagates the trap
+  (instead of just returning (void)).
+
+|#
+
 (define-logger esterel)
 
 (struct checkpoint-request (resp-chan))
