@@ -21,7 +21,8 @@
              #:pre (in-reaction?)
              void?)]
   [pause (->* () #:pre (in-reaction?) void?)]
-  [exit-trap (-> trap? any)]))
+  [exit-trap (-> trap? any)]
+  [exn:fail:not-constructive? (-> any/c boolean?)]))
 
 (define-logger esterel)
 
@@ -321,10 +322,15 @@
        maybe-signals]))
   (match maybe-signals
     ['non-constructive
-     (error 'react! "the program is not constructive")]
+     (raise
+      (exn:fail:not-constructive
+       "react!: the program is not constructive"
+       (current-continuation-marks)))]
     [(? exn?) (raise maybe-signals)]
     [#f (error 'react! "a reaction is already running")]
     [else maybe-signals]))
+
+(struct exn:fail:not-constructive exn:fail ())
 
 (define (run-reaction-thread thunk the-signal-table)
   (define first-instant-sema (make-semaphore 0))

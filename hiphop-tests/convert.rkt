@@ -15,26 +15,38 @@
      (let/ec escape
        (for ([input-output (in-list input-outputs)]
              [i (in-naturals)])
-         (match-define `((,s-inputs ...) => (,s-emitteds ...))
-           input-output)
+         (define-values (s-inputs s-emitteds)
+           (match input-output
+             [`((,s-inputs ...) => (,s-emitteds ...))
+              (values s-inputs s-emitteds)]
+             [`((,s-inputs ...) => #:causality-error)
+              (values s-inputs 'not-constructive)]))
          (define result
-           (react! r
-                   #:emit
-                   (for/list ([s-input (in-list s-inputs)])
-                     (hash-ref signals s-input))))
+           (with-handlers ([exn:fail:not-constructive?
+                            (λ (x) 'not-constructive)])
+             (react! r
+                     #:emit
+                     (for/list ([s-input (in-list s-inputs)])
+                       (hash-ref signals s-input)))))
          (define expected-outputs
-           (for/set ([s-emitted (in-list s-emitteds)])
-             (hash-ref signals s-emitted)))
+           (if (equal? s-emitteds 'not-constructive)
+               'not-constructive
+               (for/set ([s-emitted (in-list s-emitteds)])
+                 (hash-ref signals s-emitted))))
          (define (output-signal? s)
            (or (for/or ([si (in-list so)])
                  (equal? (hash-ref signals si) s))
                (for/or ([sio (in-list sio)])
                  (equal? (hash-ref signals sio) s))))
          (define actual-outputs
-           (for/set ([(signal emitted?) (in-hash result)]
-                     #:when emitted?
-                     #:when (output-signal? signal))
-             signal))
+           (cond
+             [(equal? result 'not-constructive)
+              'not-constructive]
+             [else
+              (for/set ([(signal emitted?) (in-hash result)]
+                        #:when emitted?
+                        #:when (output-signal? signal))
+                signal)]))
          (unless (equal? expected-outputs actual-outputs)
            (eprintf "reaction ~a (counting from 0):\n  file ~a\n  expected ~s\n       got ~s\n"
                     i fn expected-outputs actual-outputs)

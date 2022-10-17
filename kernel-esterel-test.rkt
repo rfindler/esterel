@@ -636,7 +636,7 @@
 
 ;; popl 2019, figure 11
 (check-exn
- #rx"not constructive"
+ exn:fail:not-constructive?
  (λ ()
    (let ([sl1 (signal)]
          [sl2 (signal)])
