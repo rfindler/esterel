@@ -3,6 +3,7 @@
 (provide halt loop-each abort-when sustain
          await await-immediate
          every every-immediate
+         weak-abort weak-abort-immediate
          (all-from-out "kernel-esterel.rkt"))
 
 (define (halt)
@@ -80,3 +81,21 @@
     (emit s)
     (pause)
     (loop)))
+
+(define-syntax-rule
+  (weak-abort signal expr1 expr2 ...)
+  (weak-abort/proc signal (λ () expr1 expr2 ...)))
+
+(define (weak-abort/proc signal body)
+  (with-trap T-weak-abort
+    (par (begin (body) (exit-trap T-weak-abort))
+         (begin (await-immediate signal) (exit-trap T-weak-abort)))))
+
+(define-syntax-rule
+  (weak-abort-immediate signal expr1 expr2 ...)
+  (weak-abort-immediate/proc signal (λ () expr1 expr2 ...)))
+
+(define (weak-abort-immediate/proc signal body)
+  (with-trap T-weak-abort-immediate
+    (par (begin (body) (exit-trap T-weak-abort-immediate))
+         (begin (await-immediate signal) (exit-trap T-weak-abort-immediate)))))

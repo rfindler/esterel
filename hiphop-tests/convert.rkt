@@ -90,6 +90,15 @@
        [`(trap& ,t ,body) (with-trap T (loop body signals (hash-set traps t T)))]
        [`(exit& ,t) (exit-trap (hash-ref traps t))]
        [`(sustain& ,s) (sustain (hash-ref signals s))]
+       [`(weak-abort& ,s ,e1 ,e2 ...)
+        (weak-abort (hash-ref signals s)
+                    (for ([e (in-list (cons e1 e2))])
+                      (loop e signals traps)))]
+       [`(weak-abort-immediate& ,s ,e1 ,e2 ...)
+        (weak-abort-immediate
+         (hash-ref signals s)
+         (for ([e (in-list (cons e1 e2))])
+           (loop e signals traps)))]
        ))))
 
 (module+ main
