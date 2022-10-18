@@ -463,7 +463,8 @@ DOC
 (define-empty-tokens hiphop-output-empty-tokens
   (OUTPUT SEMICOLON RESET-COMMAND RESET-RESPONSE OUTPUT-EOF
           BANGS
-          BANGS3))
+          BANGS3
+          WARNING))
 
 (define-lex-abbrev output-identifier (:+ (:or alphabetic numeric #\_)))
 
@@ -473,6 +474,7 @@ DOC
    ("!!!" (token-BANGS3))
    ((:: "!!!" (:+ "!")) (token-BANGS))
    ("--- Output:" (token-OUTPUT))
+   ("Warning: Potential causality cycle" (token-WARNING))
    ("!reset" (token-RESET-COMMAND))
    ((:: output-identifier #\>)
     (token-PROMPT lexeme))
@@ -493,6 +495,7 @@ DOC
     (sequence
       [() '()]
       [(causality) (list $1)]
+      [(WARNING sequence) $2]
       [(cycle sequence) (cons $1 $2)])
     (causality
      [(PROMPT signals SEMICOLON BANGS)

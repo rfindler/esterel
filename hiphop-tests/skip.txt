@@ -31,3 +31,4 @@ p19		pre
 TEST		not really a test case
 run		do not support running a machine inside another one
 run2		do not support running a machine inside another one
+npnvpv		doesn't look like an interesting tests

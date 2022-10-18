@@ -58,9 +58,15 @@
               [signals signals]
               [traps (hash)])
      (match expr
-       [`(signal& ,s ,body1 ,body2 ...)
+       [`(signal& ,(? symbol? s) ,body1 ,body2 ...)
+        (loop `(signal& (,s) ,body1 ,@body2)
+              signals
+              traps)]
+       [`(signal& (,(? symbol? signal-syms) ...) ,body1 ,body2 ...)
         (loop `(seq& ,body1 ,@body2)
-              (hash-set signals s (signal #:name s))
+              (for/fold ([signals signals])
+                        ([s (in-list signal-syms)])
+                (hash-set signals s (signal #:name s)))
               traps)]
        [`(seq& ,es ...) (for ([e (in-list es)]) (loop e signals traps))]
        [`(loop-each& ,r ,e1 ,e2s ...)
