@@ -17,6 +17,7 @@
                      #:pre (in-reaction?)
                      boolean?)]
   [signal? (-> any/c boolean?)]
+  [signal-name (-> signal? string?)]
   [emit (->* (signal?)
              #:pre (in-reaction?)
              void?)]
