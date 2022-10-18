@@ -907,16 +907,17 @@ or to a trap. We use this map at four moments in time:
            (match-define (vector checkpoint-or-par-result-chan parent-thread result-chans+children-threads)
              checkpoint-or-par-result-chan+parent+children-threads)
            (define children-threads (for/set ([x (in-set result-chans+children-threads)]) (cdr x)))
-           (log-esterel-debug "~a: starting a par ~s ~s"
-                              (eq-hash-code (current-thread))
-                              parent-thread children-threads)
-           (add-running-threads children-threads)
-           (remove-running-thread parent-thread)
-           (set! par-active-children (hash-set par-active-children parent-thread children-threads))
            (define parent-parent-thread (hash-ref par-parents parent-thread #f))
            (define parent-parent-paused-children-or-trap
              (and parent-parent-thread
                   (hash-ref par-paused-children-or-trap parent-parent-thread)))
+           (log-esterel-debug "~a: starting a par ~s ~s ~s"
+                              (eq-hash-code (current-thread))
+                              parent-thread children-threads
+                              parent-parent-paused-children-or-trap)
+           (add-running-threads children-threads)
+           (remove-running-thread parent-thread)
+           (set! par-active-children (hash-set par-active-children parent-thread children-threads))
            (set! par-paused-children-or-trap
                  (hash-set par-paused-children-or-trap parent-thread
                            (if (or (trap? parent-parent-paused-children-or-trap)
@@ -989,10 +990,10 @@ or to a trap. We use this map at four moments in time:
          (λ (thread+resp-chan)
            (match-define (vector paused-thread resp-chan) thread+resp-chan)
            (define parent-thread (hash-ref par-parents paused-thread #f))
-           (log-esterel-debug "~a: paused ~s" (eq-hash-code (current-thread)) paused-thread)
            (define paused-siblings-or-trap
              (and parent-thread
                   (hash-ref par-paused-children-or-trap parent-thread set)))
+           (log-esterel-debug "~a: paused ~s ~s" (eq-hash-code (current-thread)) paused-thread paused-siblings-or-trap)
            (cond
              [(or (exn? paused-siblings-or-trap)
                   (trap? paused-siblings-or-trap))
