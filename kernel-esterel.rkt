@@ -72,6 +72,26 @@ or to a trap. We use this map at four moments in time:
 |#
 
 (define-logger esterel)
+(define (log-par-state par-active-children
+                       par-paused-children-or-trap
+                       par-checkpoint-or-result-chans
+                       running-threads)
+  (log-esterel-debug
+   "run ~s\n         par ~s\n         act ~a\n         pau ~a\n"
+   running-threads
+   (hash-keys par-checkpoint-or-result-chans)
+   (for/fold ([s ""])
+             ([(k v) (in-hash par-active-children)]
+              [i (in-naturals)])
+     (string-append s
+                    (if (= i 0) "" "\n             ")
+                    (format "~s -> ~s" k v)))
+   (for/fold ([s ""])
+             ([(k v) (in-hash par-paused-children-or-trap)]
+              [i (in-naturals)])
+     (string-append s
+                    (if (= i 0) "" "\n             ")
+                    (format "~s -> ~s" k v)))))
 
 (struct checkpoint-request (resp-chan))
 (define reaction-prompt-tag (make-continuation-prompt-tag 'reaction))
@@ -162,21 +182,18 @@ or to a trap. We use this map at four moments in time:
                 (values pending-result-chans+par-threads checkpoint-or-par-result-chan))
               reaction-prompt-tag))
            (when (set-empty? pending-result-chans+par-threads)
-             (error 'kernel-esterel.rkt "internal error: asked for a par checkpoint with no children"))
+             (internal-error "asked for a par checkpoint with no children"))
            (loop new-pending-result-chans+par-threads new-checkpoint-or-par-result-chan)]
           [(? (or/c trap? exn?))
            (unless (set-empty? pending-result-chans+par-threads)
-             (error 'kernel-esterel.rkt
-                    "internal error: exiting the par but still have children ~s ~s"
-                    checkpoint-resp-chan-or-final-result
-                    pending-result-chans+par-threads))
+             (internal-error "exiting the par but still have children.1 ~s ~s"
+                             checkpoint-resp-chan-or-final-result
+                             pending-result-chans+par-threads))
            (exit-trap checkpoint-resp-chan-or-final-result)]
           [#f
            (unless (set-empty? pending-result-chans+par-threads)
-             (error 'kernel-esterel.rkt
-                    "internal error: exiting the par but still have children ~s ~s"
-                    checkpoint-resp-chan-or-final-result
-                    pending-result-chans+par-threads))
+             (internal-error "exiting the par but still have children.2 ~s"
+                             pending-result-chans+par-threads))
            (void)])))
      (for/list ([result-chan+pending-par-thread (in-set pending-result-chans+par-threads)])
        (match-define (cons result-chan pending-par-thread) result-chan+pending-par-thread)
@@ -211,11 +228,15 @@ or to a trap. We use this map at four moments in time:
          (channel-put
           par-child-result-chan
           (let/ec escape
+            (define original-uncaught-exception-handler
+              (uncaught-exception-handler))
             (parameterize ([uncaught-exception-handler
                             (λ (x)
-                              ;; what about breaks?
-                              (escape
-                               (raise-argument->exn x)))])
+                              (if (kernel-esterel.rkt::internal-error? x)
+                                  (original-uncaught-exception-handler x)
+                                  ;; what about breaks?
+                                  (escape
+                                   (raise-argument->exn x))))])
               (with-continuation-mark trap-start-of-par-mark
                 (vector escape before-par-trap-counter)
                 (with-continuation-mark trap-counter-mark before-par-trap-counter
@@ -393,8 +414,12 @@ or to a trap. We use this map at four moments in time:
              (let/ec escape
                (call-with-exception-handler
                 (λ (exn)
-                  (channel-put react-thread-done-chan (raise-argument->exn exn))
-                  (escape (void)))
+                  (cond
+                    [(kernel-esterel.rkt::internal-error? exn)
+                     exn]
+                    [else
+                     (channel-put react-thread-done-chan (raise-argument->exn exn))
+                     (escape (void))]))
                 thunk)
                (channel-put react-thread-done-chan #f)))
            reaction-prompt-tag))
@@ -481,11 +506,18 @@ or to a trap. We use this map at four moments in time:
   (define running-threads (set reaction-thread))
   (define/contract (add-running-thread t)
     (-> thread? void?)
+    (when (set-member? running-threads t)
+      (internal-error "adding a running thread but it was already running ~s" t))
     (set! running-threads (set-add running-threads t)))
   (define/contract (add-running-threads ts)
     (-> (set/c thread?) void?)
+    (for ([t (in-set ts)])
+      (when (set-member? running-threads t)
+        (internal-error "adding a running thread (via add-running-threads) but it was already running ~s" t)))
     (set! running-threads (set-union running-threads ts)))
   (define (remove-running-thread t)
+    (unless (set-member? running-threads t)
+      (internal-error "removing a running thread but it was not running ~s" t))
     (set! running-threads (set-remove running-threads t)))
 
   ;; a child thread (of a par) points to its parent
@@ -576,6 +608,7 @@ or to a trap. We use this map at four moments in time:
                     (hash-keys signal-waiters))]))
     (unless non-constructive-program?
       (log-esterel-debug "~a: chose ~a to be absent" (eq-hash-code (current-thread)) signal-to-be-absent)
+      (log-par-state par-active-children par-paused-children-or-trap par-checkpoint-or-result-chans running-threads)
       (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
       (set! signals (hash-set signals signal-to-be-absent #f))
       (set! signal-waiters (hash-remove signal-waiters signal-to-be-absent))
@@ -653,7 +686,7 @@ or to a trap. We use this map at four moments in time:
            (match-define (cons signal (blocked-thread thread resp-chan)) signal+blocked-thread)
            (channel-put resp-chan a-checkpoint-request)
            (rb-blocked signal (channel-get k-chan)))]
-        [else (error 'kernel-esterel.rkt::collect-rollback-points "lost a thread ~s" thread)])))
+        [else (internal-error "lost a thread ~s" thread)])))
 
   ;; rebuild-threads-from-rb-tree : rb-tree? -> thread
   ;; returns the new reaction thread
@@ -788,6 +821,7 @@ or to a trap. We use this map at four moments in time:
     (cond
       [non-constructive-program?
        (log-esterel-debug "~a: non constructive program ~s" (eq-hash-code (current-thread)) raised-exns)
+       (log-par-state par-active-children par-paused-children-or-trap par-checkpoint-or-result-chans running-threads)
        (channel-put instant-complete-chan
                     (if (set-empty? raised-exns)
                         'non-constructive
@@ -801,6 +835,7 @@ or to a trap. We use this map at four moments in time:
             (set-empty? running-threads)
             instant-complete-chan)
        (log-esterel-debug "~a: instant is over: ~s" (eq-hash-code (current-thread)) (or latest-exn wrong-guess?))
+       (log-par-state par-active-children par-paused-children-or-trap par-checkpoint-or-result-chans running-threads)
        (cond
          [(or latest-exn wrong-guess?)
           ;; although we got to the end of the instant, we did so with
@@ -818,6 +853,7 @@ or to a trap. We use this map at four moments in time:
       ;; an instant is not runnning, wait for one to start (but don't wait for other stuff)
       [(not instant-complete-chan)
        (log-esterel-debug "~a: waiting for an instant to start" (eq-hash-code (current-thread)))
+       (log-par-state par-active-children par-paused-children-or-trap par-checkpoint-or-result-chans running-threads)
        (sync
         (handle-evt
          instant-chan
@@ -856,7 +892,7 @@ or to a trap. We use this map at four moments in time:
       ;; everyone's blocked on signals or paused; pick a signal to set to be absent
       [(set-empty? running-threads)
        (when (= 0 (hash-count signal-waiters))
-         (error 'kernel-esterel.rkt "internal error; expected someone to be blocked on a signal"))
+         (internal-error "expected someone to be blocked on a signal"))
        (choose-a-signal-to-be-absent)
        (loop)]
 
@@ -872,6 +908,7 @@ or to a trap. We use this map at four moments in time:
                               a-signal
                               (hash-ref signals a-signal 'unknown)
                               the-thread)
+           (log-par-state par-active-children par-paused-children-or-trap par-checkpoint-or-result-chans running-threads)
            (match (hash-ref signals a-signal 'unknown)
              ['unknown
               (remove-running-thread the-thread)
@@ -888,6 +925,7 @@ or to a trap. We use this map at four moments in time:
                               (eq-hash-code (current-thread))
                               a-signal
                               (hash-ref signals a-signal 'unknown))
+           (log-par-state par-active-children par-paused-children-or-trap par-checkpoint-or-result-chans running-threads)
            (match (hash-ref signals a-signal 'unknown)
              ['unknown
               (set! signals (hash-set signals a-signal #t))
@@ -938,6 +976,7 @@ or to a trap. We use this map at four moments in time:
                               (eq-hash-code (current-thread))
                               done-thread
                               new-trap)
+           (log-par-state par-active-children par-paused-children-or-trap par-checkpoint-or-result-chans running-threads)
            (remove-running-thread done-thread)
            (define children-to-remove (set done-thread))
            (define paused-children-or-trap (hash-ref par-paused-children-or-trap parent-thread))
@@ -1026,7 +1065,15 @@ or to a trap. We use this map at four moments in time:
          react-thread-done-chan
          (λ (exn)
            (log-esterel-debug "~a: main reaction thread done, ~s" (eq-hash-code (current-thread)) exn)
+           (log-par-state par-active-children par-paused-children-or-trap par-checkpoint-or-result-chans running-threads)
            (set! latest-exn exn)
            (remove-running-thread reaction-thread)
            (loop)))
         )])))
+
+(struct kernel-esterel.rkt::internal-error exn:fail ())
+(define (internal-error fmt . args)
+  (raise
+  (kernel-esterel.rkt::internal-error
+   (string-append "kernel-esterel.rkt: internal error: " (apply format fmt args))
+   (current-continuation-marks))))
