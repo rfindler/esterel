@@ -26,16 +26,18 @@
   (check-equal?
    (react!
     (reaction
-     (par (begin (emit s) #f)
-          (signal-value s))))
+     (par
+      (begin (emit s) #f)
+      (signal-value s))))
    (hash s #t)))
 
 (let ([s (signal)])
   (check-equal?
    (react!
     (reaction
-     (par (signal-value s)
-          (signal-value s))))
+     (par
+      (signal-value s)
+      (signal-value s))))
    (hash s #f)))
 
 (check-equal?
@@ -93,53 +95,71 @@
 
 (check-equal?
  (react! (reaction
-          (par (pause)
-               (void))))
+          (par
+           (pause)
+           (void))))
  (hash))
 
 (check-equal?
  (react! (reaction
-          (par (pause)
-               (pause))))
+          (par
+           (pause)
+           (pause))))
  (hash))
 
 (let ([s (signal)])
   (check-equal?
    (react! (reaction
-            (par (pause)
-                 (emit s))))
+            (par
+             (pause)
+             (emit s))))
    (hash s #t)))
 
 (check-equal?
  (react! (reaction
-          (par (par (pause)
-                    (pause))
-               (par (pause)
-                    (pause)))))
+          (par
+           (par
+            (pause)
+            (pause))
+           (par
+            (pause)
+            (pause)))))
  (hash))
 
 (let ([s (signal)])
   (check-equal?
    (react!
     (reaction
-     (par (par (signal-value s)
-               (pause))
-          (par (pause)
-               (signal-value s)))))
+     (par
+      (par
+       (signal-value s)
+       (pause))
+      (par
+       (pause)
+       (signal-value s)))))
    (hash s #f)))
 
 (check-equal?
  (react! (reaction
-          (par (par (par (par (pause)
-                              (pause))
-                         (par (pause)
-                              (pause)))
-                    (pause))
-               (par (pause)
-                    (par (par (pause)
-                              (pause))
-                         (par (pause)
-                              (pause)))))))
+          (par
+           (par
+            (par
+             (par
+              (pause)
+              (pause))
+             (par
+              (pause)
+              (pause)))
+            (pause))
+           (par
+            (pause)
+            (par
+             (par
+              (pause)
+              (pause))
+             (par
+              (pause)
+              (pause)))))))
  (hash))
 
 (let ()
@@ -172,8 +192,9 @@
    (react!
     (reaction
      (with-trap t
-       (par (emit s1)
-            (exit-trap t))
+       (par
+        (emit s1)
+        (exit-trap t))
        (emit s2))))
    (hash s1 #t)))
 
@@ -184,8 +205,9 @@
     (reaction
      (with-trap t1
        (with-trap t2
-         (par (exit-trap t1)
-              (exit-trap t2))
+         (par
+          (exit-trap t1)
+          (exit-trap t2))
          (emit s1))
        (emit s2))))
    (hash)))
@@ -199,10 +221,13 @@
        (with-trap t2
          (with-trap t3
            (with-trap t4
-             (par (par (exit-trap t1)
-                       (exit-trap t4))
-                  (par (exit-trap t2)
-                       (emit s1))))))
+             (par
+              (par
+               (exit-trap t1)
+               (exit-trap t4))
+              (par
+               (exit-trap t2)
+               (emit s1))))))
        (emit s2))))
    (hash s1 #t)))
 
@@ -211,8 +236,9 @@
   (define r
     (reaction
      (with-trap t1
-       (par (begin (pause) (emit s1))
-            (exit-trap t1)))))
+       (par
+        (begin (pause) (emit s1))
+        (exit-trap t1)))))
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash)))
 
@@ -222,8 +248,9 @@
   (define r
     (reaction
      (with-trap t1
-       (par (begin (pause) (emit s1))
-            (exit-trap t1)))
+       (par
+        (begin (pause) (emit s1))
+        (exit-trap t1)))
      (pause)
      (emit s3)))
   (check-equal? (react! r) (hash))
@@ -233,9 +260,11 @@
   (define r
     (reaction
      (with-trap T1
-       (par (exit-trap T1)))
-     (par (pause)
-          (pause))))
+       (par
+        (exit-trap T1)))
+     (par
+      (pause)
+      (pause))))
 
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash)))
@@ -263,8 +292,9 @@
   (define t
     (reaction
      (with-trap T
-       (par (pause)
-            (exit-trap T)))
+       (par
+        (pause)
+        (exit-trap T)))
      (emit O)))
 
   (check-equal? (react! t) (hash O #t)))
@@ -274,8 +304,10 @@
   (define t
     (reaction
      (with-trap T
-       (par (par (pause))
-            (exit-trap T)))
+       (par
+        (par
+         (pause))
+        (exit-trap T)))
      (emit O)))
 
   (check-equal? (react! t) (hash O #t)))
@@ -285,9 +317,11 @@
   (define t
     (reaction
      (with-trap T
-       (par (par (pause)
-                 (pause))
-            (exit-trap T)))
+       (par
+        (par
+         (pause)
+         (pause))
+        (exit-trap T)))
      (emit O)))
 
   (check-equal? (react! t) (hash O #t)))
@@ -297,9 +331,11 @@
   (define t
     (reaction
      (with-trap T
-       (par (par (pause)
-                 (void))
-            (exit-trap T)))
+       (par
+        (par
+         (pause)
+         (void))
+        (exit-trap T)))
      (emit O)))
 
   (check-equal? (react! t) (hash O #t)))
@@ -308,10 +344,13 @@
   (define O (signal))
   (define r
     (reaction
-     (par (with-trap T
-            (par (par (pause))
-                 (exit-trap T)))
+     (par
+      (with-trap T
+        (par
+         (par
           (pause))
+         (exit-trap T)))
+      (pause))
      (emit O)))
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash O #t)))
@@ -320,13 +359,18 @@
   (define O (signal))
   (define r
     (reaction
-     (par (with-trap T1
-            (par (par (pause))
-                 (exit-trap T1)))
-          (pause)
-          (with-trap T2
-            (par (par (pause))
-                 (exit-trap T2))))
+     (par
+      (with-trap T1
+        (par
+         (par
+          (pause))
+         (exit-trap T1)))
+      (pause)
+      (with-trap T2
+        (par
+         (par
+          (pause))
+         (exit-trap T2))))
      (emit O)))
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash O #t)))
@@ -336,13 +380,18 @@
   (define r
     (reaction
      (with-trap T0
-       (par (with-trap T1
-              (par (par (pause))
-                   (exit-trap T1)))
-            (exit-trap T0)
-            (with-trap T2
-              (par (par (pause))
-                   (exit-trap T2))))
+       (par
+        (with-trap T1
+          (par
+           (par
+            (pause))
+           (exit-trap T1)))
+        (exit-trap T0)
+        (with-trap T2
+          (par
+           (par
+            (pause))
+           (exit-trap T2))))
        (emit O))))
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash)))
@@ -352,13 +401,18 @@
   (define r
     (reaction
      (with-trap T0
-       (par (with-trap T1
-              (par (par (pause))
-                   (exit-trap T1)))
-            (exit-trap T0)
-            (with-trap T2
-              (par (par (pause))
-                   (exit-trap T2)))))
+       (par
+        (with-trap T1
+          (par
+           (par
+            (pause))
+           (exit-trap T1)))
+        (exit-trap T0)
+        (with-trap T2
+          (par
+           (par
+            (pause))
+           (exit-trap T2)))))
      (emit O)))
   (check-equal? (react! r) (hash O #t))
   (check-equal? (react! r) (hash)))
@@ -376,24 +430,17 @@
  (λ ()
    (react!
     (reaction
-     (par (car #f))))))
+     (par
+      (car #f))))))
 
 (check-exn
  #rx"expected: pair[?].* given: #f"
  (λ ()
    (react!
     (reaction
-     (par (pause)
-          (car #f))))))
-
-(check-exn
- #rx"expected: pair[?].* given: #f"
- (λ ()
-   (react!
-    (reaction
-     (with-trap T
-       (par (exit-trap T)
-            (car #f)))))))
+     (par
+      (pause)
+      (car #f))))))
 
 (check-exn
  #rx"expected: pair[?].* given: #f"
@@ -401,16 +448,32 @@
    (react!
     (reaction
      (with-trap T
-       (par (par (exit-trap T))
-            (par (car #f))))))))
+       (par
+        (exit-trap T)
+        (car #f)))))))
+
+(check-exn
+ #rx"expected: pair[?].* given: #f"
+ (λ ()
+   (react!
+    (reaction
+     (with-trap T
+       (par
+        (par
+         (exit-trap T))
+        (par
+         (car #f))))))))
 
 (let ()
   (define S (signal))
   (define r
     (reaction
-      (with-trap T
-        (par (par (pause) (emit S))
-             (par (car #f))))))
+     (with-trap T
+       (par
+        (par
+         (pause) (emit S))
+        (par
+         (car #f))))))
   (check-exn
    #rx"expected: pair[?].* given: #f"
    (λ () (react! r)))
@@ -424,12 +487,13 @@
   (check-equal?
    (react!
     (reaction
-     (par (if (signal-value s1)
-              (void)
-              (car #f))
-          (if (signal-value s2)
-              (void)
-              (emit s1)))))
+     (par
+      (if (signal-value s1)
+          (void)
+          (car #f))
+      (if (signal-value s2)
+          (void)
+          (emit s1)))))
    (hash s1 #t s2 #f)))
 
 (let ()
@@ -438,12 +502,13 @@
   (check-equal?
    (react!
     (reaction
-     (par (if (signal-value s2)
-              (void)
-              (emit s1))
-          (if (signal-value s1)
-              (void)
-              (car #f)))))
+     (par
+      (if (signal-value s2)
+          (void)
+          (emit s1))
+      (if (signal-value s1)
+          (void)
+          (car #f)))))
    (hash s1 #t s2 #f)))
 
 (let ()
@@ -452,12 +517,13 @@
   (check-equal?
    (react!
     (reaction
-     (par (if (signal-value s1)
-              (void)
-              (emit s2))
-          (if (signal-value s2)
-              (void)
-              (car #f)))))
+     (par
+      (if (signal-value s1)
+          (void)
+          (emit s2))
+      (if (signal-value s2)
+          (void)
+          (car #f)))))
    (hash s1 #f s2 #t)))
 
 (check-exn
@@ -471,12 +537,13 @@
    (define s2 (signal))
    (react!
     (reaction
-     (par (if (signal-value s1)
-              (void)
-              (car #f))
-          (if (signal-value s2)
-              (void)
-              (car #f)))))))
+     (par
+      (if (signal-value s1)
+          (void)
+          (car #f))
+      (if (signal-value s2)
+          (void)
+          (car #f)))))))
 
 
 ;                                                                                                            
@@ -518,10 +585,11 @@
   (check-equal?
    (react!
     (reaction
-     (par (emit sl)
-          (if (signal-value sl)
-              (emit so1)
-              (emit so2)))))
+     (par
+      (emit sl)
+      (if (signal-value sl)
+          (emit so1)
+          (emit so2)))))
    (hash sl #t so1 #t)))
 
 
@@ -545,8 +613,9 @@
   (check-equal?
    (react!
     (reaction
-     (par (when (signal-value sl1) (emit sl2))
-          (when (signal-value sl2) (emit sl1)))))
+     (par
+      (when (signal-value sl1) (emit sl2))
+      (when (signal-value sl2) (emit sl1)))))
    (hash sl1 #f sl2 #f)))
 
 
@@ -556,9 +625,9 @@
       [so2 (signal)])
   (define r
     (reaction
-     (par (begin (pause)
-                 (emit sl))
-          (if (signal-value sl) (emit so1) (emit so2)))))
+     (par
+      (begin (pause) (emit sl))
+      (if (signal-value sl) (emit so1) (emit so2)))))
   (check-equal?
    (react! r)
    (hash sl #f so2 #t))
@@ -574,17 +643,18 @@
       [so2 (signal)])
   (define r
     (reaction
-     (par (if (signal-value sl1)
-              (if (signal-value sl2)
-                  (emit so1)
-                  (emit sl3))
-              (if (signal-value sl2)
-                  (emit so2)
-                  (emit sl3)))
-          (begin
-            (emit sl2)
-            (when (signal-value sl3) (pause))
-            (emit sl1)))))
+     (par
+      (if (signal-value sl1)
+          (if (signal-value sl2)
+              (emit so1)
+              (emit sl3))
+          (if (signal-value sl2)
+              (emit so2)
+              (emit sl3)))
+      (begin
+        (emit sl2)
+        (when (signal-value sl3) (pause))
+        (emit sl1)))))
   (check-equal?
    (react! r)
    (hash sl1 #t sl2 #t sl3 #f so1 #t)))
@@ -642,9 +712,10 @@
          [sl2 (signal)])
      (react!
       (reaction
-       (par (when (signal-value sl1) (emit sl2))
-            (begin (when (signal-value sl2) pause)
-                   (emit sl1))))))))
+       (par
+        (when (signal-value sl1) (emit sl2))
+        (begin (when (signal-value sl2) pause)
+               (emit sl1))))))))
 
 ;; popl 2019, figure 25
 (let ([s-outer (signal)]
