@@ -12,27 +12,30 @@
     (loop)))
 
 (define-syntax-rule
-  (loop-each p t)
-  (loop-each/proc (λ () p) t))
-(define (loop-each/proc thunk t)
+  (loop-each p s)
+  (loop-each/proc (λ () p) s))
+(define (loop-each/proc thunk s)
   (let loop ()
-    (abort-when (begin (thunk) (halt)) t)
+    (abort-when (begin (thunk) (halt)) (signal-value s))
     (loop)))
 
 (define-syntax-rule
   (abort-when p d)
-  (abort-when/proc (λ () p) d))
-(define (abort-when/proc thunk d)
+  (abort-when/proc (λ () p) (λ () d)))
+(define (abort-when/proc body-thunk when-thunk)
   (with-trap T-abort-when.1
     (with-trap T-abort-when.2
-      (par (begin (suspend (thunk) (signal-value d)) (exit-trap T-abort-when.1))
-           (begin (await d) (exit-trap T-abort-when.2))))))
+      (par (begin (suspend (body-thunk) (when-thunk)) (exit-trap T-abort-when.1))
+           (begin (await (when-thunk)) (exit-trap T-abort-when.2))))))
 
-(define (await s)
+(define-syntax-rule
+  (await e)
+  (await/proc (λ () e)))
+(define (await/proc thunk)
   (with-trap T-await
     (let loop ()
       (pause)
-      (when (signal-value s)
+      (when (thunk)
         (exit-trap T-await))
       (loop))))
 
@@ -63,7 +66,7 @@
     [(_ s n p) #'(every-n/proc s n (λ () p))]))
 
 (define (every/proc s thunk)
-  (await s)
+  (await (signal-value s))
   (loop-each
    (thunk)
    s))

@@ -14,6 +14,7 @@
                (hash/c signal? boolean? #:immutable #t #:flat? #t))]
   [in-reaction? (-> boolean?)]
   [signal-value (->* (signal?)
+                     (#:pre natural?)
                      #:pre (in-reaction?)
                      boolean?)]
   [signal? (-> any/c boolean?)]
@@ -94,15 +95,20 @@ If the latter, we raise the non-constructive exception.
   (define signal-table (current-signal-table))
   (channel-put (signal-table-emit-chan signal-table) a-signal))
   
-(define (signal-value a-signal)
+(define (signal-value a-signal #:pre [pre 0])
   (define signal-table (current-signal-table))
   (define resp-chan (make-channel))
+  (unless (<= pre (signal-table-pre-count signal-table))
+    (error 'signal-value
+           "#:pre argument too large\n  maximum: ~a\n  given: ~a"
+           (signal-table-pre-count signal-table)
+           pre))
   (channel-put (signal-table-signal-chan signal-table)
-               (vector a-signal (current-thread) resp-chan))
+               (vector a-signal (current-thread) resp-chan pre))
   (let loop ([resp-chan resp-chan])
     (define maybe-val (channel-get resp-chan))
-    (cond
-      [(checkpoint-request? maybe-val)
+    (match maybe-val
+      [(? checkpoint-request?)
        (loop
         (call/cc
          (λ (k)
@@ -154,6 +160,8 @@ If the latter, we raise the non-constructive exception.
           [(? channel?)
            ;; here we have been asked to do a checkpoint
            (define-values (new-pending-result-chans+par-threads new-checkpoint-or-par-result-chan)
+             ;; is it possible we get asked for the same continuation multiple times?
+             ;; should we save them, if so?
              (call/cc
               (λ (k)
                 (channel-put checkpoint-resp-chan-or-final-result (vector before-par-trap-counter k))
@@ -339,15 +347,22 @@ If the latter, we raise the non-constructive exception.
                       emit-chan
                       par-start-chan par-partly-done-chan
                       pause-chan instant-chan
-                      react-thread-done-chan))
+                      react-thread-done-chan
+                      pre-count))
   
 (struct reaction (signal-table) #:mutable)
-(define-syntax-rule (-reaction e1 e2 ...) (reaction/proc (λ () e1 e2 ...)))
-(define (reaction/proc thunk)
+(define-syntax (-reaction stx)
+  (syntax-parse stx
+    [(_ #:pre pre-expr:expr e1:expr e2:expr ...)
+     #'(reaction/proc pre-expr (λ () e1 e2 ...))]
+    [(_ e1:expr e2:expr ...)
+     #'(reaction/proc 0 (λ () e1 e2 ...))]))
+(define (reaction/proc pre-count thunk)
   (define the-signal-table
     (signal-table (make-channel) (make-channel) (make-channel)
-                  (make-channel) (make-channel) (make-channel) (make-channel)))
-  (thread (λ () (run-reaction-thread thunk the-signal-table)))
+                  (make-channel) (make-channel) (make-channel) (make-channel)
+                  pre-count))
+  (thread (λ () (run-reaction-thread pre-count thunk the-signal-table)))
   (reaction the-signal-table))
 
 (define (react! a-reaction #:emit [signals-to-emit '()])
@@ -379,7 +394,7 @@ If the latter, we raise the non-constructive exception.
 
 (struct exn:fail:not-constructive exn:fail ())
 
-(define (run-reaction-thread thunk the-signal-table)
+(define (run-reaction-thread pre-count thunk the-signal-table)
   (define first-instant-sema (make-semaphore 0))
   (define reaction-thread
     (let ([first-instant-sema first-instant-sema])
@@ -406,8 +421,14 @@ If the latter, we raise the non-constructive exception.
   (match-define (signal-table signal-chan emit-chan
                               par-start-chan par-partly-done-chan
                               pause-chan instant-chan
-                              react-thread-done-chan)
+                              react-thread-done-chan
+                              pre-count)
     the-signal-table)
+
+  ;; tracks the values of signals in previous instants
+  (define/contract signals-pre
+    (listof (set/c signal?))
+    '())
 
 
 ;                                                                                    
@@ -896,6 +917,18 @@ If the latter, we raise the non-constructive exception.
           ;; close the instant down and let `react!` know
           (channel-put instant-complete-chan signals)
           (set! instant-complete-chan #f)
+          ; save the signals from previous instants
+          (set! signals-pre
+                (let loop ([signals-pre (cons (for/set ([(signal val) (in-hash signals)]
+                                                        #:when val)
+                                                signal)
+                                              signals-pre)]
+                           [pre-count pre-count])
+                  (cond
+                    [(zero? pre-count) '()]
+                    [(null? signals-pre) '()]
+                    [else (cons (car signals-pre)
+                                (loop (cdr signals-pre) (- pre-count 1)))])))
           (set! signals (hash)) ;; reset the signals in preparation for the next instant
           (set! raised-exns (set)) ;; reset the exns (as they are now defunct; bad guesses)
           (loop)])]
@@ -942,31 +975,42 @@ If the latter, we raise the non-constructive exception.
        (sync
         (handle-evt
          signal-chan
-         (λ (s+resp)
-           (match-define (vector a-signal the-thread resp-chan) s+resp)
+         (λ (s+thd+resp+pre)
+           (match-define (vector a-signal the-thread resp-chan pre) s+thd+resp+pre)
            (log-esterel-debug "~a: waiting on a signal ~s ~s ~s"
                               (eq-hash-code (current-thread))
                               a-signal
                               (hash-ref signals a-signal 'unknown)
                               the-thread)
            (log-par-state)
-           (match (hash-ref signals a-signal 'unknown)
-             ['unknown
-              (remove-running-thread the-thread)
-              (add-signal-waiter! a-signal the-thread resp-chan)
-              (define parent-thread (hash-ref par-parents the-thread #f))
-              (when parent-thread
-                (define old-par-state (hash-ref parent->par-state parent-thread))
-                (define new-par-state
-                  (struct-copy
-                   par-state old-par-state
-                   [active (set-remove (par-state-active old-par-state) the-thread)]
-                   [signal-waiting (set-add (par-state-signal-waiting old-par-state) the-thread)]))
-                (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))]
-             [#f
-              (channel-put resp-chan #f)]
-             [#t
-              (channel-put resp-chan #t)])
+           (cond
+             [(= pre 0)
+              (match (hash-ref signals a-signal 'unknown)
+                ['unknown
+                 (remove-running-thread the-thread)
+                 (add-signal-waiter! a-signal the-thread resp-chan)
+                 (define parent-thread (hash-ref par-parents the-thread #f))
+                 (when parent-thread
+                   (define old-par-state (hash-ref parent->par-state parent-thread))
+                   (define new-par-state
+                     (struct-copy
+                      par-state old-par-state
+                      [active (set-remove (par-state-active old-par-state) the-thread)]
+                      [signal-waiting (set-add (par-state-signal-waiting old-par-state) the-thread)]))
+                   (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))]
+                [#f
+                 (channel-put resp-chan #f)]
+                [#t
+                 (channel-put resp-chan #t)])]
+             [else
+              (let loop ([loop-pre (- pre 1)]
+                         [loop-signals-pre signals-pre])
+                (cond
+                  [(empty? loop-signals-pre)
+                   (channel-put resp-chan #f)]
+                  [(zero? loop-pre)
+                   (channel-put resp-chan (set-member? (car loop-signals-pre) a-signal))]
+                  [else (loop (- loop-pre 1) (cdr loop-signals-pre))]))])
            (loop)))
         (handle-evt
          emit-chan

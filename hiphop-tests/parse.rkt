@@ -183,6 +183,8 @@
      `(signal& ,sig ,@(parse-hh-exprs body))]
     [`(hh.abort (@ (,sig)) ,body ...)
      `(abort& ,sig ,@(parse-hh-exprs body))]
+    [`(hh.abort (@ (pre) (,sig)) ,body ...)
+     `(abort& pre& ,sig ,@(parse-hh-exprs body))]
     [`(hh.sequence ,@body)
      `(seq& ,@(parse-hh-exprs body))]
     [`(hh.loop ,body ...)
@@ -197,6 +199,10 @@
      (match (parse-hh-exprs body)
        [(list a) `(present& ,sig ,a nothing&)]
        [(list a b) `(present& ,sig ,a ,b)])]
+    [`(hh.if (@ (pre) (,sig)) ,@body)
+     (match (parse-hh-exprs body)
+       [(list a) `(present& pre& ,sig ,a nothing&)]
+       [(list a b) `(present& pre& ,sig ,a ,b)])]
     [`(hh.run (@ (module ,mod)
                  ,name-pairs ...)
               ;; for some reason html-parsing parses

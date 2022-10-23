@@ -11,7 +11,9 @@
      (define signals
        (for/hash ([name (in-list (append si so sio))])
          (values name (signal #:name name))))
-     (define r (build-reaction signals expr))
+     (define has-pre?
+       (let loop ([expr expr]) (match expr [(cons a b) (or (loop a) (loop b))] ['pre& #t] [_ #f])))
+     (define r (reaction #:pre (if has-pre? 1 0) (&->dyn expr signals)))
      (let/ec escape
        (for ([input-output (in-list input-outputs)]
              [i (in-naturals)])
@@ -52,74 +54,79 @@
                     i fn expected-outputs actual-outputs)
            (escape (void)))))]))
 
-(define (build-reaction signals expr)
-  (reaction
-   (let loop ([expr expr]
-              [signals signals]
-              [traps (hash)])
-     (match expr
-       [`(signal& ,(? symbol? s) ,body1 ,body2 ...)
-        (loop `(signal& (,s) ,body1 ,@body2)
-              signals
-              traps)]
-       [`(signal& (,(? symbol? signal-syms) ...) ,body1 ,body2 ...)
-        (loop `(seq& ,body1 ,@body2)
-              (for/fold ([signals signals])
-                        ([s (in-list signal-syms)])
-                (hash-set signals s (signal #:name s)))
-              traps)]
-       [`(seq& ,es ...) (for ([e (in-list es)]) (loop e signals traps))]
-       [`(loop-each& ,r ,e1 ,e2s ...)
-        (loop-each
+(define (&->dyn expr signals)
+  (let loop ([expr expr]
+             [signals signals]
+             [traps (hash)])
+    (match expr
+      [`(signal& ,(? symbol? s) ,body1 ,body2 ...)
+       (loop `(signal& (,s) ,body1 ,@body2)
+             signals
+             traps)]
+      [`(signal& (,(? symbol? signal-syms) ...) ,body1 ,body2 ...)
+       (loop `(seq& ,body1 ,@body2)
+             (for/fold ([signals signals])
+                       ([s (in-list signal-syms)])
+               (hash-set signals s (signal #:name s)))
+             traps)]
+      [`(seq& ,es ...) (for ([e (in-list es)]) (loop e signals traps))]
+      [`(loop-each& ,r ,e1 ,e2s ...)
+       (loop-each
+        (for ([e (in-list (cons e1 e2s))])
+          (loop e signals traps))
+        (hash-ref signals r))]
+      [`(loop& ,e1 ,e2s ...)
+       (let loop-loop ()
          (for ([e (in-list (cons e1 e2s))])
            (loop e signals traps))
-         (hash-ref signals r))]
-       [`(loop& ,e1 ,e2s ...)
-        (let loop-loop ()
-          (for ([e (in-list (cons e1 e2s))])
-            (loop e signals traps))
-          (loop-loop))]
-       [`(par& ,es ...)
-        (let p-loop ([es es])
-          (cond
-            [(null? (cdr es)) (loop (car es) signals traps)]
-            [else (par (loop (car es) signals traps)
-                       (p-loop (cdr es)))]))]
-       [`(await& ,s) (await (hash-ref signals s))]
-       [`(await& ,(? natural? n) ,s)
-        (for ([i (in-range n)])
-          (await (hash-ref signals s)))]
-       [`(abort& ,s ,body1 ,body2 ...)
-        (abort-when (loop `(seq& ,body1 ,@body2) signals traps)
-                    (hash-ref signals s))]
-       [`(emit& ,s) (emit (hash-ref signals s))]
-       [`(present& ,s ,thn ,els) (if (signal-value (hash-ref signals s))
-                                     (loop thn signals traps)
-                                     (loop els signals traps))]
-       [`(suspend& ,s ,body1 ,body2 ...)
-        (suspend (loop `(seq& ,body1 ,@body2) signals traps)
-                 (signal-value (hash-ref signals s)))]
-       [`pause& (pause)]
-       [`nothing& (void)]
-       [`halt& (halt)]
-       [`(await-immediate& ,i) (await-immediate (hash-ref signals i))]
-       [`(every& ,(? symbol? s) ,body) (every (hash-ref signals s) (loop body signals traps))]
-       [`(every& (,(? natural? n) ,(? symbol? s)) ,body)
-        (every (hash-ref signals s) n (loop body signals traps))]
-       [`(every& ,s #:immediate ,body) (every-immediate (hash-ref signals s) (loop body signals traps))]
-       [`(trap& ,t ,body) (with-trap T (loop body signals (hash-set traps t T)))]
-       [`(exit& ,t) (exit-trap (hash-ref traps t))]
-       [`(sustain& ,s) (sustain (hash-ref signals s))]
-       [`(weak-abort& ,s ,e1 ,e2 ...)
-        (weak-abort (hash-ref signals s)
-                    (for ([e (in-list (cons e1 e2))])
-                      (loop e signals traps)))]
-       [`(weak-abort-immediate& ,s ,e1 ,e2 ...)
-        (weak-abort-immediate
-         (hash-ref signals s)
-         (for ([e (in-list (cons e1 e2))])
-           (loop e signals traps)))]
-       ))))
+         (loop-loop))]
+      [`(par& ,es ...)
+       (let p-loop ([es es])
+         (cond
+           [(null? (cdr es)) (loop (car es) signals traps)]
+           [else (par (loop (car es) signals traps)
+                      (p-loop (cdr es)))]))]
+      [`(await& ,s) (await (signal-value (hash-ref signals s)))]
+      [`(await& ,(? natural? n) ,s)
+       (for ([i (in-range n)])
+         (await (signal-value (hash-ref signals s))))]
+      [`(abort& pre& ,s ,body1 ,body2 ...)
+       (abort-when (loop `(seq& ,body1 ,@body2) signals traps)
+                   (signal-value (hash-ref signals s) #:pre 1))]
+      [`(abort& ,s ,body1 ,body2 ...)
+       (abort-when (loop `(seq& ,body1 ,@body2) signals traps)
+                   (signal-value (hash-ref signals s)))]
+      [`(emit& ,s) (emit (hash-ref signals s))]
+      [`(present& ,s ,thn ,els) (if (signal-value (hash-ref signals s))
+                                    (loop thn signals traps)
+                                    (loop els signals traps))]
+      [`(present& pre& ,s ,thn ,els) (if (signal-value (hash-ref signals s) #:pre 1)
+                                         (loop thn signals traps)
+                                         (loop els signals traps))]
+      [`(suspend& ,s ,body1 ,body2 ...)
+       (suspend (loop `(seq& ,body1 ,@body2) signals traps)
+                (signal-value (hash-ref signals s)))]
+      [`pause& (pause)]
+      [`nothing& (void)]
+      [`halt& (halt)]
+      [`(await-immediate& ,i) (await-immediate (hash-ref signals i))]
+      [`(every& ,(? symbol? s) ,body) (every (hash-ref signals s) (loop body signals traps))]
+      [`(every& (,(? natural? n) ,(? symbol? s)) ,body)
+       (every (hash-ref signals s) n (loop body signals traps))]
+      [`(every& ,s #:immediate ,body) (every-immediate (hash-ref signals s) (loop body signals traps))]
+      [`(trap& ,t ,body) (with-trap T (loop body signals (hash-set traps t T)))]
+      [`(exit& ,t) (exit-trap (hash-ref traps t))]
+      [`(sustain& ,s) (sustain (hash-ref signals s))]
+      [`(weak-abort& ,s ,e1 ,e2 ...)
+       (weak-abort (hash-ref signals s)
+                   (for ([e (in-list (cons e1 e2))])
+                     (loop e signals traps)))]
+      [`(weak-abort-immediate& ,s ,e1 ,e2 ...)
+       (weak-abort-immediate
+        (hash-ref signals s)
+        (for ([e (in-list (cons e1 e2))])
+          (loop e signals traps)))]
+      )))
 
 (module+ main
   (require "parse.rkt" "find.rkt")

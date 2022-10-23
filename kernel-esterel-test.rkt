@@ -545,6 +545,69 @@
           (void)
           (car #f)))))))
 
+;; #:pre
+
+(let ()
+  (define S (signal))
+  (define O (signal))
+  (define r
+    (reaction
+     #:pre 2
+     (emit S)
+     (pause)
+     (when (signal-value S #:pre 1)
+       (emit O))))
+  (check-equal? (react! r) (hash S #t))
+  (check-equal? (react! r) (hash O #t)))
+
+(let ()
+  (define O1 (signal))
+  (define O2 (signal))
+  (define S (signal))
+  (define r
+    (reaction
+     #:pre 2
+     (if (signal-value S #:pre 1)
+         (emit O1)
+         (emit O2))))
+  (check-equal? (react! r) (hash O2 #t)))
+
+(let ()
+  (define O (signal))
+  (define r
+    (reaction
+     #:pre 1
+     (pause)
+     (pause)
+     (signal-value O #:pre 2)))
+  (react! r)
+  (react! r)
+  (check-exn
+   #rx"signal-value: #:pre argument too large.*maximum: 1"
+   (λ () (react! r))))
+
+(let ()
+  (define S (signal))
+  (define O (signal))
+  (define r
+    (reaction
+     #:pre 1
+     (pause)
+     (par
+      (let loop () (emit S) (pause) (pause) (loop))
+      (let loop ()
+        (when (signal-value S #:pre 1)
+          (emit O))
+        (pause)
+        (loop)))))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash S #t))
+  (check-equal? (react! r) (hash O #t))
+  (check-equal? (react! r) (hash S #t))
+  (check-equal? (react! r) (hash O #t))
+  (check-equal? (react! r) (hash S #t))
+  (check-equal? (react! r) (hash O #t)))
+
 
 ;                                                                                                            
 ;                                                                                                            
