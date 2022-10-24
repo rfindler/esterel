@@ -129,14 +129,3 @@
         (for ([e (in-list (cons e1 e2))])
           (loop e signals traps)))]
       )))
-
-(module+ main
-  (require "parse.rkt" "find.rkt")
-  (for ([test (in-list (find-all-hiphop-tests))])
-    (printf "running ~a\n" test)
-    (with-handlers ([exn:fail? (λ (x)
-                                 ((error-display-handler)
-                                  (exn-message x)
-                                  x))])
-      (run-hiphop-test
-       (load-hiphop-test test)))))
