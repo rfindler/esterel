@@ -1,5 +1,7 @@
 #lang racket
 (require "../esterel.rkt")
+(provide run-hiphop-test)
+
 (define (run-hiphop-test test)
   (match test
     [`(test-case
