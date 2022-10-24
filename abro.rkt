@@ -17,8 +17,8 @@ given in figure 1.2
 (define abro
   (reaction
    (par (loop-each
-         (begin (par (await A)
-                     (await B))
+         (begin (par (await (signal-value A))
+                     (await (signal-value B)))
                 (emit O))
          R)
         (begin
