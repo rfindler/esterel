@@ -11,7 +11,7 @@
   (check-equal?
    (react!
     (reaction
-     (signal-value s)))
+     (present? s)))
    (hash s #f)))
 
 (let ([s (signal)])
@@ -19,7 +19,7 @@
    (react!
     (reaction
      (emit s)
-     (signal-value s)))
+     (present? s)))
    (hash s #t)))
 
 (let ([s (signal)])
@@ -28,7 +28,7 @@
     (reaction
      (par
       (begin (emit s) #f)
-      (signal-value s))))
+      (present? s))))
    (hash s #t)))
 
 (let ([s (signal)])
@@ -36,8 +36,8 @@
    (react!
     (reaction
      (par
-      (signal-value s)
-      (signal-value s))))
+      (present? s)
+      (present? s))))
    (hash s #f)))
 
 (check-equal?
@@ -77,11 +77,11 @@
 (let ([s (signal)])
   (define r
     (reaction
-     (signal-value s)
+     (present? s)
      (pause)
      (emit s)
      (pause)
-     (signal-value s)))
+     (present? s)))
   (check-equal?
    (react! r)
    (hash s #f))
@@ -132,11 +132,11 @@
     (reaction
      (par
       (par
-       (signal-value s)
+       (present? s)
        (pause))
       (par
        (pause)
-       (signal-value s)))))
+       (present? s)))))
    (hash s #f)))
 
 (check-equal?
@@ -168,7 +168,7 @@
   (define r
     (reaction
      (par
-      (let loop () (suspend (begin (pause) (emit s2)) (signal-value s1)) (loop))
+      (let loop () (suspend (begin (pause) (emit s2)) (present? s1)) (loop))
       (begin (emit s1) (pause) (emit s1)))))
   (check-equal? (react! r) (hash s1 #t))
   (check-equal? (react! r) (hash s1 #t))
@@ -276,7 +276,7 @@
   (define r
     (reaction
      (let loop ()
-       (when (signal-value i)
+       (when (present? i)
          (emit o))
        (pause)
        (loop))))
@@ -488,10 +488,10 @@
    (react!
     (reaction
      (par
-      (if (signal-value s1)
+      (if (present? s1)
           (void)
           (car #f))
-      (if (signal-value s2)
+      (if (present? s2)
           (void)
           (emit s1)))))
    (hash s1 #t s2 #f)))
@@ -503,10 +503,10 @@
    (react!
     (reaction
      (par
-      (if (signal-value s2)
+      (if (present? s2)
           (void)
           (emit s1))
-      (if (signal-value s1)
+      (if (present? s1)
           (void)
           (car #f)))))
    (hash s1 #t s2 #f)))
@@ -518,10 +518,10 @@
    (react!
     (reaction
      (par
-      (if (signal-value s1)
+      (if (present? s1)
           (void)
           (emit s2))
-      (if (signal-value s2)
+      (if (present? s2)
           (void)
           (car #f)))))
    (hash s1 #f s2 #t)))
@@ -538,10 +538,10 @@
    (react!
     (reaction
      (par
-      (if (signal-value s1)
+      (if (present? s1)
           (void)
           (car #f))
-      (if (signal-value s2)
+      (if (present? s2)
           (void)
           (car #f)))))))
 
@@ -555,7 +555,7 @@
      #:pre 2
      (emit S)
      (pause)
-     (when (signal-value S #:pre 1)
+     (when (present? S #:pre 1)
        (emit O))))
   (check-equal? (react! r) (hash S #t))
   (check-equal? (react! r) (hash O #t)))
@@ -567,7 +567,7 @@
   (define r
     (reaction
      #:pre 2
-     (if (signal-value S #:pre 1)
+     (if (present? S #:pre 1)
          (emit O1)
          (emit O2))))
   (check-equal? (react! r) (hash O2 #t)))
@@ -579,11 +579,11 @@
      #:pre 1
      (pause)
      (pause)
-     (signal-value O #:pre 2)))
+     (present? O #:pre 2)))
   (react! r)
   (react! r)
   (check-exn
-   #rx"signal-value: #:pre argument too large.*maximum: 1"
+   #rx"present[?]: #:pre argument too large.*maximum: 1"
    (λ () (react! r))))
 
 (let ()
@@ -596,7 +596,7 @@
      (par
       (let loop () (emit S) (pause) (pause) (loop))
       (let loop ()
-        (when (signal-value S #:pre 1)
+        (when (present? S #:pre 1)
           (emit O))
         (pause)
         (loop)))))
@@ -636,7 +636,7 @@
    (react!
     (reaction
      (emit sl)
-     (if (signal-value sl)
+     (if (present? sl)
          (emit so1)
          (emit so2))))
    (hash sl #t so1 #t)))
@@ -650,7 +650,7 @@
     (reaction
      (par
       (emit sl)
-      (if (signal-value sl)
+      (if (present? sl)
           (emit so1)
           (emit so2)))))
    (hash sl #t so1 #t)))
@@ -663,7 +663,7 @@
   (check-equal?
    (react!
     (reaction
-     (if (signal-value sl)
+     (if (present? sl)
          (emit so1)
          (emit so2))))
    (hash sl #f so2 #t)))
@@ -677,8 +677,8 @@
    (react!
     (reaction
      (par
-      (when (signal-value sl1) (emit sl2))
-      (when (signal-value sl2) (emit sl1)))))
+      (when (present? sl1) (emit sl2))
+      (when (present? sl2) (emit sl1)))))
    (hash sl1 #f sl2 #f)))
 
 
@@ -690,7 +690,7 @@
     (reaction
      (par
       (begin (pause) (emit sl))
-      (if (signal-value sl) (emit so1) (emit so2)))))
+      (if (present? sl) (emit so1) (emit so2)))))
   (check-equal?
    (react! r)
    (hash sl #f so2 #t))
@@ -707,16 +707,16 @@
   (define r
     (reaction
      (par
-      (if (signal-value sl1)
-          (if (signal-value sl2)
+      (if (present? sl1)
+          (if (present? sl2)
               (emit so1)
               (emit sl3))
-          (if (signal-value sl2)
+          (if (present? sl2)
               (emit so2)
               (emit sl3)))
       (begin
         (emit sl2)
-        (when (signal-value sl3) (pause))
+        (when (present? sl3) (pause))
         (emit sl1)))))
   (check-equal?
    (react! r)
@@ -729,7 +729,7 @@
    (let ([s1 (signal)])
      (react!
       (reaction
-       (if (signal-value s1)
+       (if (present? s1)
            (void)
            (emit s1)))))))
 
@@ -740,7 +740,7 @@
   (check-equal?
    (react!
     (reaction
-     (if (signal-value s1)
+     (if (present? s1)
          (emit s1)
          (void))))
    (hash s1 #f)))
@@ -753,7 +753,7 @@
    (let ([s1 (signal)])
      (react!
       (reaction
-       (if (signal-value s1)
+       (if (present? s1)
            (emit s1)
            (emit s1)))))))
 
@@ -764,7 +764,7 @@
    (let ([s1 (signal)])
      (react!
       (reaction
-       (if (signal-value s1) (void) (void))
+       (if (present? s1) (void) (void))
        (emit s1))))))
 
 ;; popl 2019, figure 11
@@ -776,8 +776,8 @@
      (react!
       (reaction
        (par
-        (when (signal-value sl1) (emit sl2))
-        (begin (when (signal-value sl2) pause)
+        (when (present? sl1) (emit sl2))
+        (begin (when (present? sl2) pause)
                (emit sl1))))))))
 
 ;; popl 2019, figure 25
@@ -787,6 +787,6 @@
    (react!
     (reaction
      (begin
-       (signal-value s-outer)
-       (when (signal-value s-inner) (emit s-outer)))))
+       (present? s-outer)
+       (when (present? s-inner) (emit s-outer)))))
    (hash s-outer #f s-inner #f)))

@@ -1,7 +1,7 @@
 #lang racket
 (require "kernel-esterel.rkt")
 (provide halt loop-each abort-when sustain
-         await await-immediate
+         await await-immediate await-n
          every every-immediate
          weak-abort weak-abort-immediate
          (all-from-out "kernel-esterel.rkt"))
@@ -16,12 +16,12 @@
   (loop-each/proc (λ () p) s))
 (define (loop-each/proc thunk s)
   (let loop ()
-    (abort-when (begin (thunk) (halt)) (signal-value s))
+    (abort-when (begin (thunk) (halt)) (present? s))
     (loop)))
 
 (define-syntax-rule
-  (abort-when p d)
-  (abort-when/proc (λ () p) (λ () d)))
+  (abort-when p s)
+  (abort-when/proc (λ () p) (λ () s)))
 (define (abort-when/proc body-thunk when-thunk)
   (with-trap T-abort-when.1
     (with-trap T-abort-when.2
@@ -42,7 +42,7 @@
 (define (await-n s n)
   (suspend
    (repeat n (λ () (pause)))
-   (not (signal-value s))))
+   (not (present? s))))
 
 (define (repeat n thunk)
   (with-trap T
@@ -55,7 +55,7 @@
 (define (await-immediate s)
   (with-trap T-await-immediate
     (let loop ()
-      (when (signal-value s)
+      (when (present? s)
         (exit-trap T-await-immediate))
       (pause)
       (loop))))
@@ -66,7 +66,7 @@
     [(_ s n p) #'(every-n/proc s n (λ () p))]))
 
 (define (every/proc s thunk)
-  (await (signal-value s))
+  (await (present? s))
   (loop-each
    (thunk)
    s))

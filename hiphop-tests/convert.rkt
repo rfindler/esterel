@@ -88,26 +88,26 @@
            [(null? (cdr es)) (loop (car es) signals traps)]
            [else (par (loop (car es) signals traps)
                       (p-loop (cdr es)))]))]
-      [`(await& ,s) (await (signal-value (hash-ref signals s)))]
+      [`(await& ,s) (await (present? (hash-ref signals s)))]
       [`(await& ,(? natural? n) ,s)
        (for ([i (in-range n)])
-         (await (signal-value (hash-ref signals s))))]
+         (await (present? (hash-ref signals s))))]
       [`(abort& pre& ,s ,body1 ,body2 ...)
        (abort-when (loop `(seq& ,body1 ,@body2) signals traps)
-                   (signal-value (hash-ref signals s) #:pre 1))]
+                   (present? (hash-ref signals s) #:pre 1))]
       [`(abort& ,s ,body1 ,body2 ...)
        (abort-when (loop `(seq& ,body1 ,@body2) signals traps)
-                   (signal-value (hash-ref signals s)))]
+                   (present? (hash-ref signals s)))]
       [`(emit& ,s) (emit (hash-ref signals s))]
-      [`(present& ,s ,thn ,els) (if (signal-value (hash-ref signals s))
+      [`(present& ,s ,thn ,els) (if (present? (hash-ref signals s))
                                     (loop thn signals traps)
                                     (loop els signals traps))]
-      [`(present& pre& ,s ,thn ,els) (if (signal-value (hash-ref signals s) #:pre 1)
+      [`(present& pre& ,s ,thn ,els) (if (present? (hash-ref signals s) #:pre 1)
                                          (loop thn signals traps)
                                          (loop els signals traps))]
       [`(suspend& ,s ,body1 ,body2 ...)
        (suspend (loop `(seq& ,body1 ,@body2) signals traps)
-                (signal-value (hash-ref signals s)))]
+                (present? (hash-ref signals s)))]
       [`pause& (pause)]
       [`nothing& (void)]
       [`halt& (halt)]

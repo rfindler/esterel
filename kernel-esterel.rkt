@@ -13,10 +13,10 @@
                (#:emit (listof signal?))
                (hash/c signal? boolean? #:immutable #t #:flat? #t))]
   [in-reaction? (-> boolean?)]
-  [signal-value (->* (signal?)
-                     (#:pre natural?)
-                     #:pre (in-reaction?)
-                     boolean?)]
+  [present? (->* (signal?)
+                 (#:pre natural?)
+                 #:pre (in-reaction?)
+                 boolean?)]
   [signal? (-> any/c boolean?)]
   [signal-name (-> signal? string?)]
   [emit (->* (signal?)
@@ -95,11 +95,11 @@ If the latter, we raise the non-constructive exception.
   (define signal-table (current-signal-table))
   (channel-put (signal-table-emit-chan signal-table) a-signal))
   
-(define (signal-value a-signal #:pre [pre 0])
+(define (present? a-signal #:pre [pre 0])
   (define signal-table (current-signal-table))
   (define resp-chan (make-channel))
   (unless (<= pre (signal-table-pre-count signal-table))
-    (error 'signal-value
+    (error 'present?
            "#:pre argument too large\n  maximum: ~a\n  given: ~a"
            (signal-table-pre-count signal-table)
            pre))
@@ -192,7 +192,7 @@ If the latter, we raise the non-constructive exception.
           (loop (set-remove pending-result-chans+par-threads result-chan+pending-par-thread)
                 checkpoint-or-par-result-chan)))))))
 
-;; we didn't save the parameterization at the point of the pause/signal-value/par
+;; we didn't save the parameterization at the point of the pause/present?/par
 ;; and so we cannot restore it here; not sure if this is important or not, tho!
 ;; this function creates the par children thread when a par is first encountered
 ;; and it also creates the threads for when we fall back to a previous state
@@ -453,7 +453,7 @@ If the latter, we raise the non-constructive exception.
   (define non-constructive-program? #f)
 
   ;; if a signal isn't mapped, its value isn't yet known
-  (define/contract signals
+  (define/contract signal-status
     (hash/c signal? boolean? #:flat? #t #:immutable #t)
     (hash))
 
@@ -629,13 +629,13 @@ If the latter, we raise the non-constructive exception.
         [else
          (continue! se-st
                     (current-rollback-point)
-                    (hash-keys signals)
+                    (hash-keys signal-status)
                     (hash-keys signal-waiters))]))
     (unless non-constructive-program?
       (log-esterel-debug "~a: chose ~a to be absent" (eq-hash-code (current-thread)) signal-to-be-absent)
       (log-par-state)
       (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
-      (set! signals (hash-set signals signal-to-be-absent #f))
+      (set! signal-status (hash-set signal-status signal-to-be-absent #f))
       (set! signal-waiters (hash-remove signal-waiters signal-to-be-absent))
       (for ([a-blocked-thread (in-list blocked-threads)])
         (match-define (blocked-thread thread resp-chan) a-blocked-thread)
@@ -652,17 +652,17 @@ If the latter, we raise the non-constructive exception.
 
   ;; rb-tree : rb-tree?
   ;; signals : (hash/c signal? boolean? #:flat? #t #:immutable #t)
-  (struct rollback-point (rb-tree signals))
+  (struct rollback-point (rb-tree signal-status))
   (define (rollback! a-rollback-point)
-    (match-define (rollback-point rb-tree rb-signals) a-rollback-point)
-    (set! signals rb-signals)
+    (match-define (rollback-point rb-tree rb-signal-status) a-rollback-point)
+    (set! signal-status rb-signal-status)
     (set! latest-exn #f)
     (set! signal-waiters (hash))
     (set! paused-threads (hash))
     (set! par-parents (hash))
     (set! parent->par-state (hash))
     (set! reaction-thread (rebuild-threads-from-rb-tree rb-tree)))
-  (define (current-rollback-point) (rollback-point (build-rb-tree-from-current-state) signals))
+  (define (current-rollback-point) (rollback-point (build-rb-tree-from-current-state) signal-status))
 
   (struct rb-tree ())
 
@@ -915,11 +915,11 @@ If the latter, we raise the non-constructive exception.
           (loop)]
          [else
           ;; close the instant down and let `react!` know
-          (channel-put instant-complete-chan signals)
+          (channel-put instant-complete-chan signal-status)
           (set! instant-complete-chan #f)
           ; save the signals from previous instants
           (set! signals-pre
-                (let loop ([signals-pre (cons (for/set ([(signal val) (in-hash signals)]
+                (let loop ([signals-pre (cons (for/set ([(signal val) (in-hash signal-status)]
                                                         #:when val)
                                                 signal)
                                               signals-pre)]
@@ -929,7 +929,7 @@ If the latter, we raise the non-constructive exception.
                     [(null? signals-pre) '()]
                     [else (cons (car signals-pre)
                                 (loop (cdr signals-pre) (- pre-count 1)))])))
-          (set! signals (hash)) ;; reset the signals in preparation for the next instant
+          (set! signal-status (hash)) ;; reset the signals in preparation for the next instant
           (set! raised-exns (set)) ;; reset the exns (as they are now defunct; bad guesses)
           (loop)])]
 
@@ -943,7 +943,7 @@ If the latter, we raise the non-constructive exception.
          (λ (signals-to-emit+instant-complete-chan)
            (match-define (cons signals-to-emit _instant-complete-chan)
              signals-to-emit+instant-complete-chan)
-           (set! signals (for/fold ([signals signals])
+           (set! signal-status (for/fold ([signals signal-status])
                                    ([signal-to-emit (in-list signals-to-emit)])
                            (hash-set signals signal-to-emit #t)))
            (when first-instant-sema
@@ -980,12 +980,12 @@ If the latter, we raise the non-constructive exception.
            (log-esterel-debug "~a: waiting on a signal ~s ~s ~s"
                               (eq-hash-code (current-thread))
                               a-signal
-                              (hash-ref signals a-signal 'unknown)
+                              (hash-ref signal-status a-signal 'unknown)
                               the-thread)
            (log-par-state)
            (cond
              [(= pre 0)
-              (match (hash-ref signals a-signal 'unknown)
+              (match (hash-ref signal-status a-signal 'unknown)
                 ['unknown
                  (remove-running-thread the-thread)
                  (add-signal-waiter! a-signal the-thread resp-chan)
@@ -1018,11 +1018,11 @@ If the latter, we raise the non-constructive exception.
            (log-esterel-debug "~a: emitting ~s ~s"
                               (eq-hash-code (current-thread))
                               a-signal
-                              (hash-ref signals a-signal 'unknown))
+                              (hash-ref signal-status a-signal 'unknown))
            (log-par-state)
-           (match (hash-ref signals a-signal 'unknown)
+           (match (hash-ref signal-status a-signal 'unknown)
              ['unknown
-              (set! signals (hash-set signals a-signal #t))
+              (set! signal-status (hash-set signal-status a-signal #t))
               (for ([a-blocked-thread (hash-ref signal-waiters a-signal '())])
                 (match-define (blocked-thread thread resp-chan) a-blocked-thread)
                 (channel-put resp-chan #t)
