@@ -60,9 +60,11 @@
      (define new-node
        (node rollback known-signals choices new-children))
      (set-link-subtree! latest-leaf new-node)
-     (set-search-state-latest-leaf! se-st (car new-children))])
+     (set-search-state-latest-leaf! se-st (pick-one new-children))])
   (link-choice (search-state-latest-leaf se-st)))
 
+(define (pick-one l)
+  (list-ref l (random (length l))))
 
 (define (fail! se-st)
   (cond
