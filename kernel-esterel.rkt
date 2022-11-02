@@ -1,5 +1,6 @@
 #lang racket
 (require "structs.rkt" "search-state.rkt"
+         racket/hash
          (for-syntax syntax/parse))
 
 (provide
@@ -11,15 +12,32 @@
  (contract-out
   [react! (->* (reaction?)
                (#:emit (listof signal?))
-               (hash/c signal? boolean? #:immutable #t #:flat? #t))]
+               (hash/dc [s signal?]
+                        ;; if a signal is not emitted
+                        ;; and also has a combination function,
+                        ;; then it just won't be in the map,
+                        ;; so we won't be told that its absense
+                        ;; mattered to the computation
+                        [v (s) (if (signal-combine s)
+                                   any/c
+                                   boolean?)]
+                        #:immutable #t #:kind 'flat))]
   [in-reaction? (-> boolean?)]
   [present? (->* (signal?)
                  (#:pre natural?)
                  #:pre (in-reaction?)
                  boolean?)]
+  [signal-value (->* ((and/c signal? signal-combine))
+                     ;; NB when we go "too far" with #:pre the values are just #f,
+                     ;; even if the signal never had that value... is this okay?
+                     (#:pre natural?)
+                     #:pre (in-reaction?)
+                     any/c)]
   [signal? (-> any/c boolean?)]
   [signal-name (-> signal? string?)]
+  [signal-combine (-> signal? (-> any/c any/c any/c))]
   [emit (->* (signal?)
+             (any/c)
              #:pre (in-reaction?)
              void?)]
   [pause (->* () #:pre (in-reaction?) void?)]
@@ -79,32 +97,49 @@ If the latter, we raise the non-constructive exception.
 (define (in-reaction?) (and (current-signal-table) #t))
 
 (define-syntax (-signal stx)
-  (syntax-case stx ()
-    [(_) #`(mk-signal.1 '#,(syntax-local-name))]
-    [(_ #:name n) #`(mk-signal.1 n)]
-    [x (identifier? #'x) #`mk-signal.0]))
+  (syntax-parse stx
+    [(_ (~alt (~optional (~seq #:name name-expr:expr) #:name "#:name argument")
+              (~optional (~seq #:combine combine-expr) #:name "#:combine argument"))
+        ...)
+     #:declare combine-expr
+     (expr/c #'(-> any/c any/c any/c)
+             #:name "the #:combine argument")
+     #`(mk-signal.args (~? name-expr '#,(syntax-local-name)) (~? combine-expr.c #f))]))
 
-(define mk-signal.0
-  (let ([signal
-         (λ () (signal #f))])
-    signal))
+(define (mk-signal.args name combine)
+  (unless (or (not name) (string? name) (symbol? name))
+    (error 'signal "expected a string for the #:name argument\n  name: ~e" name))
+  (signal (if (symbol? name) (symbol->string name) name) combine))
 
-(define (mk-signal.1 x) (signal (format "~a" x)))
-
-(define (emit a-signal)
+(define no-value-provided (gensym 'no-value-provided))
+(define (emit a-signal [value no-value-provided])
   (define signal-table (current-signal-table))
-  (channel-put (signal-table-emit-chan signal-table) a-signal))
+  (define no-value-provided? (equal? value no-value-provided))
+  (if no-value-provided?
+      (when (signal-combine a-signal)
+        (error 'emit "signal emitted with no value but has a combination function\n  signal: ~e\n  value: ~e"
+               a-signal value))
+      (unless (signal-combine a-signal)
+        (error 'emit "signal emitted with a value but has no combination function\n  signal: ~e\n  value: ~e"
+               a-signal value)))
+  (channel-put (signal-table-emit-chan signal-table) (vector a-signal no-value-provided? value)))
   
 (define (present? a-signal #:pre [pre 0])
+  (signal-value/present? #t a-signal pre))
+
+(define (signal-value a-signal #:pre [pre 0])
+  (signal-value/present? #f a-signal pre))
+
+(define (signal-value/present? is-present? a-signal pre)
   (define signal-table (current-signal-table))
   (define resp-chan (make-channel))
   (unless (<= pre (signal-table-pre-count signal-table))
-    (error 'present?
+    (error (if is-present? 'present? 'signal-value)
            "#:pre argument too large\n  maximum: ~a\n  given: ~a"
            (signal-table-pre-count signal-table)
            pre))
   (channel-put (signal-table-signal-chan signal-table)
-               (vector a-signal (current-thread) resp-chan pre))
+               (vector is-present? a-signal (current-thread) resp-chan pre))
   (let loop ([resp-chan resp-chan])
     (define maybe-val (channel-get resp-chan))
     (match maybe-val
@@ -429,6 +464,9 @@ If the latter, we raise the non-constructive exception.
   (define/contract signals-pre
     (listof (set/c signal?))
     '())
+  (define/contract signal-values-pre
+    (listof (hash/c signal? any/c #:flat? #t #:immutable #t))
+    '())
 
 
 ;                                                                                    
@@ -452,9 +490,22 @@ If the latter, we raise the non-constructive exception.
   
   (define non-constructive-program? #f)
 
-  ;; if a signal isn't mapped, its value isn't yet known
+  ;; if a signal isn't mapped, its status isn't yet known
+  ;; if it is #t, the signal has been emitted
+  ;; (if a value-carrying signal, it has been emitted for the last time)
+  ;; if it is #f, the signal is not going to be emitted
+  ;; the status will be 'unknown for value-carrying signals until
+  ;;   we guess that it won't get emitted anymore, then it changes to #t
+  ;;   if a value carrying signal is never emitted then its status is #f
   (define/contract signal-status
     (hash/c signal? boolean? #:flat? #t #:immutable #t)
+    (hash))
+
+  ;; if a signal is mapped in `signal-value`, then it
+  ;; a) has been emitted and
+  ;; b) has a `combine` function
+  (define/contract signal-value
+    (hash/c signal? any/c #:flat? #t #:immutable #t)
     (hash))
 
   ;; the latest-exn is set to an exception when we just
@@ -471,15 +522,15 @@ If the latter, we raise the non-constructive exception.
     (set/c exn?)
     (set))
 
-  (struct blocked-thread (thread resp-chan) #:transparent)
+  (struct blocked-thread (is-present? thread resp-chan) #:transparent)
     
   ;; threads that are blocked, waiting for a signal's value to be decided
   ;; (a missing entry is the same as the empty list)
   (define/contract signal-waiters
     (hash/c signal? (listof blocked-thread?) #:flat? #t #:immutable #t)
     (hash))
-  (define (add-signal-waiter! a-signal the-thread resp-chan)
-    (define a-blocked-thread (blocked-thread the-thread resp-chan))
+  (define (add-signal-waiter! a-signal is-present? the-thread resp-chan)
+    (define a-blocked-thread (blocked-thread is-present? the-thread resp-chan))
     (define new-waiters (cons a-blocked-thread (hash-ref signal-waiters a-signal '())))
     (set! signal-waiters (hash-set signal-waiters a-signal new-waiters)))
 
@@ -608,8 +659,8 @@ If the latter, we raise the non-constructive exception.
   ;; it actually gets emitted)
   (define wrong-guess? #f)
   
-  (define (choose-a-signal-to-be-absent)
-    (define signal-to-be-absent
+  (define (choose-a-signal-to-be-absent-or-to-have-no-more-emits)
+    (define chosen-signal
       (cond
         [(or latest-exn wrong-guess?)
          (when latest-exn
@@ -632,14 +683,23 @@ If the latter, we raise the non-constructive exception.
                     (hash-keys signal-status)
                     (hash-keys signal-waiters))]))
     (unless non-constructive-program?
-      (log-esterel-debug "~a: chose ~a to be absent" (eq-hash-code (current-thread)) signal-to-be-absent)
+      (log-esterel-debug "~a: chose ~a to be absent/done emitting" (eq-hash-code (current-thread)) chosen-signal)
       (log-par-state)
-      (define blocked-threads (hash-ref signal-waiters signal-to-be-absent))
-      (set! signal-status (hash-set signal-status signal-to-be-absent #f))
-      (set! signal-waiters (hash-remove signal-waiters signal-to-be-absent))
+      (define blocked-threads (hash-ref signal-waiters chosen-signal))
+      ;; if the signal is in signal-value that means that it's been emitted
+      ;; and we're guessing that it won't be emitted again
+      (define done-emitting? (hash-has-key? signal-value chosen-signal))
+      (cond
+        [done-emitting?
+         ;; setting the status to #t means we can use `signal-value` as the value
+         (set! signal-status (hash-set signal-status chosen-signal #t))]
+        [else
+         ;; setting the status to #f means it is absent
+         (set! signal-status (hash-set signal-status chosen-signal #f))])
+      (set! signal-waiters (hash-remove signal-waiters chosen-signal))
       (for ([a-blocked-thread (in-list blocked-threads)])
-        (match-define (blocked-thread thread resp-chan) a-blocked-thread)
-        (channel-put resp-chan #f)
+        (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
+        (channel-put resp-chan (if done-emitting? (hash-ref signal-value chosen-signal) #f))
         (add-running-thread thread)
         (define parent-thread (hash-ref par-parents thread #f))
         (when parent-thread
@@ -652,17 +712,18 @@ If the latter, we raise the non-constructive exception.
 
   ;; rb-tree : rb-tree?
   ;; signals : (hash/c signal? boolean? #:flat? #t #:immutable #t)
-  (struct rollback-point (rb-tree signal-status))
+  (struct rollback-point (rb-tree signal-status signal-value))
   (define (rollback! a-rollback-point)
-    (match-define (rollback-point rb-tree rb-signal-status) a-rollback-point)
+    (match-define (rollback-point rb-tree rb-signal-status rb-signal-value) a-rollback-point)
     (set! signal-status rb-signal-status)
+    (set! signal-value rb-signal-value)
     (set! latest-exn #f)
     (set! signal-waiters (hash))
     (set! paused-threads (hash))
     (set! par-parents (hash))
     (set! parent->par-state (hash))
     (set! reaction-thread (rebuild-threads-from-rb-tree rb-tree)))
-  (define (current-rollback-point) (rollback-point (build-rb-tree-from-current-state) signal-status))
+  (define (current-rollback-point) (rollback-point (build-rb-tree-from-current-state) signal-status signal-value))
 
   (struct rb-tree ())
 
@@ -677,8 +738,9 @@ If the latter, we raise the non-constructive exception.
   (struct rb-paused rb-tree (cont))
 
   ;; signal : signal?
+  ;; is-present? : boolean?
   ;; cont : continuation[channel]
-  (struct rb-blocked rb-tree (signal cont))
+  (struct rb-blocked rb-tree (signal is-present? cont))
 
   ;; build-rb-tree-from-current-state : -> rb-tree?
   (define (build-rb-tree-from-current-state)
@@ -705,9 +767,9 @@ If the latter, we raise the non-constructive exception.
         [(find-signal thread)
          =>
          (λ (signal+blocked-thread)
-           (match-define (cons signal (blocked-thread thread resp-chan)) signal+blocked-thread)
+           (match-define (cons signal (blocked-thread is-present? thread resp-chan)) signal+blocked-thread)
            (channel-put resp-chan a-checkpoint-request)
-           (rb-blocked signal (channel-get k-chan)))]
+           (rb-blocked signal is-present? (channel-get k-chan)))]
         [else (internal-error "lost a thread ~s" thread)])))
 
   ;; rebuild-threads-from-rb-tree : rb-tree? -> thread
@@ -773,7 +835,7 @@ If the latter, we raise the non-constructive exception.
               (λ () (cont resp-chan)))))
          (set! paused-threads (hash-set paused-threads paused-thread resp-chan))
          paused-thread]
-        [(rb-blocked a-signal cont)
+        [(rb-blocked a-signal is-present? cont)
          (define resp-chan (make-channel))
          (define blocked-thread
            (parameterize ([current-signal-table the-signal-table])
@@ -781,7 +843,7 @@ If the latter, we raise the non-constructive exception.
               #:before-par-trap-counter parent-before-par-trap-counter
               #:par-child-result-chan par-child-result-chan
               (λ () (cont resp-chan)))))
-         (add-signal-waiter! a-signal blocked-thread resp-chan)
+         (add-signal-waiter! a-signal is-present? blocked-thread resp-chan)
          blocked-thread])))
   
 ;                                                                               
@@ -911,25 +973,35 @@ If the latter, we raise the non-constructive exception.
          [(or latest-exn wrong-guess?)
           ;; although we got to the end of the instant, we did so with
           ;; a wrong guess for signal absence; go back and try again
-          (choose-a-signal-to-be-absent)
+          (choose-a-signal-to-be-absent-or-to-have-no-more-emits)
           (loop)]
          [else
           ;; close the instant down and let `react!` know
-          (channel-put instant-complete-chan signal-status)
+          (channel-put instant-complete-chan
+                       (hash-union
+                        (for/hash ([(s v) (in-hash signal-status)]
+                                   #:unless (signal-combine s))
+                          (values s v))
+                        signal-value))
           (set! instant-complete-chan #f)
           ; save the signals from previous instants
+          (define (keep-pre-count new old)
+            (let loop ([l (cons new old)]
+                       [i pre-count])
+              (cond
+                [(zero? i) '()]
+                [(null? l) '()]
+                [else (cons (car l) (loop (cdr l) (- i 1)))])))
           (set! signals-pre
-                (let loop ([signals-pre (cons (for/set ([(signal val) (in-hash signal-status)]
-                                                        #:when val)
-                                                signal)
-                                              signals-pre)]
-                           [pre-count pre-count])
-                  (cond
-                    [(zero? pre-count) '()]
-                    [(null? signals-pre) '()]
-                    [else (cons (car signals-pre)
-                                (loop (cdr signals-pre) (- pre-count 1)))])))
-          (set! signal-status (hash)) ;; reset the signals in preparation for the next instant
+                (keep-pre-count
+                 (for/set ([(signal val) (in-hash signal-status)]
+                           #:when val)
+                   signal)
+                 signals-pre))
+          (set! signal-values-pre (keep-pre-count signal-value signal-values-pre))
+          ;; reset the signals in preparation for the next instant
+          (set! signal-status (hash))
+          (set! signal-value (hash))
           (set! raised-exns (set)) ;; reset the exns (as they are now defunct; bad guesses)
           (loop)])]
 
@@ -944,8 +1016,8 @@ If the latter, we raise the non-constructive exception.
            (match-define (cons signals-to-emit _instant-complete-chan)
              signals-to-emit+instant-complete-chan)
            (set! signal-status (for/fold ([signals signal-status])
-                                   ([signal-to-emit (in-list signals-to-emit)])
-                           (hash-set signals signal-to-emit #t)))
+                                         ([signal-to-emit (in-list signals-to-emit)])
+                                 (hash-set signals signal-to-emit #t)))
            (when first-instant-sema
              ;; this blocks starting the first instant; after that it isn't needed
              (semaphore-post first-instant-sema)
@@ -967,7 +1039,7 @@ If the latter, we raise the non-constructive exception.
       [(set-empty? running-threads)
        (when (= 0 (hash-count signal-waiters))
          (internal-error "expected someone to be blocked on a signal"))
-       (choose-a-signal-to-be-absent)
+       (choose-a-signal-to-be-absent-or-to-have-no-more-emits)
        (loop)]
 
       ;; an instant is running, handle the various things that can happen during it
@@ -975,8 +1047,8 @@ If the latter, we raise the non-constructive exception.
        (sync
         (handle-evt
          signal-chan
-         (λ (s+thd+resp+pre)
-           (match-define (vector a-signal the-thread resp-chan pre) s+thd+resp+pre)
+         (λ (isp+s+thd+resp+pre)
+           (match-define (vector is-present? a-signal the-thread resp-chan pre) isp+s+thd+resp+pre)
            (log-esterel-debug "~a: waiting on a signal ~s ~s ~s"
                               (eq-hash-code (current-thread))
                               a-signal
@@ -988,7 +1060,7 @@ If the latter, we raise the non-constructive exception.
               (match (hash-ref signal-status a-signal 'unknown)
                 ['unknown
                  (remove-running-thread the-thread)
-                 (add-signal-waiter! a-signal the-thread resp-chan)
+                 (add-signal-waiter! a-signal is-present? the-thread resp-chan)
                  (define parent-thread (hash-ref par-parents the-thread #f))
                  (when parent-thread
                    (define old-par-state (hash-ref parent->par-state parent-thread))
@@ -999,47 +1071,75 @@ If the latter, we raise the non-constructive exception.
                       [signal-waiting (set-add (par-state-signal-waiting old-par-state) the-thread)]))
                    (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))]
                 [#f
-                 (channel-put resp-chan #f)]
+                 (if is-present?
+                     (channel-put resp-chan #f)
+                     (internal-error "dunno what-to-do-here?!?"))]
                 [#t
-                 (channel-put resp-chan #t)])]
+                 (channel-put resp-chan (if is-present? #t (hash-ref signal-value a-signal)))])]
              [else
               (let loop ([loop-pre (- pre 1)]
-                         [loop-signals-pre signals-pre])
+                         [loop-signals-pre (if is-present? signals-pre signal-values-pre)])
                 (cond
                   [(empty? loop-signals-pre)
                    (channel-put resp-chan #f)]
                   [(zero? loop-pre)
-                   (channel-put resp-chan (set-member? (car loop-signals-pre) a-signal))]
+                   (channel-put resp-chan
+                                (if is-present?
+                                    (set-member? (car loop-signals-pre) a-signal)
+                                    (hash-ref (car loop-signals-pre) a-signal)))]
                   [else (loop (- loop-pre 1) (cdr loop-signals-pre))]))])
            (loop)))
         (handle-evt
          emit-chan
-         (λ (a-signal)
-           (log-esterel-debug "~a: emitting ~s ~s"
+         (λ (a-signal+value-provided+value)
+           (match-define (vector a-signal no-value-provided? a-value)
+             a-signal+value-provided+value)
+           (define value-provided? (not no-value-provided?))
+           (log-esterel-debug "~a: emitting: ~s status: ~s value: ~a"
                               (eq-hash-code (current-thread))
                               a-signal
-                              (hash-ref signal-status a-signal 'unknown))
+                              (hash-ref signal-status a-signal 'unknown)
+                              (if value-provided?
+                                  (format "~.s" a-value)
+                                  "<< no value provided >>"))
            (log-par-state)
            (match (hash-ref signal-status a-signal 'unknown)
              ['unknown
-              (set! signal-status (hash-set signal-status a-signal #t))
-              (for ([a-blocked-thread (hash-ref signal-waiters a-signal '())])
-                (match-define (blocked-thread thread resp-chan) a-blocked-thread)
-                (channel-put resp-chan #t)
-                (define parent-thread (hash-ref par-parents thread #f))
-                (when parent-thread
-                  (define old-par-state (hash-ref parent->par-state parent-thread))
-                  (define new-par-state
-                    (struct-copy
-                     par-state old-par-state
-                     [signal-waiting (set-remove (par-state-signal-waiting old-par-state) thread)]
-                     [active (set-add (par-state-active old-par-state) thread)]))
-                  (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
-                (add-running-thread thread))
-              (set! signal-waiters (hash-remove signal-waiters a-signal))]
+              (cond
+                [value-provided?
+                 ;; if it is a value-carrying signal, we don't yet know if this is the
+                 ;; last emit that it will see so we don't unblock the threads and we
+                 ;; don't update signal-status; we wait and explicitly make a choice, later
+                 (define new-value
+                   (if (hash-has-key? signal-value a-signal)
+                       ((signal-combine a-signal) (hash-ref signal-value a-signal) a-value)
+                       a-value))
+                 (set! signal-value (hash-set signal-value a-signal new-value))]
+                [else
+                 ;; here it isn't a value-carrying signal so we
+                 ;; set the status and wake up any blocked threads
+                 (define blocked-threads (hash-ref signal-waiters a-signal '()))
+                 (set! signal-status (hash-set signal-status a-signal #t))
+                 (for ([a-blocked-thread (in-list blocked-threads)])
+                   (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
+                   (channel-put resp-chan #t)
+                   (define parent-thread (hash-ref par-parents thread #f))
+                   (when parent-thread
+                     (define old-par-state (hash-ref parent->par-state parent-thread))
+                     (define new-par-state
+                       (struct-copy
+                        par-state old-par-state
+                        [signal-waiting (set-remove (par-state-signal-waiting old-par-state) thread)]
+                        [active (set-add (par-state-active old-par-state) thread)]))
+                     (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
+                   (add-running-thread thread))
+                 (set! signal-waiters (hash-remove signal-waiters a-signal))])]
              [#t
-              (void)]
+              (when value-provided?
+                ;; we guessed that this signal-carrying value would not have any more emits
+                (set! wrong-guess? #t))]
              [#f
+              ;; we guessed that this signal would not be emitted
               (set! wrong-guess? #t)])
            (loop)))
         (handle-evt

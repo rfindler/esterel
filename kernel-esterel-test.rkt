@@ -608,21 +608,125 @@
   (check-equal? (react! r) (hash S #t))
   (check-equal? (react! r) (hash O #t)))
 
+;; signals with values
+
+(let ()
+  (define S (signal #:combine +))
+  (check-equal?
+   (react!
+    (reaction
+     (emit S 1)))
+   (hash S 1)))
+
+(let ()
+  (define S (signal #:combine +))
+  (check-equal?
+   (react!
+    (reaction
+     (emit S 1)
+     (emit S 2)))
+   (hash S 3)))
+
+(let ()
+  (define S1 (signal #:combine +))
+  (define S2 (signal #:combine +))
+  (check-equal?
+   (react!
+    (reaction
+     (emit S1 1)
+     (emit S1 2)
+     (emit S2 (+ 2 (signal-value S1)))))
+   (hash S1 3 S2 5)))
+
+(let ()
+  (define S1 (signal #:combine +))
+  (define S2 (signal #:combine +))
+  (check-equal?
+   (react!
+    (reaction
+     (par (emit S1 1)
+          (emit S2 (+ 1 (signal-value S1)))
+          (emit S1 2))))
+   (hash S1 3 S2 4)))
+
+(let ()
+  (define S1 (signal #:combine +))
+  (check-exn
+   #rx"not constructive"
+   (λ ()
+     (react!
+      (reaction
+       (emit S1 1)
+       (signal-value S1)
+       (emit S1 2))))))
+
+(let ()
+  (define S1 (signal #:combine +))
+  (define S2 (signal #:combine +))
+  (check-equal?
+   (react!
+    (reaction
+     (par (if (signal-value S1)
+              (void)
+              (emit S2 1))
+          (if (signal-value S2)
+              (void)
+              (void)))))
+   (hash S2 1)))
+
+(let ()
+  (define S (signal #:combine +))
+  (define r
+    (reaction
+     (emit S 1)
+     (pause)
+     (emit S 2)))
+  (check-equal? (react! r) (hash S 1))
+  (check-equal? (react! r) (hash S 2)))
+
+(let ()
+  (define S (signal #:combine +))
+  (define O (signal))
+  (define r
+    (reaction
+     #:pre 2
+     (emit S 1)
+     (pause)
+     (when (= 1 (signal-value S #:pre 1))
+       (emit O))))
+  (check-equal? (react! r) (hash S 1))
+  (check-equal? (react! r) (hash O #t)))
+
+(let ()
+  (define S (signal #:combine +))
+  (define O (signal))
+  (define r
+    (reaction
+     #:pre 2
+     (emit S 1)
+     (pause)
+     (emit S 2)
+     (when (= 1 (signal-value S #:pre 1))
+       (emit O))
+     (pause)
+     (when (= 1 (signal-value S #:pre 2))
+       (emit O))))
+  (check-equal? (react! r) (hash S 1))
+  (check-equal? (react! r) (hash S 2 O #t))
+  (check-equal? (react! r) (hash O #t)))
+
 
 ;                                                                                                            
 ;                                                                                                            
-;                                                                                                            
-;                                                                                                            
-;   ;;;;                              ;;;;;;     ;;;;    ;;;;;;   ;;;          ;;;;;    ;;;      ;;    ;;;;  
-;  ;;;                                ;;;;;;;   ;;;;;;   ;;;;;;;  ;;;         ;;;;;;;  ;;;;;    ;;;   ;;;;;; 
-;  ;;;; ;;; ;; ;;;   ;;; ;; ;;;       ;;; ;;;  ;;;  ;;;  ;;; ;;;  ;;;         ;;; ;;; ;;; ;;;  ;;;;   ;;; ;;;
-;  ;;;; ;;;;; ;;;;;  ;;;;;;;;;;;      ;;; ;;;  ;;;  ;;;  ;;; ;;;  ;;;             ;;; ;;; ;;;  ; ;;   ;;; ;;;
-;  ;;;  ;;;  ;;; ;;; ;;; ;;; ;;;      ;;;;;;;  ;;;  ;;;  ;;;;;;;  ;;;            ;;;  ;;; ;;;    ;;   ;;;;;;;
-;  ;;;  ;;;  ;;; ;;; ;;; ;;; ;;;      ;;;;;;   ;;;  ;;;  ;;;;;;   ;;;           ;;;   ;;; ;;;    ;;    ;; ;;;
-;  ;;;  ;;;  ;;; ;;; ;;; ;;; ;;;      ;;;      ;;;  ;;;  ;;;      ;;;          ;;;    ;;; ;;;    ;;       ;;;
-;  ;;;  ;;;   ;;;;;  ;;; ;;; ;;;      ;;;       ;;;;;;   ;;;      ;;;;;;      ;;;;;;;  ;;;;;     ;;   ;;;;;; 
-;  ;;;  ;;;    ;;;   ;;; ;;; ;;;      ;;;        ;;;;    ;;;      ;;;;;;      ;;;;;;;   ;;;      ;;    ;;;;  
-;                                                                                                            
+;  ;;;;;;     ;;;;    ;;;;;;   ;;;          ;;;;;    ;;;      ;;    ;;;;  
+;  ;;;;;;;   ;;;;;;   ;;;;;;;  ;;;         ;;;;;;;  ;;;;;    ;;;   ;;;;;; 
+;  ;;; ;;;  ;;;  ;;;  ;;; ;;;  ;;;         ;;; ;;; ;;; ;;;  ;;;;   ;;; ;;;
+;  ;;; ;;;  ;;;  ;;;  ;;; ;;;  ;;;             ;;; ;;; ;;;  ; ;;   ;;; ;;;
+;  ;;;;;;;  ;;;  ;;;  ;;;;;;;  ;;;            ;;;  ;;; ;;;    ;;   ;;;;;;;
+;  ;;;;;;   ;;;  ;;;  ;;;;;;   ;;;           ;;;   ;;; ;;;    ;;    ;; ;;;
+;  ;;;      ;;;  ;;;  ;;;      ;;;          ;;;    ;;; ;;;    ;;       ;;;
+;  ;;;       ;;;;;;   ;;;      ;;;;;;      ;;;;;;;  ;;;;;     ;;   ;;;;;; 
+;  ;;;        ;;;;    ;;;      ;;;;;;      ;;;;;;;   ;;;      ;;    ;;;;  
 ;                                                                                                            
 ;                                                                                                            
 ;                                                                                                            

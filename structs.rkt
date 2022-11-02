@@ -16,7 +16,7 @@
        (display ">" port)]))
   write-proc)
 
-(struct signal (name)
+(struct signal (name combine)
   #:methods gen:custom-write
   [(define write-proc (mk-write-proc (λ (x) (signal-name x)) "signal"))])
 
