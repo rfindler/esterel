@@ -715,6 +715,55 @@
   (check-equal? (react! r) (hash S 2 O #t))
   (check-equal? (react! r) (hash O #t)))
 
+(let ()
+  (define S (signal #:combine +))
+  (define r
+    (reaction
+     (present? S)))
+  (check-equal? (react! r) (hash)))
+
+(let ()
+  (define S (signal #:combine +))
+  (define r
+    (reaction
+     (emit S 0)
+     (present? S)))
+  (check-equal? (react! r)
+                (hash S 0)))
+
+(let ()
+  (define S (signal #:combine +))
+  (define r
+    (reaction
+     (emit S 0)
+     (present? S)
+     (present? S)))
+  (check-equal? (react! r)
+                (hash S 0)))
+
+(let ()
+  (define S (signal #:combine +))
+  (define r
+    (reaction
+     (present? S)))
+  (check-equal? (react! r #:emit (list (cons S 0)))
+                (hash S 0)))
+
+(let ()
+  (define S (signal #:combine +))
+  (define O (signal))
+  (define r
+    (reaction
+     (let loop ()
+       (when (and (present? S) (= (signal-value S) 2))
+         (emit O))
+       (pause)
+       (loop))))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r #:emit (list (cons S 1))) (hash S 1))
+  (check-equal? (react! r #:emit (list (cons S 2))) (hash S 2 O #t)))
+
+
 
 ;                                                                                                            
 ;                                                                                                            

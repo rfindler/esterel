@@ -11,7 +11,10 @@
  with-trap
  (contract-out
   [react! (->* (reaction?)
-               (#:emit (listof signal?))
+               (#:emit (listof
+                        (or/c (and/c signal? (not/c signal-combine))
+                              (cons/c (and/c signal? signal-combine)
+                                      any/c))))
                (hash/dc [s signal?]
                         ;; if a signal is not emitted
                         ;; and also has a combination function,
@@ -27,6 +30,8 @@
                  (#:pre natural?)
                  #:pre (in-reaction?)
                  boolean?)]
+
+  ;; when a signal is not emitted it will return #f for the signal-value
   [signal-value (->* ((and/c signal? signal-combine))
                      ;; NB when we go "too far" with #:pre the values are just #f,
                      ;; even if the signal never had that value... is this okay?
@@ -699,7 +704,14 @@ If the latter, we raise the non-constructive exception.
       (set! signal-waiters (hash-remove signal-waiters chosen-signal))
       (for ([a-blocked-thread (in-list blocked-threads)])
         (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
-        (channel-put resp-chan (if done-emitting? (hash-ref signal-value chosen-signal) #f))
+        (channel-put resp-chan
+                     (if done-emitting?
+                         (if is-present?
+                             (hash-has-key? signal-value chosen-signal)
+                             ;; if we ask for a signal's value and the signal
+                             ;; isn't going to be emitted, return #f
+                             (hash-ref signal-value chosen-signal #f))
+                         #f))
         (add-running-thread thread)
         (define parent-thread (hash-ref par-parents thread #f))
         (when parent-thread
@@ -1015,9 +1027,17 @@ If the latter, we raise the non-constructive exception.
          (λ (signals-to-emit+instant-complete-chan)
            (match-define (cons signals-to-emit _instant-complete-chan)
              signals-to-emit+instant-complete-chan)
-           (set! signal-status (for/fold ([signals signal-status])
-                                         ([signal-to-emit (in-list signals-to-emit)])
-                                 (hash-set signals signal-to-emit #t)))
+           (set!-values (signal-status signal-value)
+                        (for/fold ([signal-status signal-status]
+                                   [signal-value signal-value])
+                                  ([signal-to-emit (in-list signals-to-emit)])
+                          (match signal-to-emit
+                            [(? signal?)
+                             (values (hash-set signal-status signal-to-emit #t)
+                                     signal-value)]
+                            [(cons (? signal? signal-to-emit) val)
+                             (values signal-status
+                                     (hash-set signal-value signal-to-emit val))])))
            (when first-instant-sema
              ;; this blocks starting the first instant; after that it isn't needed
              (semaphore-post first-instant-sema)
