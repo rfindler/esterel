@@ -24,21 +24,34 @@
               (values [rollback any/c] [choice (or/c #f signal?)]))]
   ))
 
-;; search-tree : search-tree
-;; latest-leaf : #f or search-tree   -- only #f when we've not yet started the search
-(struct search-state (root latest-leaf) #:mutable)
+(define node?/fw (let ([node? (λ (x) (node? x))]) node?))
+(define link?/fw (let ([link? (λ (x) (link? x))]) link?))
+(define search-tree/c
+  (or/c 'unk       ;; -- means that we have not explored here
+        'fail      ;; -- means that this was a failure
+        node?/fw   ;; -- means that there is more structure here
+        ))
 
-;; search-tree = one of:
-;;   'unk  -- means that we have not explored here
-;;   'fail -- means that this was a failure
-;;   node  -- means that there is more structure here
+(struct/contract
+ search-state
+ ([root search-tree/c]
+  [latest-leaf
+   (or/c #f  ;; -- only #f when we've not yet started the search
+         link?/fw)])
+ #:mutable)
 
-;; children : (listof link?)
-(struct node (rollback known-signals choices children) #:transparent)
+(struct/contract
+ node
+ ([rollback any/c]
+  [known-signals list?]
+  [choices list?]
+  [children (listof link?/fw)])
+ #:transparent)
 
-;; choice : signal -- this is the signal we chose to not emit
-;; subtree : search-tree -- this is what happened when we explored it
-(struct link (choice [subtree #:mutable]) #:transparent)
+;; choice : this is the signal we chose to not emit
+;; subtree : this is what happened when we explored it
+(struct/contract link ([choice signal?] [subtree search-tree/c])
+  #:mutable #:transparent)
 
 
 (define (new-search-state) (search-state 'unk #f))
@@ -107,8 +120,8 @@
          (loop (link-subtree child)))])))
 
 (module+ test
-  (define s1 (signal "s1"))
-  (define s2 (signal "s2"))
+  (define s1 (signal "s1" #f))
+  (define s2 (signal "s2" #f))
 
   (check-equal?
    (let ([se-st (new-search-state)])
