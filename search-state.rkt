@@ -53,7 +53,6 @@
 (struct/contract link ([choice signal?] [subtree search-tree/c])
   #:mutable #:transparent)
 
-
 (define (new-search-state) (search-state 'unk #f))
 
 (define (continue! se-st rollback known-signals choices)
@@ -100,8 +99,22 @@
        (when (search-tree-is-all-failed? (search-state-root se-st))
          (escape #f #f))
 
-       ;; here we need to do some more searching, but I don't have an algorithm
-       ;; for that yet.....
+       ;; since all the children of the root are explored, let's
+       ;; just do a depth-first search for the first unexplored
+       ;; place and try to explore it.
+       (for ([root-child-link (in-list (node-children (search-state-root se-st)))])
+         (let loop ([parent root]
+                    [link-to-parent root-child-link])
+           (define child (link-subtree link-to-parent))
+           (match child
+             ['unk
+              (set-search-state-latest-leaf! se-st link-to-parent)
+              (escape (node-rollback parent)
+                      (link-choice link-to-parent))]
+             ['fail (void)]
+             [(node _ _ _ children)
+              (for ([link (in-list children)])
+                (loop child link))])))
        (pretty-write (search-state-root se-st))
        (error 'fail! "I'm not sure what to do..."))]
     [else
@@ -122,6 +135,8 @@
 (module+ test
   (define s1 (signal "s1" #f))
   (define s2 (signal "s2" #f))
+  (define s3 (signal "s3" #f))
+  (define s4 (signal "s3" #f))
 
   (check-equal?
    (let ([se-st (new-search-state)])
@@ -152,4 +167,62 @@
      (call-with-values
       (λ () (fail! se-st))
       list))
-   (list #f #f)))
+   (list #f #f))
+
+  ;; this test case overspecifies the search order
+  ;; in the sense that it will not pass unless
+  ;; we try all of the initial choices (ie rolling
+  ;; back to the rollback value `1`) before trying
+  ;; anything nested.
+  (let ([se-st (new-search-state)])
+    (define all (list s1 s2 s3))
+    (define c1 (continue! se-st 1 '() all))
+    (check-not-false (member c1 all))
+    (define c1b (continue! se-st 2 '() (remove c1 all)))
+    (check-not-false (member c1b (remove c1 all)))
+    (define-values (rb1 c2) (fail! se-st))
+    (check-equal? rb1 1)
+    (check-not-false (member c2 (remove c1 all)))
+    (define-values (rb2 c3) (fail! se-st))
+    (check-equal? rb2 1)
+    (define-values (rb3 c5) (fail! se-st))
+    (check-equal? rb3 2)
+    (check-not-false (member c5 (remove c1 all)))
+    (define-values (rb4 c6) (fail! se-st))
+    (check-equal? rb4 #f)
+    (check-equal? c6 #f)
+    )
+
+  ;; this test case gets into choices that requires
+  ;; jumping around from one place that's not in the
+  ;; top-level to another that's also not in the top-level.
+  (let ([se-st (new-search-state)])
+    (define all (list s1 s2 s3 s4))
+    (define c1 (continue! se-st 'top-level '() all))
+    (check-not-false (member c1 all))
+    (define c1b (continue! se-st 'child1 '() (remove c1 all)))
+    (check-not-false (member c1b (remove c1 all)))
+    (define-values (rb1 c2) (fail! se-st))
+    (check-equal? rb1 'top-level)
+    (check-not-false (member c2 (remove c1 all)))
+    (define-values (rb2 c3) (fail! se-st))
+    (check-equal? rb2 'top-level)
+    (define-values (rb3 c4) (fail! se-st))
+    (check-equal? rb3 'top-level)
+    (check-not-false (member c4 (remove c3 (remove c2 (remove c1 all)))))
+    (define-values (rb4 c6) (fail! se-st))
+    (check-equal? rb4 'child1)
+    (check-not-false (member c6 (remove c1 all)))
+    (define c7 (continue! se-st 'child-of-child1 '() (remove c1 (remove c6 all))))
+    (check-not-false (member c7 (remove c1 (remove c6 all))))
+    (define-values (rb5 c8) (fail! se-st))
+    (check-not-false (member rb5 '(child1 child-of-child1)))
+    (define-values (rb6 c9) (fail! se-st))
+    (check-not-false (member rb6 '(child1 child-of-child1)))
+    (check-false (equal? rb5 rb6))
+    (define-values (the-end1 the-end2) (fail! se-st))
+    (check-false the-end1)
+    (check-false the-end2)
+    )
+
+  )
