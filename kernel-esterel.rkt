@@ -94,6 +94,7 @@ If the latter, we raise the non-constructive exception.
 |#
 
 (define-logger esterel)
+(define-logger esterel-par)
 
 (struct checkpoint-request (resp-chan))
 (define reaction-prompt-tag (make-continuation-prompt-tag 'reaction))
@@ -610,7 +611,7 @@ If the latter, we raise the non-constructive exception.
   (define instant-complete-chan #f)
 
   (define (log-par-state)
-    (log-esterel-debug
+    (log-esterel-par-debug
      "running ~a\n         ~a"
      (if (set-empty? running-threads)
          "... none"
@@ -947,7 +948,7 @@ If the latter, we raise the non-constructive exception.
 
     ;; this is a kind of abuse of the logging system; we skip these checks unless
     ;; someone is listening on the debugging logger
-    (log-esterel-debug
+    (log-esterel-par-debug
      "checking invariants of par-parents / running-threads / parent->par-state~a"
      (begin
        (for ([(par-parent a-par-state) (in-hash parent->par-state)])
@@ -979,7 +980,9 @@ If the latter, we raise the non-constructive exception.
       [(and (= 0 (hash-count signal-waiters))
             (set-empty? running-threads)
             instant-complete-chan)
-       (log-esterel-debug "~a: instant is over: ~s" (eq-hash-code (current-thread)) (or latest-exn wrong-guess?))
+       (log-esterel-debug "~a: instant is over~a"
+                          (eq-hash-code (current-thread))
+                          (if (or latest-exn wrong-guess?) " need to rollback" ""))
        (log-par-state)
        (cond
          [(or latest-exn wrong-guess?)
