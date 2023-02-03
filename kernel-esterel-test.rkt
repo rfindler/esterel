@@ -763,7 +763,30 @@
   (check-equal? (react! r #:emit (list (cons S 1))) (hash S 1))
   (check-equal? (react! r #:emit (list (cons S 2))) (hash S 2 O #t)))
 
-
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (let ([SO1 (signal)]
+         [SO2 (signal)])
+     (define r
+       (reaction
+        (par
+         (par
+          (par
+           (begin
+             (pause)
+             (if (present? SO1)
+                 (void)
+                 (begin (emit SO1)
+                        (emit SO2))))
+           (begin
+             (pause)
+             (if (present? SO2)
+                 (void)
+                 (begin (emit SO1)
+                        (emit SO2)))))))))
+     (react! r)
+     (react! r))))
 
 ;                                                                                                            
 ;                                                                                                            

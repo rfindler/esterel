@@ -749,9 +749,10 @@ If the latter, we raise the non-constructive exception.
   ;; cont : continuation[listof thread]
   ;; signal-waiting : (set/c rb-tree?)
   ;; paused : (set/c rb-tree?)
+  ;; active : (set/c rb-tree?) -- these are children of the current par that have children; they aren't running
   ;; trap : (or/c trap? exn? #f)
   ;; before-par-trap-counter : natural?
-  (struct rb-par rb-tree (cont signal-waiting paused trap before-par-trap-counter) #:transparent)
+  (struct rb-par rb-tree (cont signal-waiting paused active trap before-par-trap-counter) #:transparent)
 
   ;; cont : continuation[channel]
   (struct rb-paused rb-tree (cont) #:transparent)
@@ -778,6 +779,8 @@ If the latter, we raise the non-constructive exception.
             (loop child))
           (for/set ([child (in-set paused)])
             (loop child))
+          (for/set ([child (in-set active)])
+            (loop child))
           a-trap
           before-par-trap-counter)]
         [(hash-has-key? paused-threads thread)
@@ -799,7 +802,7 @@ If the latter, we raise the non-constructive exception.
                [par-child-result-chan #f]
                [parent-before-par-trap-counter #f])
       (match rb-tree
-        [(rb-par par-cont rb-signal-waiting rb-paused a-trap before-par-trap-counter)
+        [(rb-par par-cont rb-signal-waiting rb-paused rb-active a-trap before-par-trap-counter)
          ;; we have to do this strange dance with `sema` in order to make
          ;; the recursive call to `loop`, as we need the par parent
          ;; thread to make the call. So we avoid race
@@ -827,9 +830,11 @@ If the latter, we raise the non-constructive exception.
                 (define checkpoint/result-chan (make-channel))
                 (define this-par-result-chans+signal-waiting-children (get-result-chans+par-children rb-signal-waiting))
                 (define this-par-result-chans+paused-children (get-result-chans+par-children rb-paused))
+                (define this-par-result-chans+active-children (get-result-chans+par-children rb-active))
                 (define signal-waiting (drop-result-chans this-par-result-chans+signal-waiting-children))
                 (define paused (drop-result-chans this-par-result-chans+paused-children))
-                (for ([child-thread (in-set (set-union signal-waiting paused))])
+                (define active (drop-result-chans this-par-result-chans+active-children))
+                (for ([child-thread (in-set (set-union signal-waiting paused active))])
                   (set! par-parents (hash-set par-parents child-thread parent-thread)))
                 (set! parent->par-state
                       (hash-set parent->par-state
@@ -837,11 +842,12 @@ If the latter, we raise the non-constructive exception.
                                 (par-state checkpoint/result-chan
                                            signal-waiting
                                            paused
-                                           (set)
+                                           active
                                            a-trap)))
                 (semaphore-post sema)
                 (par-cont (set-union this-par-result-chans+signal-waiting-children
-                                     this-par-result-chans+paused-children)
+                                     this-par-result-chans+paused-children
+                                     this-par-result-chans+active-children)
                           checkpoint/result-chan)))))
          (semaphore-wait sema)
          par-parent-thread]
