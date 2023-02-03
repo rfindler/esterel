@@ -320,12 +320,18 @@ If the latter, we raise the non-constructive exception.
          (continuation-mark-set->iterator
           (current-continuation-marks)
           (list suspend-mark)))
-       (let loop ([iter iter])
-         (define-values (next-val next-iter) (iter))
-         (when next-val
-           (when ((vector-ref next-val 0)) (pause))
-           (loop next-iter)))
-       val])))
+       (define suspend?
+         (let loop ([iter iter])
+           (define-values (next-val next-iter) (iter))
+           (cond
+             [next-val
+              (or ((vector-ref next-val 0))
+                  (loop next-iter))]
+             [else #f])))
+       (cond
+         [suspend?
+          (pause)]
+         [else val])])))
 
 (define-syntax (suspend stx)
   (syntax-case stx ()
