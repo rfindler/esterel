@@ -697,7 +697,6 @@ If the latter, we raise the non-constructive exception.
     (unless non-constructive-program?
       (log-esterel-debug "~a: chose ~a to be absent/done emitting" (eq-hash-code (current-thread)) chosen-signal)
       (log-par-state)
-      (define blocked-threads (hash-ref signal-waiters chosen-signal))
       ;; if the signal is in signal-value that means that it's been emitted
       ;; and we're guessing that it won't be emitted again
       (define done-emitting? (hash-has-key? signal-value chosen-signal))
@@ -708,6 +707,7 @@ If the latter, we raise the non-constructive exception.
         [else
          ;; setting the status to #f means it is absent
          (set! signal-status (hash-set signal-status chosen-signal #f))])
+      (define blocked-threads (hash-ref signal-waiters chosen-signal '()))
       (set! signal-waiters (hash-remove signal-waiters chosen-signal))
       (for ([a-blocked-thread (in-list blocked-threads)])
         (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
@@ -744,22 +744,22 @@ If the latter, we raise the non-constructive exception.
     (set! reaction-thread (rebuild-threads-from-rb-tree rb-tree)))
   (define (current-rollback-point) (rollback-point (build-rb-tree-from-current-state) signal-status signal-value))
 
-  (struct rb-tree ())
+  (struct rb-tree () #:transparent)
 
   ;; cont : continuation[listof thread]
   ;; signal-waiting : (set/c rb-tree?)
   ;; paused : (set/c rb-tree?)
   ;; trap : (or/c trap? exn? #f)
   ;; before-par-trap-counter : natural?
-  (struct rb-par rb-tree (cont signal-waiting paused trap before-par-trap-counter))
+  (struct rb-par rb-tree (cont signal-waiting paused trap before-par-trap-counter) #:transparent)
 
   ;; cont : continuation[channel]
-  (struct rb-paused rb-tree (cont))
+  (struct rb-paused rb-tree (cont) #:transparent)
 
   ;; signal : signal?
   ;; is-present? : boolean?
   ;; cont : continuation[channel]
-  (struct rb-blocked rb-tree (signal is-present? cont))
+  (struct rb-blocked rb-tree (signal is-present? cont) #:transparent)
 
   ;; build-rb-tree-from-current-state : -> rb-tree?
   (define (build-rb-tree-from-current-state)
@@ -768,7 +768,8 @@ If the latter, we raise the non-constructive exception.
     (let loop ([thread reaction-thread])
       (cond
         [(hash-has-key? parent->par-state thread)
-         (match-define (par-state checkpoint/result-chan signal-waiting paused active a-trap) (hash-ref parent->par-state thread))
+         (match-define (par-state checkpoint/result-chan signal-waiting paused active a-trap)
+           (hash-ref parent->par-state thread))
          (channel-put checkpoint/result-chan k-chan)
          (match-define (vector before-par-trap-counter par-continuation) (channel-get k-chan))
          (rb-par
