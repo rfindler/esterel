@@ -1171,6 +1171,7 @@ continuations).
        (set! saved-must-state (current-must-state))
        (set! mode (cons (new-can) mode))
        (rollback! (can-starting-point (car mode)))
+       (add-can-signals! (car mode))
        (unblock-threads (can-unknown-signals (car mode)))
        (loop)]
 
