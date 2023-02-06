@@ -515,7 +515,7 @@ continuations).
   
   (define (inc-signal-states a-can)
     (struct-copy can a-can
-                 [signal-states (+ (can-signal-states a-can) 2)]))
+                 [signal-states (+ (can-signal-states a-can) 1)]))
   (define (signal-states-done? a-can)
     (match-define (can emits unknown-signals signal-states starting-point) a-can)
     (= (- (expt 2 (length unknown-signals)) 1) signal-states))
@@ -1090,7 +1090,9 @@ continuations).
             instant-complete-chan)
        (log-esterel-debug "~a: instant has completed~a"
                           (eq-hash-code (current-thread))
-                          (if (pair? mode) "; finished a can exploration" ""))
+                          (if (pair? mode)
+                              (format "; finished a can exploration: ~a" (can-signal-states (car mode)))
+                              ""))
        (log-par-state)
        (cond
          [(pair? raised-exns)
@@ -1223,6 +1225,7 @@ continuations).
                           (hash-keys signal-waiters))
        (when (= 0 (hash-count signal-waiters))
          (internal-error "expected some thread to be blocked on a signal"))
+       (set! saved-must-state (current-must-state))
        (set! mode (cons (new-can) mode))
        (rollback! (can-starting-point (car mode)))
        (unblock-threads (can-unknown-signals (car mode)))
