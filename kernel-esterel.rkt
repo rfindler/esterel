@@ -721,65 +721,6 @@ continuations).
 ;                                                           
 
 
-  #;  ;; need to delete this function
-  (define (choose-a-signal-to-be-absent-or-to-have-no-more-emits)
-    (define chosen-signal
-      (cond
-        [(or latest-exn wrong-guess?)
-         (when latest-exn
-           (set! raised-exns (set-add raised-exns latest-exn)))
-         (set! wrong-guess? #f)
-         (set! latest-exn #f)
-         (define-values (rollback-point choice) (fail! se-st))
-         (cond
-           [choice
-            (rollback! rollback-point)
-            choice]
-           [else
-            ;; after this function returns, we always go back to the
-            ;; main loop in the handler thread; with this flag set
-            ;; it always just disables everything
-            (set! non-constructive-program? #t)])]
-        [else
-         (continue! se-st
-                    (current-rollback-point)
-                    (hash-keys signal-status)
-                    (hash-keys signal-waiters))]))
-    (unless non-constructive-program?
-      (log-esterel-debug "~a: chose ~a to be absent/done emitting" (eq-hash-code (current-thread)) chosen-signal)
-      (log-par-state)
-      ;; if the signal is in signal-value that means that it's been emitted
-      ;; and we're guessing that it won't be emitted again
-      (define done-emitting? (hash-has-key? signal-value chosen-signal))
-      (cond
-        [done-emitting?
-         ;; setting the status to #t means we can use `signal-value` as the value
-         (set! signal-status (hash-set signal-status chosen-signal #t))]
-        [else
-         ;; setting the status to #f means it is absent
-         (set! signal-status (hash-set signal-status chosen-signal #f))])
-      (define blocked-threads (hash-ref signal-waiters chosen-signal '()))
-      (set! signal-waiters (hash-remove signal-waiters chosen-signal))
-      (for ([a-blocked-thread (in-list blocked-threads)])
-        (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
-        (channel-put resp-chan
-                     (if done-emitting?
-                         (if is-present?
-                             (hash-has-key? signal-value chosen-signal)
-                             ;; if we ask for a signal's value and the signal
-                             ;; isn't going to be emitted, return #f
-                             (hash-ref signal-value chosen-signal #f))
-                         #f))
-        (add-running-thread thread)
-        (define parent-thread (hash-ref par-parents thread #f))
-        (when parent-thread
-          (define old-par-state (hash-ref parent->par-state parent-thread))
-          (define new-par-state
-            (struct-copy par-state old-par-state
-                         [active (set-add (par-state-active old-par-state) thread)]
-                         [signal-waiting (set-remove (par-state-signal-waiting old-par-state) thread)]))
-          (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state))))))
-
   ;; unblock-threads : (listof signal?) -> void
   ;; wakes up all the threads that are blocked on `unemitted-signals`
   (define (unblock-threads signals)
