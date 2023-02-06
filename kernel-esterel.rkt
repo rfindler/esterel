@@ -1,5 +1,5 @@
 #lang racket
-(require "structs.rkt" "search-state.rkt"
+(require "structs.rkt"
          racket/hash
          (for-syntax syntax/parse))
 
@@ -78,18 +78,19 @@ has finished. When all arms of the par finish, then we decide
 what to do with the par. This is handled by `maybe-finalize-a-par`
 (which also uses `unpause-to-trap`).
 
-To handle instantaneous reaction to absence, we simply block on
-unemitted signals. When everything else has finished, there must
-be one of those signals that is not going to be emitted (or else
-the reaction isn't constructive) and so we just pick one to see
-if it is. The picking is handled by search-state.rkt. We then run
-on the assumption it is absent and we find out we were wrong if
-it gets emitted. In order to prepare for being wrong, we grab
-continuations of all the threads before running forward with the
-assumption. If the assumption was wrong, we roll back and pick
-a different signal to be absent. Eventually either the reaction
-completes, or we run out of signals to pick. If the former, fine.
-If the latter, we raise the non-constructive exception.
+To handle instantaneous reaction to absence, we block on
+unemitted signals. When all threads are blocked, then we know
+that we cannot make progress in "must" mode (ie normal execution
+of the program), so we switch to "can" mode. We remember where
+we are by grabbing continuations for all the threads and then
+start exploring to see which signals can be emitted. To explore,
+we systematically consider all possible signal settings (ie explore
+2^n ways to continue from this point if there are n signals that
+the computation is blocked on) and record which signals were
+emitted. Any signal that doesn't get emitted during this process
+cannot be emitted, so we set it to absent (and continue the
+computation, back in "must" mode from where we saved all the
+continuations).
 
 |#
 
@@ -499,9 +500,74 @@ If the latter, we raise the non-constructive exception.
 ;                                                                                    
 ;                                                                                    
 
-  
-  (define non-constructive-program? #f)
+  ;; emits : the signals that can be emitted (that we've learned about so far)
+  ;; unknown-signals : the order tracks the bits in `signal-states` telling of the signals' state
+  ;; signal-states : the bits tell us which signals are present/absent
+  (struct/contract can ([emits (set/c signal?)]
+                        [unknown-signals (listof signal?)]
+                        [signal-states (and/c exact? integer?)]
+                        [starting-point (λ (x) (starting-point? x))]))
 
+  (define/contract mode
+    (or/c null?                    ;; we're in Must mode
+          (non-empty-listof can?)) ;; we're in Can mode
+    '())
+  
+  (define (inc-signal-states a-can)
+    (struct-copy can a-can
+                 [signal-states (+ (can-signal-states a-can) 2)]))
+  (define (signal-states-done? a-can)
+    (match-define (can emits unknown-signals signal-states starting-point) a-can)
+    (= (- (expt 2 (length unknown-signals)) 1) signal-states))
+  
+  ;; add-can-signals : can? -> void?
+  ;; STATE: updates `signal-status` based on the choices in `a-can`
+  (define (add-can-signals! a-can)
+    (match-define (can emits unknown-signals signal-states starting-point) a-can)
+    (set! signal-status
+          (for/fold ([signal-status signal-status])
+                    ([i (in-naturals)]
+                     [signal (in-list unknown-signals)])
+            (hash-set signal-status
+                      signal
+                      (bitwise-bit-set? signal-states i)))))
+
+  ;; get-unemitted-signals : can? -> (set/c signal?)
+  ;; returns the set of signals that cannot be emitted
+  (define (get-unemitted-signals a-can)
+    (match-define (can emits unknown-signals signal-states starting-point) a-can)
+    (for/set ([signal (in-list unknown-signals)]
+              #:unless (set-member? emits signal))
+      signal))
+  
+  ;; new-can : -> can
+  ;; STATE: uses `signal-status` to find the signals that are being explored
+  ;;        and uses `get-starting-point` for when to start things off
+  (define (new-can)
+    (define unknown-signals (hash-keys signal-waiters))
+    (can (set) unknown-signals 0 (get-starting-point)))
+
+
+  ;; add-emitted-signal : can? signal? -> can?
+  ;; adds `a-signal` as emitted to `a-can`
+  (define (add-emitted-signal a-can a-signal)
+    (struct-copy can a-can
+                 [emits (set-add (can-emits a-can) a-signal)]))
+    
+  ;; must-state holds the state of the instant at the point where we
+  ;; switched form must mode to can mode (so that we can return to
+  ;; that state when we are done with can)
+  (struct must-state (latest-exn
+                      signal-waiters
+                      paused-threads
+                      par-parents
+                      parent->par-state
+                      reaction-thread))
+  ;; saved-must-state : (or/c #f must-state?)
+  ;; #f when we're in must mode and must-state? when we're in can mode
+  (define saved-must-state #f)
+  
+  
   ;; if a signal isn't mapped, its status isn't yet known
   ;; if it is #t, the signal has been emitted
   ;; (if a value-carrying signal, it has been emitted for the last time)
@@ -513,33 +579,24 @@ If the latter, we raise the non-constructive exception.
     (hash/c signal? boolean? #:flat? #t #:immutable #t)
     (hash))
 
-  ;; if a signal is mapped in `signal-value`, then it
-  ;; a) has been emitted and
-  ;; b) has a `combine` function
+  ;; if a signal is mapped in `signal-value`, then
+  ;; a) it has been emitted and
+  ;; b) it has a `combine` function
   (define/contract signal-value
     (hash/c signal? any/c #:flat? #t #:immutable #t)
     (hash))
 
-  ;; the latest-exn is set to an exception when we just
-  ;; finished a reaction; this might indicate a bad guess
-  ;; so we'll go back and make another guess (until we
-  ;; exhaust all guesses) if this is not #f
-  (define/contract latest-exn
-    (or/c #f exn?)
-    #f)
-
   ;; this is all of the exceptions that were raised
-  ;; during the guessing when running the current instant
+  ;; when running the current instant
   (define/contract raised-exns
-    (set/c exn?)
-    (set))
+    (listof exn?)
+    '())
 
   (struct blocked-thread (is-present? thread resp-chan) #:transparent)
     
   ;; threads that are blocked, waiting for a signal's value to be decided
-  ;; (a missing entry is the same as the empty list)
   (define/contract signal-waiters
-    (hash/c signal? (listof blocked-thread?) #:flat? #t #:immutable #t)
+    (hash/c signal? (non-empty-listof blocked-thread?) #:flat? #t #:immutable #t)
     (hash))
   (define (add-signal-waiter! a-signal is-present? the-thread resp-chan)
     (define a-blocked-thread (blocked-thread is-present? the-thread resp-chan))
@@ -663,14 +720,8 @@ If the latter, we raise the non-constructive exception.
 ;                                                           
 ;                                                           
 
-  
-  (define se-st (new-search-state))
 
-  ;; this gets set to #t when we discover that signal
-  ;; had a wrong guess (we guessed it won't be emitted but
-  ;; it actually gets emitted)
-  (define wrong-guess? #f)
-  
+  #;  ;; need to delete this function
   (define (choose-a-signal-to-be-absent-or-to-have-no-more-emits)
     (define chosen-signal
       (cond
@@ -729,20 +780,74 @@ If the latter, we raise the non-constructive exception.
                          [signal-waiting (set-remove (par-state-signal-waiting old-par-state) thread)]))
           (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state))))))
 
+  ;; unblock-threads : (listof signal?) -> void
+  ;; wakes up all the threads that are blocked on `unemitted-signals`
+  (define (unblock-threads signals)
+    (for ([chosen-signal (in-list signals)])
+      (define done-emitting? (hash-has-key? signal-value chosen-signal))
+      (define blocked-threads (hash-ref signal-waiters chosen-signal '()))
+      (set! signal-waiters (hash-remove signal-waiters chosen-signal))
+      (for ([a-blocked-thread (in-list blocked-threads)])
+        (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
+        (channel-put resp-chan
+                     (if done-emitting?
+                         (if is-present?
+                             (hash-has-key? signal-value chosen-signal)
+                             ;; if we ask for a signal's value and the signal
+                             ;; isn't going to be emitted, return #f
+                             (hash-ref signal-value chosen-signal #f))
+                         #f))
+        (add-running-thread thread)
+        (define parent-thread (hash-ref par-parents thread #f))
+        (when parent-thread
+          (define old-par-state (hash-ref parent->par-state parent-thread))
+          (define new-par-state
+            (struct-copy par-state old-par-state
+                         [active (set-add (par-state-active old-par-state) thread)]
+                         [signal-waiting (set-remove (par-state-signal-waiting old-par-state) thread)]))
+          (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state))))))
+  
+  ;; current-must-state : -> must-state?
+  (define (current-must-state)
+    (must-state raised-exns
+                signal-waiters
+                paused-threads
+                par-parents
+                parent->par-state
+                reaction-thread))
+
+  (define (restore-must-state)
+    (match-define (must-state _raised-exns
+                              _signal-waiters
+                              _paused-threads
+                              _par-parents
+                              _parent->par-state
+                              _reaction-thread)
+      saved-must-state)
+    (set! raised-exns _raised-exns) ;; TODO: this doesn't seem right! there cannot be anything there, right?
+    (set! signal-waiters _signal-waiters)
+    (set! paused-threads _paused-threads)
+    (set! par-parents _par-parents)
+    (set! parent->par-state _parent->par-state)
+    (set! reaction-thread _reaction-thread))
+
+  ;; the `starting-point` struct holds information about the starting point
+  ;; for running can. we start the computation here with various settings
+  ;; of the signals to see what can be emitted (and thus, what cannot be emitted)
   ;; rb-tree : rb-tree?
   ;; signals : (hash/c signal? boolean? #:flat? #t #:immutable #t)
-  (struct rollback-point (rb-tree signal-status signal-value))
-  (define (rollback! a-rollback-point)
-    (match-define (rollback-point rb-tree rb-signal-status rb-signal-value) a-rollback-point)
+  (struct starting-point (rb-tree signal-status signal-value))
+  (define (rollback! a-starting-point)
+    (match-define (starting-point rb-tree rb-signal-status rb-signal-value) a-starting-point)
     (set! signal-status rb-signal-status)
     (set! signal-value rb-signal-value)
-    (set! latest-exn #f)
+    (set! raised-exns '())     ;;; TODO: is this right? 
     (set! signal-waiters (hash))
     (set! paused-threads (hash))
     (set! par-parents (hash))
     (set! parent->par-state (hash))
     (set! reaction-thread (rebuild-threads-from-rb-tree rb-tree)))
-  (define (current-rollback-point) (rollback-point (build-rb-tree-from-current-state) signal-status signal-value))
+  (define (get-starting-point) (starting-point (build-rb-tree-from-current-state) signal-status signal-value))
 
   (struct rb-tree () #:transparent)
 
@@ -978,32 +1083,71 @@ If the latter, we raise the non-constructive exception.
        ""))
 
     (cond
-      [non-constructive-program?
-       (log-esterel-debug "~a: non constructive program ~s" (eq-hash-code (current-thread)) raised-exns)
-       (log-par-state)
-       (channel-put instant-complete-chan
-                    (if (set-empty? raised-exns)
-                        'non-constructive
-                        (set-first raised-exns)))
-       ;; when we send back 'non-constructive or an exception, then we will
-       ;; never come back to this thread again, so just let it expire
-       (void)]
 
       ;; the instant is over
       [(and (= 0 (hash-count signal-waiters))
             (set-empty? running-threads)
             instant-complete-chan)
-       (log-esterel-debug "~a: instant is over~a"
+       (log-esterel-debug "~a: instant has completed~a"
                           (eq-hash-code (current-thread))
-                          (if (or latest-exn wrong-guess?) " need to rollback" ""))
+                          (if (pair? mode) "; finished a can exploration" ""))
        (log-par-state)
        (cond
-         [(or latest-exn wrong-guess?)
-          ;; although we got to the end of the instant, we did so with
-          ;; a wrong guess for signal absence; go back and try again
-          (choose-a-signal-to-be-absent-or-to-have-no-more-emits)
-          (loop)]
+         [(pair? raised-exns)
+          (channel-put instant-complete-chan (car raised-exns))
+          ;; there was an exception while running so just report that
+          ;; and give up on this reaction; currently throwing away
+          ;; exceptions if there are multiples; not sure what to do about that
+          (void)]
+         [(pair? mode)
+          ;; we've finished the instant in can mode
+          (define a-can (car mode))
+          (cond
+            [(signal-states-done? a-can)
+             ;; we've explored all possibilities of relevant signals
+             (set! mode (cdr mode))
+             (cond
+               [(pair? mode)
+                ;; this was a nested can mode inside another can; go back to the previous can
+                ;; to do so, merge the results from the inner can into the current
+                ;; can and then do the rollback.
+                (define combined-can
+                  (struct-copy can (car mode)
+                               [emits (set-union (can-emits a-can)
+                                                 (can-emits (car mode)))]))
+                (set! mode (cons combined-can (cdr mode)))
+                (set! mode (cons (inc-signal-states (car mode)) (cdr mode)))
+                (rollback! (can-starting-point combined-can))
+                (unblock-threads (can-unknown-signals (car mode)))
+                (loop)]
+               [else
+                ;; we've finished with can mode, either go back to must mode or
+                ;; report the discovery of a non-constructive program
+                (define unemitted-signals (get-unemitted-signals a-can))
+                (cond
+                  [(set-empty? unemitted-signals)
+                   (channel-put instant-complete-chan 'non-constructive)
+                   ;; when we send back 'non-constructive, then we will
+                   ;; never come back to this thread again, so just let it expire
+                   (void)]
+                  [else
+                   (restore-must-state)
+                   (set! saved-must-state #f)
+                   (set! signal-status
+                         (for/fold ([signal-status signal-status])
+                                   ([signal (in-set unemitted-signals)])
+                           (hash-set signal-status signal #f)))
+                   (unblock-threads (set->list unemitted-signals))
+                   (loop)])])]
+            [else
+             ;; we've got more possible signal values to explore; set them up
+             ;; and go back to the rollback point to try them out
+             (set! mode (cons (inc-signal-states a-can) (cdr mode)))
+             (rollback! (can-starting-point a-can))
+             (unblock-threads (can-unknown-signals a-can))
+             (loop)])]
          [else
+          ;; we finished the instant in must mode so
           ;; close the instant down and let `react!` know
           (channel-put instant-complete-chan
                        (hash-union
@@ -1030,7 +1174,7 @@ If the latter, we raise the non-constructive exception.
           ;; reset the signals in preparation for the next instant
           (set! signal-status (hash))
           (set! signal-value (hash))
-          (set! raised-exns (set)) ;; reset the exns (as they are now defunct; bad guesses)
+          (set! raised-exns '()) ;; TODO: is this right?
           (loop)])]
 
       ;; an instant is not runnning, wait for one to start (but don't wait for other stuff)
@@ -1071,11 +1215,17 @@ If the latter, we raise the non-constructive exception.
                    (values parent-thread (par-state checkpoint/result-chan signal-waiting (set) paused #f))))
            (loop))))]
 
-      ;; nothing is running, but at least one thread is waiting for a signal's value
+      ;; nothing is running, but at least one thread is
+      ;; waiting for a signal's value; switch into Can mode
       [(set-empty? running-threads)
+       (log-esterel-debug "~a: switching into Can mode; ~s"
+                          (eq-hash-code (current-thread))
+                          (hash-keys signal-waiters))
        (when (= 0 (hash-count signal-waiters))
-         (internal-error "expected someone to be blocked on a signal"))
-       (choose-a-signal-to-be-absent-or-to-have-no-more-emits)
+         (internal-error "expected some thread to be blocked on a signal"))
+       (set! mode (cons (new-can) mode))
+       (rollback! (can-starting-point (car mode)))
+       (unblock-threads (can-unknown-signals (car mode)))
        (loop)]
 
       ;; an instant is running, handle the various things that can happen during it
@@ -1172,11 +1322,13 @@ If the latter, we raise the non-constructive exception.
                  (set! signal-waiters (hash-remove signal-waiters a-signal))])]
              [#t
               (when value-provided?
-                ;; we guessed that this signal-carrying value would not have any more emits
-                (set! wrong-guess? #t))]
+                (internal-error "the signal ~s has been emitted with a value and something is wrong" a-signal))]
              [#f
-              ;; we guessed that this signal would not be emitted
-              (set! wrong-guess? #t)])
+              (internal-error "the signal ~s has been emitted but it was not in can" a-signal)])
+
+           (when (pair? mode)
+             ;; we're in can mode, so record that this signal was emitted
+             (set! mode (cons (add-emitted-signal (car mode) a-signal) (cdr mode))))
            (loop)))
         (handle-evt
          par-start-chan
@@ -1247,7 +1399,7 @@ If the latter, we raise the non-constructive exception.
          (λ (exn)
            (log-esterel-debug "~a: main reaction thread done, ~s" (eq-hash-code (current-thread)) exn)
            (log-par-state)
-           (set! latest-exn exn)
+           (when (exn? exn) (set! raised-exns (cons exn raised-exns)))
            (remove-running-thread reaction-thread)
            (loop)))
         )])))
