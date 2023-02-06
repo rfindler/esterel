@@ -783,19 +783,19 @@ continuations).
   ;; unblock-threads : (listof signal?) -> void
   ;; wakes up all the threads that are blocked on `unemitted-signals`
   (define (unblock-threads signals)
-    (for ([chosen-signal (in-list signals)])
-      (define done-emitting? (hash-has-key? signal-value chosen-signal))
-      (define blocked-threads (hash-ref signal-waiters chosen-signal '()))
-      (set! signal-waiters (hash-remove signal-waiters chosen-signal))
+    (for ([a-signal (in-list signals)])
+      (define done-emitting? (hash-has-key? signal-value a-signal))
+      (define blocked-threads (hash-ref signal-waiters a-signal '()))
+      (set! signal-waiters (hash-remove signal-waiters a-signal))
       (for ([a-blocked-thread (in-list blocked-threads)])
         (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
         (channel-put resp-chan
                      (if done-emitting?
                          (if is-present?
-                             (hash-has-key? signal-value chosen-signal)
+                             (hash-has-key? signal-value a-signal)
                              ;; if we ask for a signal's value and the signal
                              ;; isn't going to be emitted, return #f
-                             (hash-ref signal-value chosen-signal #f))
+                             (hash-ref signal-value a-signal #f))
                          #f))
         (add-running-thread thread)
         (define parent-thread (hash-ref par-parents thread #f))
@@ -1120,6 +1120,7 @@ continuations).
                 (set! mode (cons combined-can (cdr mode)))
                 (set! mode (cons (inc-signal-states (car mode)) (cdr mode)))
                 (rollback! (can-starting-point combined-can))
+                (add-can-signals! (car mode))
                 (unblock-threads (can-unknown-signals (car mode)))
                 (loop)]
                [else
@@ -1145,7 +1146,8 @@ continuations).
              ;; we've got more possible signal values to explore; set them up
              ;; and go back to the rollback point to try them out
              (set! mode (cons (inc-signal-states a-can) (cdr mode)))
-             (rollback! (can-starting-point a-can))
+             (rollback! (can-starting-point (car mode)))
+             (add-can-signals! (car mode))
              (unblock-threads (can-unknown-signals a-can))
              (loop)])]
          [else
