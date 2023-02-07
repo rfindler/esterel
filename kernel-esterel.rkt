@@ -557,7 +557,9 @@ continuations).
   ;; must-state holds the state of the instant at the point where we
   ;; switched form must mode to can mode (so that we can return to
   ;; that state when we are done with can)
-  (struct must-state (latest-exn
+  (struct must-state (signal-status
+                      signal-value
+                      latest-exn
                       signal-waiters
                       paused-threads
                       par-parents
@@ -754,29 +756,38 @@ continuations).
                          [signal-waiting (set-remove (par-state-signal-waiting old-par-state) thread)]))
           (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state))))))
   
-  ;; current-must-state : -> must-state?
-  (define (current-must-state)
-    (must-state raised-exns
-                signal-waiters
-                paused-threads
-                par-parents
-                parent->par-state
-                reaction-thread))
+  ;; save-must-state : -> must-state?
+  (define (save-must-state)
+    (when saved-must-state (error 'save-must-state "already have a must state saved"))
+    (set! saved-must-state
+          (must-state signal-status
+                      signal-value
+                      raised-exns
+                      signal-waiters
+                      paused-threads
+                      par-parents
+                      parent->par-state
+                      reaction-thread)))
 
   (define (restore-must-state)
-    (match-define (must-state _raised-exns
+    (match-define (must-state _signal-status
+                              _signal-value
+                              _raised-exns
                               _signal-waiters
                               _paused-threads
                               _par-parents
                               _parent->par-state
                               _reaction-thread)
       saved-must-state)
+    (set! signal-status _signal-status)
+    (set! signal-value _signal-value)
     (set! raised-exns _raised-exns) ;; TODO: this doesn't seem right! there cannot be anything there, right?
     (set! signal-waiters _signal-waiters)
     (set! paused-threads _paused-threads)
     (set! par-parents _par-parents)
     (set! parent->par-state _parent->par-state)
-    (set! reaction-thread _reaction-thread))
+    (set! reaction-thread _reaction-thread)
+    (set! saved-must-state #f))
 
   ;; the `starting-point` struct holds information about the starting point
   ;; for running can. we start the computation here with various settings
@@ -1082,7 +1093,6 @@ continuations).
                    (void)]
                   [else
                    (restore-must-state)
-                   (set! saved-must-state #f)
                    (set! signal-status
                          (for/fold ([signal-status signal-status])
                                    ([signal (in-set unemitted-signals)])
@@ -1174,7 +1184,7 @@ continuations).
                           (hash-keys signal-waiters))
        (when (= 0 (hash-count signal-waiters))
          (internal-error "expected some thread to be blocked on a signal"))
-       (set! saved-must-state (current-must-state))
+       (save-must-state)
        (set! mode (cons (new-can) mode))
        (rollback! (can-starting-point (car mode)))
        (add-can-signals! (car mode))
