@@ -788,6 +788,50 @@
      (react! r)
      (react! r))))
 
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (let ([S (signal)])
+     (define r
+       (reaction
+        (if (present? S)
+            (emit S)
+            (void))))
+     (react! r))))
+
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (let ([S (signal)])
+     (define r
+       (reaction
+        (if (present? S)
+            (void)
+            (emit S))))
+     (react! r))))
+
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (let ([S (signal)])
+     (define r
+       (reaction
+        (if (present? S)
+            (emit S)
+            (emit S))))
+     (react! r))))
+
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (let ([S (signal)])
+     (define r
+       (reaction
+        (present? S)
+        (emit S)))
+     (react! r))))
+
+
 ;                                                                                                            
 ;                                                                                                            
 ;  ;;;;;;     ;;;;    ;;;;;;   ;;;          ;;;;;    ;;;      ;;    ;;;;  

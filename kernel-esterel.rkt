@@ -1288,7 +1288,11 @@ continuations).
               (when value-provided?
                 (internal-error "the signal ~s has been emitted with a value and something is wrong" a-signal))]
              [#f
-              (internal-error "the signal ~s has been emitted but it was not in can" a-signal)])
+              (unless (and (pair? mode)
+                           (member a-signal (can-unknown-signals (car mode))))
+                ;; if the above is false, then this is a signal we believe won't be emitted and yet,
+                ;; here it is emitted; let's crash.
+                (internal-error "the signal ~s has been emitted but it was not in can" a-signal))])
 
            (when (pair? mode)
              ;; we're in can mode, so record that this signal was emitted
