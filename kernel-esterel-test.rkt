@@ -831,6 +831,56 @@
         (emit S)))
      (react! r))))
 
+(let ([S1 (signal)]
+      [S2 (signal)]
+      [O (signal)])
+  (define r
+    (reaction
+     (if (present? S1)
+         (if (present? S2)
+             (void)
+             (void))
+         (emit O))))
+  (check-equal? (react! r)
+                (hash S1 #f O #t)))
+
+(let ([S1 (signal)]
+      [S2 (signal)]
+      [O (signal)])
+  (define r
+    (reaction
+     (if (present? S1)
+         (void)
+         (if (present? S2)
+             (void)
+             (emit O)))))
+  (check-equal? (react! r)
+                (hash S1 #f S2 #f O #t)))
+
+(let ([S1 (signal)]
+      [S2 (signal)]
+      [S3 (signal)]
+      [S4 (signal)]
+      [S5 (signal)])
+  (define r
+    (reaction
+     (if (present? S1)
+         (void)
+         (if (present? S2)
+             (if (present? S3)
+                 (void)
+                 (if (present? S4)
+                     (if (present? S5)
+                         (void)
+                         (void))
+                     (void)))
+             (void)))))
+
+  (check-equal? (react! r)
+                (hash S1 #f S2 #f)))
+
+
+
 
 ;                                                                                                            
 ;                                                                                                            

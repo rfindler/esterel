@@ -1049,7 +1049,7 @@ continuations).
        (log-esterel-debug "~a: instant has completed~a"
                           (eq-hash-code (current-thread))
                           (if (pair? mode)
-                              (format "; finished a can exploration: ~a" (can-signal-states (car mode)))
+                              (format "; finished a can exploration: ~a" (map can-signal-states mode))
                               ""))
        (log-par-state)
        (cond
@@ -1061,6 +1061,27 @@ continuations).
           (void)]
          [(pair? mode)
           ;; we've finished the instant in can mode
+
+          ;; first, ensure there is at most one completed mode.
+          ;; since any sequence of signal-states-done? cans at the front is
+          ;; going to get completed to the deepest completed can, just collect
+          ;; them into a single can with all of the emits to set up completing
+          ;; them all at once, below.
+          (set! mode
+                (let loop ([mode mode])
+                  (match mode
+                    [(cons can1 (cons can2 rest-mode))
+                     (cond
+                       [(and (signal-states-done? can1)
+                             (signal-states-done? can2))
+                        (define combined-can
+                          (struct-copy can can2
+                                       [emits (set-union (can-emits can1)
+                                                         (can-emits can2))]))
+                        (loop (cons combined-can rest-mode))]
+                       [else mode])]
+                    [_ mode])))
+
           (define a-can (car mode))
           (cond
             [(signal-states-done? a-can)
@@ -1071,15 +1092,17 @@ continuations).
                 ;; this was a nested can mode inside another can; go back to the previous can
                 ;; to do so, merge the results from the inner can into the current
                 ;; can and then do the rollback.
+                ;; (here, we know that the next can inside completed because
+                ;;  signal-states-done? returned #f for it above)
                 (define combined-can
-                  (struct-copy can (car mode)
-                               [emits (set-union (can-emits a-can)
-                                                 (can-emits (car mode)))]))
+                  (inc-signal-states
+                   (struct-copy can (car mode)
+                                [emits (set-union (can-emits a-can)
+                                                  (can-emits (car mode)))])))
                 (set! mode (cons combined-can (cdr mode)))
-                (set! mode (cons (inc-signal-states (car mode)) (cdr mode)))
                 (rollback! (can-starting-point combined-can))
-                (add-can-signals! (car mode))
-                (unblock-threads (can-unknown-signals (car mode)))
+                (add-can-signals! combined-can)
+                (unblock-threads (can-unknown-signals combined-can))
                 (loop)]
                [else
                 ;; we've finished with can mode, either go back to must mode or
@@ -1179,12 +1202,15 @@ continuations).
       ;; nothing is running, but at least one thread is
       ;; waiting for a signal's value; switch into Can mode
       [(set-empty? running-threads)
-       (log-esterel-debug "~a: switching into Can mode; ~s"
+       (log-esterel-debug "~a: ~a Can mode; ~s"
                           (eq-hash-code (current-thread))
+                          (if (null? mode)
+                              "switching into"
+                              "pushing a deeper")
                           (hash-keys signal-waiters))
        (when (= 0 (hash-count signal-waiters))
          (internal-error "expected some thread to be blocked on a signal"))
-       (save-must-state)
+       (unless (pair? mode) (save-must-state))
        (set! mode (cons (new-can) mode))
        (rollback! (can-starting-point (car mode)))
        (add-can-signals! (car mode))
