@@ -722,15 +722,21 @@ continuations).
 
 
   ;; unblock-threads : (listof signal?) -> void
-  ;; wakes up all the threads that are blocked on `unemitted-signals`
+  ;; wakes up all the threads that are blocked on a signal in `signals`
   (define (unblock-threads signals)
     (for ([a-signal (in-list signals)])
-      (define done-emitting? (hash-has-key? signal-value a-signal))
       (define blocked-threads (hash-ref signal-waiters a-signal '()))
       (set! signal-waiters (hash-remove signal-waiters a-signal))
       (for ([a-blocked-thread (in-list blocked-threads)])
         (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
         (channel-put resp-chan
+
+                     ;; this is unlikely to be right for valued signals
+                     (hash-ref signal-status a-signal)
+
+                     ;; this is the old code that seeme to handle valued signals
+                     ;; before but now is not right
+                     #;
                      (if done-emitting?
                          (if is-present?
                              (hash-has-key? signal-value a-signal)
@@ -1242,7 +1248,8 @@ continuations).
                 [value-provided?
                  ;; if it is a value-carrying signal, we don't yet know if this is the
                  ;; last emit that it will see so we don't unblock the threads and we
-                 ;; don't update signal-status; we wait and explicitly make a choice, later
+                 ;; don't update signal-status; we have to wait to see it is not in can
+                 ;; before we can decide we're done emitting
                  (define new-value
                    (if (hash-has-key? signal-value a-signal)
                        ((signal-combine a-signal) (hash-ref signal-value a-signal) a-value)
