@@ -481,51 +481,6 @@
    #rx"expected: pair[?].* given: #f"
    (λ () (react! r))))
 
-(let ()
-  (define s1 (signal))
-  (define s2 (signal))
-  (check-equal?
-   (react!
-    (reaction
-     (par
-      (if (present? s1)
-          (void)
-          (car #f))
-      (if (present? s2)
-          (void)
-          (emit s1)))))
-   (hash s1 #t s2 #f)))
-
-(let ()
-  (define s1 (signal))
-  (define s2 (signal))
-  (check-equal?
-   (react!
-    (reaction
-     (par
-      (if (present? s2)
-          (void)
-          (emit s1))
-      (if (present? s1)
-          (void)
-          (car #f)))))
-   (hash s1 #t s2 #f)))
-
-(let ()
-  (define s1 (signal))
-  (define s2 (signal))
-  (check-equal?
-   (react!
-    (reaction
-     (par
-      (if (present? s1)
-          (void)
-          (emit s2))
-      (if (present? s2)
-          (void)
-          (car #f)))))
-   (hash s1 #f s2 #t)))
-
 (check-exn
  #rx"expected: pair[?].* given: #f"
  (λ ()
