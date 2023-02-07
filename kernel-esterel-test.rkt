@@ -879,6 +879,48 @@
   (check-equal? (react! r)
                 (hash S1 #f S2 #f)))
 
+(let ()
+  (define S1 (signal #:combine +))
+  (define O1 (signal))
+  (define O2 (signal))
+  (define r
+    (reaction
+     (if (signal-value S1)
+         (emit O1)
+         (emit O2))))
+
+  (check-equal? (react! r)
+                (hash S1 #f O2 #t)))
+
+(let ()
+  (define S1 (signal #:combine +))
+  (define O1 (signal))
+  (define O2 (signal))
+  (define r
+    (reaction
+     (par (emit S1 3)
+          (if (signal-value S1)
+              (emit O1)
+              (emit O2)))))
+
+  (check-equal? (react! r)
+                (hash S1 3 O1 #t)))
+
+(let ()
+  (define S1 (signal #:combine +))
+  (define O1 (signal))
+  (define O2 (signal))
+  (define r
+    (reaction
+     (par (emit S1 3)
+          (emit S1 5)
+          (if (signal-value S1)
+              (emit O1)
+              (emit O2)))))
+
+  (check-equal? (react! r)
+                (hash S1 8 O1 #t)))
+
 
 
 

@@ -503,6 +503,7 @@ continuations).
   ;; emits : the signals that can be emitted (that we've learned about so far)
   ;; unknown-signals : the order tracks the bits in `signal-states` telling of the signals' state
   ;; signal-states : the bits tell us which signals are present/absent
+  ;; starting-point : this is the continuations at the point where must mode is waiting for us
   (struct/contract can ([emits (set/c signal?)]
                         [unknown-signals (listof signal?)]
                         [signal-states (and/c exact? integer?)]
@@ -1119,7 +1120,14 @@ continuations).
                    (set! signal-status
                          (for/fold ([signal-status signal-status])
                                    ([signal (in-set unemitted-signals)])
-                           (hash-set signal-status signal #f)))
+                           ;; for signals with a combining function, if they've been
+                           ;; emitted elsewhere then we have a value in signal-value
+                           ;; and so we want signal-status to have a #t
+                           ;; otherwise, we want signal-status to have a #f, indicating
+                           ;; that the signal is absent
+                           (hash-set signal-status signal
+                                     (and (signal-combine signal)
+                                          (hash-has-key? signal-value signal)))))
                    (unblock-threads (set->list unemitted-signals))
                    (loop)])])]
             [else
@@ -1136,7 +1144,11 @@ continuations).
           (channel-put instant-complete-chan
                        (hash-union
                         (for/hash ([(s v) (in-hash signal-status)]
-                                   #:unless (signal-combine s))
+                                   #:when (or (not (signal-combine s))
+                                              (not v)))
+                          ;; avoid only signals that'll be in signal-value
+                          ;; (so those with no combining function or those
+                          ;;  that aren't emitted)
                           (values s v))
                         signal-value))
           (set! instant-complete-chan #f)
@@ -1246,9 +1258,8 @@ continuations).
                       [signal-waiting (set-add (par-state-signal-waiting old-par-state) the-thread)]))
                    (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))]
                 [#f
-                 (if is-present?
-                     (channel-put resp-chan #f)
-                     (internal-error "dunno what-to-do-here?!?"))]
+                 ;; if the signal is never going to be emitted, then we always send back #f
+                 (channel-put resp-chan #f)]
                 [#t
                  (channel-put resp-chan (if is-present? #t (hash-ref signal-value a-signal)))])]
              [else
