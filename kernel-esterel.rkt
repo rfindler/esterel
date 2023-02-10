@@ -31,7 +31,10 @@
                  #:pre (in-reaction?)
                  boolean?)]
 
-  ;; when a signal is not emitted it will return #f for the signal-value
+  ;; when a signal is not emitted it will return the
+  ;; previous instant's value from signal-value, following
+  ;; _The ESTEREL synchronous programming language: design,
+  ;; semantics, implementation*_ by Berry and Gonthier
   [signal-value (->* ((and/c signal? signal-combine))
                      ;; NB when we go "too far" with #:pre the values are just #f,
                      ;; even if the signal never had that value... is this okay?
@@ -157,7 +160,12 @@ continuations).
            (channel-put (checkpoint-request-resp-chan maybe-val) k)
            resp-chan)
          reaction-prompt-tag))]
+      [(signal-never-before-emitted)
+       (error 'signal-value
+              "signal has never been emitted\n  signal: ~e" a-signal)]
       [else maybe-val])))
+
+(struct signal-never-before-emitted ())
 
 (define-syntax (par stx)
   (syntax-case stx ()
@@ -501,13 +509,16 @@ continuations).
 ;                                                                                    
 
   ;; emits : the signals that can be emitted (that we've learned about so far)
-  ;; unknown-signals : the order tracks the bits in `signal-states` telling of the signals' state
+  ;; two-choice-signals : the order tracks the bits in `signal-states` telling of the signals' state
+  ;; one-choice-signals : these signals may may not be emitted in the future
   ;; signal-states : the bits tell us which signals are present/absent
   ;; starting-point : this is the continuations at the point where must mode is waiting for us
   (struct/contract can ([emits (set/c signal?)]
-                        [unknown-signals (listof signal?)]
+                        [two-choice-signals (listof signal?)]
+                        [one-choice-signals (set/c signal?)]
                         [signal-states (and/c exact? integer?)]
-                        [starting-point (λ (x) (starting-point? x))]))
+                        [starting-point (λ (x) (starting-point? x))])
+                   #:transparent)
 
   (define/contract mode
     (or/c null?                    ;; we're in Must mode
@@ -518,35 +529,77 @@ continuations).
     (struct-copy can a-can
                  [signal-states (+ (can-signal-states a-can) 1)]))
   (define (signal-states-done? a-can)
-    (match-define (can emits unknown-signals signal-states starting-point) a-can)
-    (= (- (expt 2 (length unknown-signals)) 1) signal-states))
+    (cond
+      [(set-empty? (can-two-choice-signals a-can))
+       ;; we always run one can mode before we check to see if we're done
+       ;; thus, when there are no two-choice signals, well, we're done!
+       #t]
+      [else
+       ;; otherwise, we need to run (expt 2 (length (length (can-two-choice-signals a-can))))
+       ;; iterations to be sure we've tried every combination of absent and present
+       ;; for the two-choice signals
+       (= (- (expt 2 (length (can-two-choice-signals a-can))) 1)
+          (can-signal-states a-can))]))
   
   ;; add-can-signals : can? -> void?
   ;; STATE: updates `signal-status` based on the choices in `a-can`
   (define (add-can-signals! a-can)
-    (match-define (can emits unknown-signals signal-states starting-point) a-can)
+    (match-define (can emits two-choice-signals one-choice-signals
+                       signal-states starting-point) a-can)
+    (set!-values
+     (signal-status signal-value)
+     (for/fold ([signal-status signal-status]
+                [signal-value signal-value])
+               ([i (in-naturals)]
+                [a-signal (in-list two-choice-signals)])
+       (define on? (bitwise-bit-set? signal-states i))
+       (values (hash-set signal-status a-signal on?)
+               (if (signal-combine a-signal)
+                   (hash-set signal-value a-signal
+                             (hash-ref (car signals-pre) a-signal))
+                   signal-value))))
     (set! signal-status
           (for/fold ([signal-status signal-status])
-                    ([i (in-naturals)]
-                     [signal (in-list unknown-signals)])
+                    ([signal (in-set one-choice-signals)])
             (hash-set signal-status
                       signal
-                      (bitwise-bit-set? signal-states i)))))
+                      #t))))
 
   ;; get-unemitted-signals : can? -> (set/c signal?)
   ;; returns the set of signals that cannot be emitted
   (define (get-unemitted-signals a-can)
-    (match-define (can emits unknown-signals signal-states starting-point) a-can)
-    (for/set ([signal (in-list unknown-signals)]
-              #:unless (set-member? emits signal))
-      signal))
+    (match-define (can emits two-choice-signals one-choice-signals signal-states starting-point) a-can)
+    (set-union (for/set ([signal (in-list two-choice-signals)]
+                         #:unless (set-member? emits signal))
+                 signal)
+               (for/set ([signal (in-set one-choice-signals)]
+                         #:unless (set-member? emits signal))
+                 signal)))
   
   ;; new-can : -> can
   ;; STATE: uses `signal-status` to find the signals that are being explored
   ;;        and uses `get-starting-point` for when to start things off
   (define (new-can)
-    (define unknown-signals (hash-keys signal-waiters))
-    (can (set) unknown-signals 0 (get-starting-point)))
+    (define-values (two-choice-signals one-choice-signals)
+      (for/fold ([two-choice-signals '()]
+                 [one-choice-signals (set)])
+                ([(a-signal _ignored) (in-hash signal-waiters)])
+        (define two-choices?
+          (cond
+            [(signal-combine a-signal)
+             (and (pair? signals-pre)
+                  (hash-has-key? signal-value a-signal))]
+            [else #t]))
+        (cond
+          [two-choices?
+           (values (cons a-signal two-choice-signals)
+                   one-choice-signals)]
+          [else
+           (values two-choice-signals
+                   (set-add one-choice-signals a-signal))])))
+    (can (set)
+         two-choice-signals one-choice-signals
+         0 (get-starting-point)))
 
 
   ;; add-emitted-signal : can? signal? -> can?
@@ -573,18 +626,17 @@ continuations).
   
   ;; if a signal isn't mapped, its status isn't yet known
   ;; if it is #t, the signal has been emitted
-  ;; (if a value-carrying signal, it has been emitted for the last time)
-  ;; if it is #f, the signal is not going to be emitted
-  ;; the status will be 'unknown for value-carrying signals until
-  ;;   we guess that it won't get emitted anymore, then it changes to #t
-  ;;   if a value carrying signal is never emitted then its status is #f
+  ;;   (if a value-carrying signal, it has been emitted for the last time)
+  ;; if it is #f, the signal is not going to be emitted this instant
+  ;;   (including value-carrying signals)
   (define/contract signal-status
     (hash/c signal? boolean? #:flat? #t #:immutable #t)
     (hash))
 
   ;; if a signal is mapped in `signal-value`, then
-  ;; a) it has been emitted and
+  ;; a) it has been emitted (but there may be more emits coming) and
   ;; b) it has a `combine` function
+  ;; it is mapped to its current value
   (define/contract signal-value
     (hash/c signal? any/c #:flat? #t #:immutable #t)
     (hash))
@@ -724,6 +776,23 @@ continuations).
 ;                                                           
 
 
+  ;; get-signals-value : signal boolean -> any/c
+  ;; returns what the response to present?/signal-value should be for `a-signal`
+  ;; if the signal hasn't been emitted yet and we ask for its value in
+  ;; the first instant, then unemitted-in-first-instant will trigger an
+  ;; error at the call site of signal-value.
+  (define (get-signals-value a-signal is-present?)
+    (cond
+      [is-present? (hash-ref signal-status a-signal)]
+      [else
+       ;; if the signal has been emitted this instant, take that value
+       ;; if not, take the value from the previous instant
+       (if (hash-ref signal-status a-signal)
+           (hash-ref signal-value a-signal)
+           (if (pair? signals-pre)
+               (hash-ref (car signals-pre) a-signal)
+               (signal-never-before-emitted)))]))
+
   ;; unblock-threads : (listof signal?) -> void
   ;; wakes up all the threads that are blocked on a signal in `signals`
   (define (unblock-threads signals)
@@ -732,21 +801,7 @@ continuations).
       (set! signal-waiters (hash-remove signal-waiters a-signal))
       (for ([a-blocked-thread (in-list blocked-threads)])
         (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
-        (channel-put resp-chan
-
-                     ;; this is unlikely to be right for valued signals
-                     (hash-ref signal-status a-signal)
-
-                     ;; this is the old code that seeme to handle valued signals
-                     ;; before but now is not right
-                     #;
-                     (if done-emitting?
-                         (if is-present?
-                             (hash-has-key? signal-value a-signal)
-                             ;; if we ask for a signal's value and the signal
-                             ;; isn't going to be emitted, return #f
-                             (hash-ref signal-value a-signal #f))
-                         #f))
+        (channel-put resp-chan (get-signals-value a-signal is-present?))
         (add-running-thread thread)
         (define parent-thread (hash-ref par-parents thread #f))
         (when parent-thread
@@ -1103,7 +1158,8 @@ continuations).
                 (set! mode (cons combined-can (cdr mode)))
                 (rollback! (can-starting-point combined-can))
                 (add-can-signals! combined-can)
-                (unblock-threads (can-unknown-signals combined-can))
+                (unblock-threads (can-two-choice-signals combined-can))
+                (unblock-threads (set->list (can-one-choice-signals combined-can)))
                 (loop)]
                [else
                 ;; we've finished with can mode, either go back to must mode or
@@ -1117,17 +1173,24 @@ continuations).
                    (void)]
                   [else
                    (restore-must-state)
-                   (set! signal-status
-                         (for/fold ([signal-status signal-status])
-                                   ([signal (in-set unemitted-signals)])
-                           ;; for signals with a combining function, if they've been
-                           ;; emitted elsewhere then we have a value in signal-value
-                           ;; and so we want signal-status to have a #t
-                           ;; otherwise, we want signal-status to have a #f, indicating
-                           ;; that the signal is absent
-                           (hash-set signal-status signal
-                                     (and (signal-combine signal)
-                                          (hash-has-key? signal-value signal)))))
+                   (set!-values
+                    (signal-status signal-value)
+                    (for/fold ([signal-status signal-status]
+                               [signal-value signal-value])
+                              ([a-signal (in-set unemitted-signals)])
+                      (cond
+                        [(signal-combine a-signal)
+                         (cond
+                           [(hash-has-key? signal-value a-signal)
+                            (values (hash-set signal-status a-signal #t)
+                                    signal-value)]
+                           [else
+                            (values (hash-set signal-value a-signal #f)
+                                    (hash-set signal-value a-signal
+                                              (hash-ref (car signals-pre) a-signal)))])]
+                        [else
+                         (values (hash-set signal-value a-signal #f)
+                                 signal-value)])))
                    (unblock-threads (set->list unemitted-signals))
                    (loop)])])]
             [else
@@ -1136,7 +1199,8 @@ continuations).
              (set! mode (cons (inc-signal-states a-can) (cdr mode)))
              (rollback! (can-starting-point (car mode)))
              (add-can-signals! (car mode))
-             (unblock-threads (can-unknown-signals a-can))
+             (unblock-threads (can-two-choice-signals a-can))
+             (unblock-threads (set->list (can-one-choice-signals a-can)))
              (loop)])]
          [else
           ;; we finished the instant in must mode so
@@ -1226,7 +1290,8 @@ continuations).
        (set! mode (cons (new-can) mode))
        (rollback! (can-starting-point (car mode)))
        (add-can-signals! (car mode))
-       (unblock-threads (can-unknown-signals (car mode)))
+       (unblock-threads (can-two-choice-signals (car mode)))
+       (unblock-threads (set->list (can-one-choice-signals (car mode))))
        (loop)]
 
       ;; an instant is running, handle the various things that can happen during it
@@ -1257,11 +1322,7 @@ continuations).
                       [active (set-remove (par-state-active old-par-state) the-thread)]
                       [signal-waiting (set-add (par-state-signal-waiting old-par-state) the-thread)]))
                    (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))]
-                [#f
-                 ;; if the signal is never going to be emitted, then we always send back #f
-                 (channel-put resp-chan #f)]
-                [#t
-                 (channel-put resp-chan (if is-present? #t (hash-ref signal-value a-signal)))])]
+                [_ (channel-put resp-chan (get-signals-value a-signal is-present?))])]
              [else
               (let loop ([loop-pre (- pre 1)]
                          [loop-signals-pre (if is-present? signals-pre signal-values-pre)])
@@ -1289,6 +1350,9 @@ continuations).
                                   (format "~.s" a-value)
                                   "<< no value provided >>"))
            (log-par-state)
+           (when (pair? mode)
+             ;; we're in can mode, so record that this signal was emitted
+             (set! mode (cons (add-emitted-signal (car mode) a-signal) (cdr mode))))
            (match (hash-ref signal-status a-signal 'unknown)
              ['unknown
               (cond
@@ -1320,21 +1384,24 @@ continuations).
                         [active (set-add (par-state-active old-par-state) thread)]))
                      (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
                    (add-running-thread thread))
-                 (set! signal-waiters (hash-remove signal-waiters a-signal))])]
+                 (set! signal-waiters (hash-remove signal-waiters a-signal))])
+              (loop)]
              [#t
-              (when value-provided?
-                (internal-error "the signal ~s has been emitted with a value and something is wrong" a-signal))]
+              (cond
+                [value-provided?
+                 ;; this program is non-constructive; we won't have a #t in signal-status for
+                 ;; a value-carrying signal unless it wasn't in can. Report the error and
+                 ;; let this thread end
+                 (channel-put instant-complete-chan 'non-constructive)]
+                [else
+                 (loop)])]
              [#f
               (unless (and (pair? mode)
-                           (member a-signal (can-unknown-signals (car mode))))
+                           (member a-signal (can-two-choice-signals (car mode))))
                 ;; if the above is false, then this is a signal we believe won't be emitted and yet,
                 ;; here it is emitted; let's crash.
-                (internal-error "the signal ~s has been emitted but it was not in can" a-signal))])
-
-           (when (pair? mode)
-             ;; we're in can mode, so record that this signal was emitted
-             (set! mode (cons (add-emitted-signal (car mode) a-signal) (cdr mode))))
-           (loop)))
+                (internal-error "the signal ~s has been emitted but it was not in can" a-signal))
+              (loop)])))
         (handle-evt
          par-start-chan
          (λ (checkpoint/result-chan+parent+children-threads)

@@ -583,6 +583,26 @@
    (hash S 3)))
 
 (let ()
+  (define S (signal #:combine +))
+  (check-exn
+   (λ ()
+     (react!
+      (reaction
+       (signal-value S))))
+   #rx"whats a good error message?"))
+
+(let ()
+  (define S1 (signal #:combine +))
+  (define S2 (signal #:combine +))
+  (define r
+    (reaction
+     (emit S1 11)
+     (pause)
+     (emit S2 (+ 1 (signal-value S1)))))
+  (check-equal? (react! r) (hash S1 11))
+  (check-equal? (react! r) (hash S2 12)))
+
+(let ()
   (define S1 (signal #:combine +))
   (define S2 (signal #:combine +))
   (check-equal?
