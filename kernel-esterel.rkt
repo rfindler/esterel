@@ -1389,7 +1389,8 @@ continuations).
                  (loop)])]
              [#f
               (unless (and (pair? mode)
-                           (member a-signal (can-two-choice-signals (car mode))))
+                           (or (member a-signal (can-two-choice-signals (car mode)))
+                               (set-member? (can-one-choice-signals (car mode)) a-signal)))
                 ;; if the above is false, then this is a signal we believe won't be emitted and yet,
                 ;; here it is emitted; let's crash.
                 (internal-error "the signal ~s has been emitted but it was not in can" a-signal))
