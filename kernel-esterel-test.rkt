@@ -715,7 +715,7 @@
   (define r
     (reaction
      (present? S)))
-  (check-equal? (react! r) (hash)))
+  (check-equal? (react! r) (hash S #f)))
 
 (let ()
   (define S (signal #:combine +))
@@ -754,7 +754,7 @@
          (emit O))
        (pause)
        (loop))))
-  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash S #f))
   (check-equal? (react! r #:emit (list (cons S 1))) (hash S 1))
   (check-equal? (react! r #:emit (list (cons S 2))) (hash S 2 O #t)))
 
@@ -880,12 +880,31 @@
   (define O2 (signal))
   (define r
     (reaction
+     (emit S1 #f)
+     (pause)
      (if (signal-value S1)
          (emit O1)
          (emit O2))))
 
+  (react! r)
   (check-equal? (react! r)
                 (hash S1 #f O2 #t)))
+
+(let ()
+  (define S1 (signal #:combine +))
+  (define O1 (signal))
+  (define O2 (signal))
+  (define r
+    (reaction
+     (emit S1 #t)
+     (pause)
+     (if (signal-value S1)
+         (emit O1)
+         (emit O2))))
+
+  (react! r)
+  (check-equal? (react! r)
+                (hash S1 #f O1 #t)))
 
 (let ()
   (define S1 (signal #:combine +))
@@ -976,17 +995,16 @@
    (hash sl #f so2 #t)))
 
 ;; popl 2019 figure 5
-;; this one is wrong -- this is a non-constructive program, but we don't detect that
-;; and instead "live with" the assignment of both signals to absent
 (let ([sl1 (signal)]
       [sl2 (signal)])
-  (check-equal?
-   (react!
-    (reaction
-     (par
-      (when (present? sl1) (emit sl2))
-      (when (present? sl2) (emit sl1)))))
-   (hash sl1 #f sl2 #f)))
+  (check-exn
+   #rx"not constructive"
+   (λ ()
+     (react!
+      (reaction
+       (par
+        (when (present? sl1) (emit sl2))
+        (when (present? sl2) (emit sl1))))))))
 
 
 ;; popl 2019 figure 6
@@ -1041,16 +1059,15 @@
            (emit s1)))))))
 
 ;; popl 2019, figure 9
-;; same deal as figure 5: this one is wrong -- this is a non-constructive program
-;; but we don't detect it
 (let ([s1 (signal)])
-  (check-equal?
-   (react!
-    (reaction
-     (if (present? s1)
-         (emit s1)
-         (void))))
-   (hash s1 #f)))
+  (check-exn
+   #rx"not constructive"
+   (λ ()
+     (react!
+      (reaction
+       (if (present? s1)
+           (emit s1)
+           (void)))))))
 
 
 ;; popl 2019, figure 10 example 1
