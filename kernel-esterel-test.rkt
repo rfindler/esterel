@@ -837,7 +837,7 @@
              (void))
          (emit O))))
   (check-equal? (react! r)
-                (hash S1 #f O #t)))
+                (hash S1 #f S2 #f O #t)))
 
 (let ([S1 (signal)]
       [S2 (signal)]
@@ -872,7 +872,7 @@
              (void)))))
 
   (check-equal? (react! r)
-                (hash S1 #f S2 #f)))
+                (hash S1 #f S2 #f S3 #f S4 #f S4 #f S5 #f)))
 
 (let ()
   (define S1 (signal #:combine +))

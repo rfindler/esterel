@@ -521,9 +521,9 @@ continuations).
                    #:transparent)
 
   (define/contract mode
-    (or/c null?                    ;; we're in Must mode
-          (non-empty-listof can?)) ;; we're in Can mode
-    '())
+    (or/c #f    ;; we're in Must mode
+          can?) ;; we're in Can mode
+    #f)
   
   (define (inc-signal-states a-can)
     (struct-copy can a-can
@@ -569,26 +569,6 @@ continuations).
                          #:unless (set-member? emits signal))
                  signal)))
   
-  ;; new-can : -> can
-  ;; STATE: uses `signal-status` to find the signals that are being explored
-  ;;        and uses `get-starting-point` for when to start things off
-  (define (new-can)
-    (define-values (two-choice-signals one-choice-signals)
-      (for/fold ([two-choice-signals '()]
-                 [one-choice-signals (set)])
-                ([(a-signal _ignored) (in-hash signal-waiters)])
-        (cond
-          [(signal-combine a-signal)
-           (values two-choice-signals
-                   (set-add one-choice-signals a-signal))]
-          [else
-           (values (cons a-signal two-choice-signals)
-                   one-choice-signals)])))
-    (can (set)
-         two-choice-signals one-choice-signals
-         0 (get-starting-point)))
-
-
   ;; add-emitted-signal : can? signal? -> can?
   ;; adds `a-signal` as emitted to `a-can`
   (define (add-emitted-signal a-can a-signal)
@@ -1094,8 +1074,8 @@ continuations).
             instant-complete-chan)
        (log-esterel-debug "~a: instant has completed~a"
                           (eq-hash-code (current-thread))
-                          (if (pair? mode)
-                              (format "; finished a can exploration: ~a" (map can-signal-states mode))
+                          (if (can? mode)
+                              (format "; finished a can exploration: ~a" (can-signal-states mode))
                               ""))
        (log-par-state)
        (cond
@@ -1105,86 +1085,45 @@ continuations).
           ;; and give up on this reaction; currently throwing away
           ;; exceptions if there are multiples; not sure what to do about that
           (void)]
-         [(pair? mode)
+         [(can? mode)
           ;; we've finished the instant in can mode
-
-          ;; first, ensure there is at most one completed mode.
-          ;; since any sequence of signal-states-done? cans at the front is
-          ;; going to get completed to the deepest completed can, just collect
-          ;; them into a single can with all of the emits to set up completing
-          ;; them all at once, below.
-          (set! mode
-                (let loop ([mode mode])
-                  (match mode
-                    [(cons can1 (cons can2 rest-mode))
-                     (cond
-                       [(and (signal-states-done? can1)
-                             (signal-states-done? can2))
-                        (define combined-can
-                          (struct-copy can can2
-                                       [emits (set-union (can-emits can1)
-                                                         (can-emits can2))]))
-                        (loop (cons combined-can rest-mode))]
-                       [else mode])]
-                    [_ mode])))
-
-          (define a-can (car mode))
           (cond
-            [(signal-states-done? a-can)
+            [(signal-states-done? mode)
              ;; we've explored all possibilities of relevant signals
-             (set! mode (cdr mode))
+             ;; either go back to must mode or report the discovery
+             ;; of a non-constructive program
+             (define unemitted-signals (get-unemitted-signals mode))
              (cond
-               [(pair? mode)
-                ;; this was a nested can mode inside another can; go back to the previous can
-                ;; to do so, merge the results from the inner can into the current
-                ;; can and then do the rollback.
-                ;; (here, we know that the next can inside completed because
-                ;;  signal-states-done? returned #f for it above)
-                (define combined-can
-                  (inc-signal-states
-                   (struct-copy can (car mode)
-                                [emits (set-union (can-emits a-can)
-                                                  (can-emits (car mode)))])))
-                (set! mode (cons combined-can (cdr mode)))
-                (rollback! (can-starting-point combined-can))
-                (add-can-signals! combined-can)
-                (unblock-threads (can-two-choice-signals combined-can))
-                (unblock-threads (set->list (can-one-choice-signals combined-can)))
-                (loop)]
+               [(set-empty? unemitted-signals)
+                (channel-put instant-complete-chan 'non-constructive)
+                ;; when we send back 'non-constructive, then we will
+                ;; never come back to this thread again, so just let it expire
+                (void)]
                [else
-                ;; we've finished with can mode, either go back to must mode or
-                ;; report the discovery of a non-constructive program
-                (define unemitted-signals (get-unemitted-signals a-can))
-                (cond
-                  [(set-empty? unemitted-signals)
-                   (channel-put instant-complete-chan 'non-constructive)
-                   ;; when we send back 'non-constructive, then we will
-                   ;; never come back to this thread again, so just let it expire
-                   (void)]
-                  [else
-                   (restore-must-state)
-                   (set! signal-status
-                         (for/fold ([signal-status signal-status])
-                                   ([a-signal (in-set unemitted-signals)])
+                (set! mode #f)
+                (restore-must-state)
+                (set! signal-status
+                      (for/fold ([signal-status signal-status])
+                                ([a-signal (in-set unemitted-signals)])
+                        (cond
+                          [(signal-combine a-signal)
                            (cond
-                             [(signal-combine a-signal)
-                              (cond
-                                [(hash-has-key? signal-value a-signal)
-                                 (hash-set signal-status a-signal #t)]
-                                [else
-                                 (hash-set signal-status a-signal #f)])]
+                             [(hash-has-key? signal-value a-signal)
+                              (hash-set signal-status a-signal #t)]
                              [else
-                              (hash-set signal-status a-signal #f)])))
-                   (unblock-threads (set->list unemitted-signals))
-                   (loop)])])]
+                              (hash-set signal-status a-signal #f)])]
+                          [else
+                           (hash-set signal-status a-signal #f)])))
+                (unblock-threads (set->list unemitted-signals))
+                (loop)])]
             [else
              ;; we've got more possible signal values to explore; set them up
              ;; and go back to the rollback point to try them out
-             (set! mode (cons (inc-signal-states a-can) (cdr mode)))
-             (rollback! (can-starting-point (car mode)))
-             (add-can-signals! (car mode))
-             (unblock-threads (can-two-choice-signals a-can))
-             (unblock-threads (set->list (can-one-choice-signals a-can)))
+             (set! mode (inc-signal-states mode))
+             (rollback! (can-starting-point mode))
+             (add-can-signals! mode)
+             (unblock-threads (can-two-choice-signals mode))
+             (unblock-threads (set->list (can-one-choice-signals mode)))
              (loop)])]
          [else
           ;; we finished the instant in must mode so
@@ -1270,20 +1209,43 @@ continuations).
       ;; nothing is running, but at least one thread is
       ;; waiting for a signal's value; switch into Can mode
       [(set-empty? running-threads)
-       (log-esterel-debug "~a: ~a Can mode; ~s"
+       (log-esterel-debug "~a: switching into Can mode; ~s"
                           (eq-hash-code (current-thread))
-                          (if (null? mode)
-                              "switching into"
-                              "pushing a deeper")
                           (hash-keys signal-waiters))
        (when (= 0 (hash-count signal-waiters))
          (internal-error "expected some thread to be blocked on a signal"))
-       (unless (pair? mode) (save-must-state))
-       (set! mode (cons (new-can) mode))
-       (rollback! (can-starting-point (car mode)))
-       (add-can-signals! (car mode))
-       (unblock-threads (can-two-choice-signals (car mode)))
-       (unblock-threads (set->list (can-one-choice-signals (car mode))))
+       (define-values (two-choice-signals one-choice-signals)
+         (for/fold ([two-choice-signals '()]
+                    [one-choice-signals (set)])
+                   ([(a-signal _ignored) (in-hash signal-waiters)])
+           (cond
+             [(signal-combine a-signal)
+              (values two-choice-signals
+                      (set-add one-choice-signals a-signal))]
+             [else
+              (values (cons a-signal two-choice-signals)
+                      one-choice-signals)])))
+       (cond
+         [(can? mode)
+          ;; it might be possible to do something more efficient here but when we
+          ;; run into the second set of completely blocked threads, just
+          ;; add some signals into the can and start everything over again
+          (set! mode (can (set)
+                          (append two-choice-signals (can-two-choice-signals mode))
+                          (set-union one-choice-signals (can-one-choice-signals mode))
+                          0
+                          (can-starting-point mode)))]
+         [else
+          (save-must-state)
+          (set! mode (can (set)
+                          two-choice-signals
+                          one-choice-signals
+                          0
+                          (get-starting-point)))])
+       (rollback! (can-starting-point mode))
+       (add-can-signals! mode)
+       (unblock-threads (can-two-choice-signals mode))
+       (unblock-threads (set->list (can-one-choice-signals mode)))
        (loop)]
 
       ;; an instant is running, handle the various things that can happen during it
@@ -1342,9 +1304,9 @@ continuations).
                                   (format "~.s" a-value)
                                   "<< no value provided >>"))
            (log-par-state)
-           (when (pair? mode)
+           (when (can? mode)
              ;; we're in can mode, so record that this signal was emitted
-             (set! mode (cons (add-emitted-signal (car mode) a-signal) (cdr mode))))
+             (set! mode (add-emitted-signal mode a-signal)))
            (match (hash-ref signal-status a-signal 'unknown)
              ['unknown
               (cond
@@ -1388,10 +1350,9 @@ continuations).
                 [else
                  (loop)])]
              [#f
-              (unless (and (pair? mode)
-                           (for/or ([a-can (in-list mode)])
-                             (or (member a-signal (can-two-choice-signals a-can))
-                                 (set-member? (can-one-choice-signals a-can) a-signal))))
+              (unless (and (can? mode)
+                           (or (member a-signal (can-two-choice-signals mode))
+                               (set-member? (can-one-choice-signals mode) a-signal)))
                 ;; if the above is false, then this is a signal we believe won't be emitted and yet,
                 ;; here it is emitted; let's crash.
                 (internal-error "the signal ~s has been emitted but it was not in can" a-signal))
