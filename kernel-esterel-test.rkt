@@ -585,11 +585,11 @@
 (let ()
   (define S (signal #:combine +))
   (check-exn
+   #rx"signal has never been emitted"
    (λ ()
      (react!
       (reaction
-       (signal-value S))))
-   #rx"whats a good error message?"))
+       (signal-value S))))))
 
 (let ()
   (define S1 (signal #:combine +))
@@ -600,7 +600,7 @@
      (pause)
      (emit S2 (+ 1 (signal-value S1)))))
   (check-equal? (react! r) (hash S1 11))
-  (check-equal? (react! r) (hash S2 12)))
+  (check-equal? (react! r) (hash S1 #f S2 12)))
 
 (let ()
   (define S1 (signal #:combine +))
@@ -638,16 +638,36 @@
 (let ()
   (define S1 (signal #:combine +))
   (define S2 (signal #:combine +))
-  (check-equal?
-   (react!
+  (define r
     (reaction
+     (emit S1 44)
+     (emit S2 55)
+     (pause)
      (par (if (signal-value S1)
               (void)
               (emit S2 1))
           (if (signal-value S2)
               (void)
               (void)))))
-   (hash S2 1)))
+  (react! r)
+  (check-equal? (react! r) (hash S1 #f S2 #f)))
+
+(let ()
+  (define S1 (signal #:combine +))
+  (define S2 (signal #:combine +))
+  (define r
+    (reaction
+     (emit S1 #f)
+     (emit S2 55)
+     (pause)
+     (par (if (signal-value S1)
+              (void)
+              (emit S2 1))
+          (if (signal-value S2)
+              (void)
+              (void)))))
+  (react! r)
+  (check-equal? (react! r) (hash S2 1 S1 #f)))
 
 (let ()
   (define S (signal #:combine +))

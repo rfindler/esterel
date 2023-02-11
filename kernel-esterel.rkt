@@ -546,24 +546,17 @@ continuations).
   (define (add-can-signals! a-can)
     (match-define (can emits two-choice-signals one-choice-signals
                        signal-states starting-point) a-can)
-    (set!-values
-     (signal-status signal-value)
-     (for/fold ([signal-status signal-status]
-                [signal-value signal-value])
-               ([i (in-naturals)]
-                [a-signal (in-list two-choice-signals)])
-       (define on? (bitwise-bit-set? signal-states i))
-       (values (hash-set signal-status a-signal on?)
-               (if (signal-combine a-signal)
-                   (hash-set signal-value a-signal
-                             (hash-ref (car signals-pre) a-signal))
-                   signal-value))))
     (set! signal-status
           (for/fold ([signal-status signal-status])
-                    ([signal (in-set one-choice-signals)])
-            (hash-set signal-status
-                      signal
-                      #t))))
+                    ([a-signal (in-list two-choice-signals)]
+                     [i (in-naturals)])
+            (define on? (bitwise-bit-set? signal-states i))
+            (hash-set signal-status a-signal on?)))
+    (set! signal-status
+          (for/fold ([signal-status signal-status])
+                    ([a-signal (in-set one-choice-signals)])
+            (hash-set signal-status a-signal
+                      (hash-has-key? signal-value a-signal)))))
 
   ;; get-unemitted-signals : can? -> (set/c signal?)
   ;; returns the set of signals that cannot be emitted
@@ -584,19 +577,13 @@ continuations).
       (for/fold ([two-choice-signals '()]
                  [one-choice-signals (set)])
                 ([(a-signal _ignored) (in-hash signal-waiters)])
-        (define two-choices?
-          (cond
-            [(signal-combine a-signal)
-             (and (pair? signals-pre)
-                  (hash-has-key? signal-value a-signal))]
-            [else #t]))
         (cond
-          [two-choices?
-           (values (cons a-signal two-choice-signals)
-                   one-choice-signals)]
-          [else
+          [(signal-combine a-signal)
            (values two-choice-signals
-                   (set-add one-choice-signals a-signal))])))
+                   (set-add one-choice-signals a-signal))]
+          [else
+           (values (cons a-signal two-choice-signals)
+                   one-choice-signals)])))
     (can (set)
          two-choice-signals one-choice-signals
          0 (get-starting-point)))
@@ -778,9 +765,9 @@ continuations).
 
   ;; get-signals-value : signal boolean -> any/c
   ;; returns what the response to present?/signal-value should be for `a-signal`
-  ;; if the signal hasn't been emitted yet and we ask for its value in
-  ;; the first instant, then unemitted-in-first-instant will trigger an
-  ;; error at the call site of signal-value.
+  ;;   if the signal hasn't been emitted yet and we ask for its value in
+  ;;   the first instant, then signal-never-before-emitted will trigger an
+  ;;   error at the call site of signal-value.
   (define (get-signals-value a-signal is-present?)
     (cond
       [is-present? (hash-ref signal-status a-signal)]
@@ -789,8 +776,11 @@ continuations).
        ;; if not, take the value from the previous instant
        (if (hash-ref signal-status a-signal)
            (hash-ref signal-value a-signal)
-           (if (pair? signals-pre)
-               (hash-ref (car signals-pre) a-signal)
+           (if (pair? signal-values-pre)
+               (hash-ref (car signal-values-pre)
+                         a-signal
+                         (λ ()
+                           (signal-never-before-emitted)))
                (signal-never-before-emitted)))]))
 
   ;; unblock-threads : (listof signal?) -> void
@@ -1173,24 +1163,18 @@ continuations).
                    (void)]
                   [else
                    (restore-must-state)
-                   (set!-values
-                    (signal-status signal-value)
-                    (for/fold ([signal-status signal-status]
-                               [signal-value signal-value])
-                              ([a-signal (in-set unemitted-signals)])
-                      (cond
-                        [(signal-combine a-signal)
-                         (cond
-                           [(hash-has-key? signal-value a-signal)
-                            (values (hash-set signal-status a-signal #t)
-                                    signal-value)]
-                           [else
-                            (values (hash-set signal-value a-signal #f)
-                                    (hash-set signal-value a-signal
-                                              (hash-ref (car signals-pre) a-signal)))])]
-                        [else
-                         (values (hash-set signal-value a-signal #f)
-                                 signal-value)])))
+                   (set! signal-status
+                         (for/fold ([signal-status signal-status])
+                                   ([a-signal (in-set unemitted-signals)])
+                           (cond
+                             [(signal-combine a-signal)
+                              (cond
+                                [(hash-has-key? signal-value a-signal)
+                                 (hash-set signal-status a-signal #t)]
+                                [else
+                                 (hash-set signal-status a-signal #f)])]
+                             [else
+                              (hash-set signal-status a-signal #f)])))
                    (unblock-threads (set->list unemitted-signals))
                    (loop)])])]
             [else
@@ -1217,20 +1201,28 @@ continuations).
                         signal-value))
           (set! instant-complete-chan #f)
           ; save the signals from previous instants
-          (define (keep-pre-count new old)
+          (define (keep-count new old count)
             (let loop ([l (cons new old)]
-                       [i pre-count])
+                       [i count])
               (cond
                 [(zero? i) '()]
                 [(null? l) '()]
                 [else (cons (car l) (loop (cdr l) (- i 1)))])))
           (set! signals-pre
-                (keep-pre-count
+                (keep-count
                  (for/set ([(signal val) (in-hash signal-status)]
                            #:when val)
                    signal)
-                 signals-pre))
-          (set! signal-values-pre (keep-pre-count signal-value signal-values-pre))
+                 signals-pre
+                 pre-count))
+          (set! signal-values-pre (keep-count
+                                   (if (pair? signal-values-pre)
+                                       (hash-union-prefer-left signal-value (car signal-values-pre))
+                                       signal-value)
+                                   signal-values-pre
+                                   ;; make sure we keep at least 1 for signal value so
+                                   ;; we have a value for signals not emitted this instant
+                                   (max 1 pre-count)))
           ;; reset the signals in preparation for the next instant
           (set! signal-status (hash))
           (set! signal-value (hash))
@@ -1482,3 +1474,8 @@ continuations).
   (kernel-esterel.rkt::internal-error
    (string-append "kernel-esterel.rkt: internal error: " (apply format fmt args))
    (current-continuation-marks))))
+
+(define (hash-union-prefer-left h-left h-right)
+  (for/hash ([k (in-set (set-union (list->set (hash-keys h-left))
+                                   (list->set (hash-keys h-right))))])
+    (values k (hash-ref h-left k (λ () (hash-ref h-right k))))))
