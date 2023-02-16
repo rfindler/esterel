@@ -939,6 +939,102 @@
                 (hash S1 8 O1 #t)))
 
 
+;; the next tests explore various
+;; "dynamically created" signal
+;; scenarios might play out.
+
+(let ()
+  (define (signals->names ht)
+    (for/hash ([(k v) (in-hash ht)])
+      (values (signal-name k) v)))
+  (define S (signal))
+  (define r
+    (reaction
+     (present? S)
+     (present? (let ([S2 (signal)]) S2))))
+  (check-equal? (signals->names (react! r))
+                (hash "S" #f  "S2" #f)))
+
+(let ()
+  (define (signals->names ht)
+    (for/hash ([(k v) (in-hash ht)])
+      (values (signal-name k) v)))
+  (define r
+    (reaction
+     (let ([S1 (signal)])
+       (present? S1)
+       (let ([S2 (signal)]
+             [O1 (signal)]
+             [O2 (signal)])
+         (par (emit S2)
+              (if (present? S2)
+                  (emit O1)
+                  (emit O2)))))))
+  (check-equal? (signals->names (react! r))
+                (hash "S1" #f "S2" #t "O1" #t)))
+
+(let ()
+  (define (signals->names ht)
+    (for/hash ([(k v) (in-hash ht)])
+      (values (signal-name k) v)))
+  (define r
+    (reaction
+     (let ([S1 (signal)])
+       (present? S1)
+       (let ([S2 (signal)]
+             [O1 (signal)]
+             [O2 (signal)])
+         (if (present? S2)
+             (emit O1)
+             (emit O2))))))
+  (check-equal? (signals->names (react! r))
+                (hash "S1" #f "S2" #f "O2" #t)))
+
+(let ()
+  (define (signals->names ht)
+    (for/hash ([(k v) (in-hash ht)])
+      (values (signal-name k) v)))
+  (define r
+    (reaction
+     (let ([S1 (signal)])
+       (present? S1)
+       (let ([S2 (signal)]
+             [O1 (signal)]
+             [O2 (signal)])
+         (if (present? S2)
+             (emit O1)
+             (emit O2))))))
+  (check-equal? (signals->names (react! r))
+                (hash "S1" #f "S2" #f "O2" #t)))
+
+(let ()
+  (define (signals->names ht)
+    (for/hash ([(k v) (in-hash ht)])
+      (values (signal-name k) v)))
+  (define r
+    (reaction
+     (let ([S1 (signal)]
+           [O1 (signal)]
+           [O2 (signal)])
+       (present? S1)
+       (let ([S2 (signal)])
+         (define S3
+           (if (present? S2)
+               (let ([S3 (signal)])
+                 (emit S3)
+                 S3)
+               (let ([S3 (signal)])
+                 S3)))
+         (if (present? S3)
+             (emit O1)
+             (emit O2))))))
+  (check-equal? (signals->names (react! r))
+                (hash "S1" #f "S2" #f "S3" #f "O2" #t)))
+
+
+
+
+
 
 
 

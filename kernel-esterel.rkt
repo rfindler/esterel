@@ -1,6 +1,7 @@
 #lang racket
 (require "structs.rkt"
          racket/hash
+         syntax/location
          (for-syntax syntax/parse))
 
 (provide
@@ -95,6 +96,20 @@ cannot be emitted, so we set it to absent (and continue the
 computation, back in "must" mode from where we saved all the
 continuations).
 
+There is a subtle point with "dynamically created" signals. That is,
+when a signal is created during a "can" exploration, it might be
+important that we detect it was not emitted in order to make
+progress in the computation. So the question is how do we know
+if this signal is the "same" signal for other can exploration
+or for must execution? The way we do this is to collect the source
+location of the signal when it is created and pair that with a
+counter that is specific to the reaction where it is being
+used. Then, the reaction can reset the counter back to the same
+value for can explorations and subsequent must evaluation.
+(One problem here -- if someone creates a signal during one
+ reaction and then uses it for another one, something strange can
+ happen. Probably this can be dealt with, with extra stuff....
+ assuming the basic strategy is sound.)
 |#
 
 (define-logger esterel)
@@ -114,12 +129,31 @@ continuations).
      #:declare combine-expr
      (expr/c #'(-> any/c any/c any/c)
              #:name "the #:combine argument")
-     #`(mk-signal.args (~? name-expr '#,(syntax-local-name)) (~? combine-expr.c #f))]))
+     #`(mk-signal.args (~? name-expr '#,(syntax-local-name))
+                       (~? combine-expr.c #f)
+                       #,(syntax/loc stx (quote-srcloc))
+                       )]))
 
-(define (mk-signal.args name combine)
+(define (mk-signal.args name combine src)
   (unless (or (not name) (string? name) (symbol? name))
     (error 'signal "expected a string for the #:name argument\n  name: ~e" name))
-  (signal (if (symbol? name) (symbol->string name) name) combine))
+  (signal (if (symbol? name) (symbol->string name) name)
+          ;; the identity of a signal, when we're in a reaction,
+          ;; is eq-like in that we increment a counter for each
+          ;; one, but we arrange to make sure that subsequent
+          ;; runs in must mode get the same signal as an earlier
+          ;; can run got by including the thread identities and
+          ;; the state of the signals during that can run
+          (cond
+            [(current-signal-table)
+             =>
+             (λ (signal-table)
+               (define new-signal-chan (signal-table-new-signal-chan signal-table))
+               (define resp (make-channel))
+               (channel-put new-signal-chan resp)
+               (cons (channel-get resp) src))]
+            [else #f])
+          combine))
 
 (define no-value-provided (gensym 'no-value-provided))
 (define (emit a-signal [value no-value-provided])
@@ -246,8 +280,8 @@ continuations).
 ;; and so we cannot restore it here; not sure if this is important or not, tho!
 ;; this function creates the par children thread when a par is first encountered
 ;; and it also creates the threads for when we fall back to a previous state
-;; in the search for which signals to be absent. It doesn't create the main
-;; reaction thread but probably things should be cleaned up a bit so it can
+;; to run in can mode. It doesn't create the main
+;; reaction thread but probably things should be cleaned up a bit so it can.
 ;; if before-par-trap-counter isn't #f, then we know we're creating a par child
 ;; thread and we set up that machinery; we don't need the marks it the thread is
 ;; the outermost thread because the code that looks up the marks knows what to
@@ -399,7 +433,8 @@ continuations).
      ;; here we tell the enclosing par that a trap has happened
      ((vector-ref start-of-par-counter 0) exn-or-trap)]))
 
-(struct signal-table (signal-chan
+(struct signal-table (new-signal-chan
+                      signal-chan
                       emit-chan
                       par-start-chan par-partly-done-chan
                       pause-chan instant-chan
@@ -415,7 +450,7 @@ continuations).
      #'(reaction/proc 0 (λ () e1 e2 ...))]))
 (define (reaction/proc pre-count thunk)
   (define the-signal-table
-    (signal-table (make-channel) (make-channel) (make-channel)
+    (signal-table (make-channel) (make-channel) (make-channel) (make-channel)
                   (make-channel) (make-channel) (make-channel) (make-channel)
                   pre-count))
   (thread (λ () (run-reaction-thread pre-count thunk the-signal-table)))
@@ -474,7 +509,7 @@ continuations).
                (channel-put react-thread-done-chan #f)))
            reaction-prompt-tag))
         (thread reaction-thread-thunk))))
-  (match-define (signal-table signal-chan emit-chan
+  (match-define (signal-table new-signal-chan signal-chan emit-chan
                               par-start-chan par-partly-done-chan
                               pause-chan instant-chan
                               react-thread-done-chan
@@ -578,7 +613,8 @@ continuations).
   ;; must-state holds the state of the instant at the point where we
   ;; switched form must mode to can mode (so that we can return to
   ;; that state when we are done with can)
-  (struct must-state (signal-status
+  (struct must-state (new-signal-counter
+                      signal-status
                       signal-value
                       latest-exn
                       signal-waiters
@@ -589,7 +625,11 @@ continuations).
   ;; saved-must-state : (or/c #f must-state?)
   ;; #f when we're in must mode and must-state? when we're in can mode
   (define saved-must-state #f)
-  
+
+  ;; new-signal-counter : natural?
+  ;; used to control the equivalence relation of signals so when we
+  ;; roll back we can create the "same" signals as we did in a previous run
+  (define new-signal-counter 0)
   
   ;; if a signal isn't mapped, its status isn't yet known
   ;; if it is #t, the signal has been emitted
@@ -786,7 +826,8 @@ continuations).
   (define (save-must-state)
     (when saved-must-state (error 'save-must-state "already have a must state saved"))
     (set! saved-must-state
-          (must-state signal-status
+          (must-state new-signal-counter
+                      signal-status
                       signal-value
                       raised-exns
                       signal-waiters
@@ -796,7 +837,8 @@ continuations).
                       reaction-thread)))
 
   (define (restore-must-state)
-    (match-define (must-state _signal-status
+    (match-define (must-state _new-signal-counter
+                              _signal-status
                               _signal-value
                               _raised-exns
                               _signal-waiters
@@ -805,6 +847,7 @@ continuations).
                               _parent->par-state
                               _reaction-thread)
       saved-must-state)
+    (set! new-signal-counter _new-signal-counter)
     (set! signal-status _signal-status)
     (set! signal-value _signal-value)
     (set! raised-exns _raised-exns) ;; TODO: this doesn't seem right! there cannot be anything there, right?
@@ -820,9 +863,10 @@ continuations).
   ;; of the signals to see what can be emitted (and thus, what cannot be emitted)
   ;; rb-tree : rb-tree?
   ;; signals : (hash/c signal? boolean? #:flat? #t #:immutable #t)
-  (struct starting-point (rb-tree signal-status signal-value))
+  (struct starting-point (rb-tree new-signal-counter signal-status signal-value))
   (define (rollback! a-starting-point)
-    (match-define (starting-point rb-tree rb-signal-status rb-signal-value) a-starting-point)
+    (match-define (starting-point rb-tree rb-new-signal-counter rb-signal-status rb-signal-value) a-starting-point)
+    (set! new-signal-counter rb-new-signal-counter)
     (set! signal-status rb-signal-status)
     (set! signal-value rb-signal-value)
     (set! raised-exns '())     ;;; TODO: is this right? 
@@ -831,7 +875,7 @@ continuations).
     (set! par-parents (hash))
     (set! parent->par-state (hash))
     (set! reaction-thread (rebuild-threads-from-rb-tree rb-tree)))
-  (define (get-starting-point) (starting-point (build-rb-tree-from-current-state) signal-status signal-value))
+  (define (get-starting-point) (starting-point (build-rb-tree-from-current-state) new-signal-counter signal-status signal-value))
 
   (struct rb-tree () #:transparent)
 
@@ -1209,9 +1253,10 @@ continuations).
       ;; nothing is running, but at least one thread is
       ;; waiting for a signal's value; switch into Can mode
       [(set-empty? running-threads)
-       (log-esterel-debug "~a: switching into Can mode; ~s"
+       (log-esterel-debug "~a: switching into Can mode; ~s ~s"
                           (eq-hash-code (current-thread))
-                          (hash-keys signal-waiters))
+                          (hash-keys signal-waiters)
+                          (and mode (can-emits mode)))
        (when (= 0 (hash-count signal-waiters))
          (internal-error "expected some thread to be blocked on a signal"))
        (define-values (two-choice-signals one-choice-signals)
@@ -1251,6 +1296,12 @@ continuations).
       ;; an instant is running, handle the various things that can happen during it
       [else
        (sync
+        (handle-evt
+         new-signal-chan
+         (λ (chan)
+           (channel-put chan new-signal-counter)
+           (set! new-signal-counter (+ new-signal-counter 1))
+           (loop)))
         (handle-evt
          signal-chan
          (λ (isp+s+thd+resp+pre)
