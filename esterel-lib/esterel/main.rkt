@@ -14,10 +14,10 @@
 
 (define-syntax-rule
   (loop-each p s)
-  (loop-each/proc (λ () p) s))
-(define (loop-each/proc thunk s)
+  (loop-each/proc (λ () p) (λ () s)))
+(define (loop-each/proc thunk abort-thunk)
   (let loop ()
-    (abort-when (begin (thunk) (halt)) (present? s))
+    (abort-when (begin (thunk) (halt)) (abort-thunk))
     (loop)))
 
 (define-syntax-rule
@@ -70,7 +70,7 @@
   (await (present? s))
   (loop-each
    (thunk)
-   s))
+   (present? s)))
 
 (define (every-n/proc s n thunk)
   (let ([every-n (signal)])
@@ -87,7 +87,7 @@
   (await-immediate s)
   (loop-each
    (thunk)
-   s))
+   (present? s)))
 
 (define (sustain s)
   (let loop ()

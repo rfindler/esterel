@@ -76,7 +76,7 @@
        (loop-each
         (for ([e (in-list (cons e1 e2s))])
           (loop e signals traps))
-        (hash-ref signals r))]
+        (present? (hash-ref signals r)))]
       [`(loop& ,e1 ,e2s ...)
        (let loop-loop ()
          (for ([e (in-list (cons e1 e2s))])

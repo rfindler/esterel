@@ -20,7 +20,7 @@ given in figure 1.2
          (begin (par (await (present? A))
                      (await (present? B)))
                 (emit O))
-         R)
+         (present? R))
         (begin
           #;0 (pause)
           #;1 (emit A) (emit B) (pause)
