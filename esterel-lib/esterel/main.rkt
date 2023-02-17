@@ -1,10 +1,11 @@
-#lang racket
-(require "kernel-esterel.rkt")
+#lang racket/base
+(require "kernel.rkt"
+         (for-syntax racket/base))
 (provide halt loop-each abort-when sustain
          await await-immediate await-n
          every every-immediate
          weak-abort weak-abort-immediate
-         (all-from-out "kernel-esterel.rkt"))
+         (all-from-out "kernel.rkt"))
 
 (define (halt)
   (let loop ()

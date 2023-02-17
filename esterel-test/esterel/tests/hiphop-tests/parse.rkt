@@ -7,7 +7,8 @@
          (prefix-in : parser-tools/lex-sre)
          parser-tools/yacc
          racket/set
-         html-parsing)
+         html-parsing
+         html)
 (module+ test
   (require rackunit))
 

@@ -1,5 +1,5 @@
 #lang racket
-(require "kernel-esterel.rkt" rackunit)
+(require esterel/kernel rackunit)
 
 (check-equal?
  (react!

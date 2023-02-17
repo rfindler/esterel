@@ -1,8 +1,13 @@
-#lang racket
-(require "structs.rkt"
-         racket/hash
+#lang racket/base
+(require "private/structs.rkt"
          syntax/location
-         (for-syntax syntax/parse))
+         racket/hash
+         racket/match
+         racket/set
+         racket/contract
+         racket/list
+         racket/math
+         (for-syntax racket/base syntax/parse))
 
 (provide
  (rename-out [-reaction reaction])

@@ -1,5 +1,5 @@
 #lang racket
-(require "esterel.rkt")
+(require esterel)
 
 (define (Aux I O)
   (every-immediate

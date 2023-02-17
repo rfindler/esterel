@@ -1,5 +1,5 @@
 #lang racket
-(require "esterel.rkt")
+(require esterel)
 
 #|
 

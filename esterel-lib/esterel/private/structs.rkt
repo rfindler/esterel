@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 (require racket/hash-code)
 
 (define (mk-write-proc get-name what)

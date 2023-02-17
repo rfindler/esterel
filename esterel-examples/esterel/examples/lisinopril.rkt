@@ -1,11 +1,11 @@
 #lang racket/gui
-(require "esterel.rkt")
+(require esterel)
 
 #|
 
 This is a conversion of the example from section 4.1 in
 HipHop.js: (A)Synchronous Reactive Web Programming
-by Berry and Serrano
+by Berry and Serrano, PLDI 2020
 
 |#
 
