@@ -56,6 +56,7 @@
              void?)]
   [pause (->* () #:pre (in-reaction?) void?)]
   [exit-trap (-> trap? any)]
+  [trap? (-> any/c boolean?)]
   [exn:fail:not-constructive? (-> any/c boolean?)]))
 
 
