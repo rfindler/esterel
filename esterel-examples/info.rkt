@@ -2,7 +2,7 @@
 
 (define collection 'multi)
 
-(define deps '("base" "esterel-lib"))
+(define deps '("base" "esterel-lib" "rackunit" "gui-lib"))
 
 (define pkg-desc "Some Esterel examples")
 
