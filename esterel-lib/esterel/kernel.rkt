@@ -48,8 +48,8 @@
                      #:pre (in-reaction?)
                      any/c)]
   [signal? (-> any/c boolean?)]
-  [signal-name (-> signal? string?)]
-  [signal-combine (-> signal? (-> any/c any/c any/c))]
+  [signal-name (-> signal? (or/c #f string?))]
+  [signal-combine (-> signal? (or/c #f (-> any/c any/c any)))]
   [emit (->* (signal?)
              (any/c)
              #:pre (in-reaction?)
@@ -327,7 +327,10 @@ value for can explorations and subsequent must evaluation.
           thunk
           reaction-prompt-tag))]))
   ;; this renaming doesn't work when rebuilding the threads currently
-  (thread (procedure-rename thunk-to-run (object-name thunk))))
+  (define thunk-name (object-name thunk))
+  (thread (if thunk-name
+              (procedure-rename thunk-to-run thunk-name)
+              thunk-to-run)))
 
 (define (raise-argument->exn x)
   (if (exn? x)

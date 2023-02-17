@@ -16,3 +16,6 @@ in @racketmodname[esterel/kernel].
 @defproc[(halt) any/c]{
  Immediately pauses in every instant.
 }
+
+
+@(close-eval esterel-eval)
