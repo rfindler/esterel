@@ -40,10 +40,13 @@
         (exit-trap T-await))
       (loop))))
 
-(define (await-n s n)
+(define-syntax-rule
+  (await-n when-expr n-expr)
+  (await-n/proc (λ () when-expr) n-expr))
+(define (await-n/proc thunk n)
   (suspend
    (repeat n (λ () (pause)))
-   (not (present? s))))
+   (not (thunk))))
 
 (define (repeat n thunk)
   (with-trap T

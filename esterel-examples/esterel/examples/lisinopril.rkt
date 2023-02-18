@@ -95,7 +95,7 @@ by Berry and Serrano, PLDI 2020
   (emit Active-true)
   (emit Alert-false)
   (abort-when (begin
-                (await-n tick d)
+                (await-n (present? tick) d)
                 (let loop ()
                   (when (present? tick)
                     (emit Alert-true))
