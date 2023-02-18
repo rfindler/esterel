@@ -56,10 +56,14 @@
           (begin (thunk) (loop (- n 1)))
           (exit-trap T)))))
 
-(define (await-immediate s)
+(define-syntax-rule
+  (await-immediate test-expr)
+  (await-immediate/proc (λ () test-expr)))
+
+(define (await-immediate/proc test-thunk)
   (with-trap T-await-immediate
     (let loop ()
-      (when (present? s)
+      (when (test-thunk)
         (exit-trap T-await-immediate))
       (pause)
       (loop))))
@@ -84,13 +88,13 @@
        (every (present? every-n) (body-thunk))))
 
 (define-syntax-rule
-  (every-immediate s p)
-  (every-immediate/proc s (λ () p)))
-(define (every-immediate/proc s thunk)
-  (await-immediate s)
+  (every-immediate t p)
+  (every-immediate/proc (λ () t) (λ () p)))
+(define (every-immediate/proc test-thunk body-thunk)
+  (await-immediate (test-thunk))
   (loop-each
-   (thunk)
-   (present? s)))
+   (body-thunk)
+   (test-thunk)))
 
 (define (sustain s)
   (let loop ()
@@ -105,7 +109,7 @@
 (define (weak-abort/proc signal body)
   (with-trap T-weak-abort
     (par (begin (body) (exit-trap T-weak-abort))
-         (begin (await-immediate signal) (exit-trap T-weak-abort)))))
+         (begin (await-immediate (present? signal)) (exit-trap T-weak-abort)))))
 
 (define-syntax-rule
   (weak-abort-immediate signal expr1 expr2 ...)
@@ -114,4 +118,4 @@
 (define (weak-abort-immediate/proc signal body)
   (with-trap T-weak-abort-immediate
     (par (begin (body) (exit-trap T-weak-abort-immediate))
-         (begin (await-immediate signal) (exit-trap T-weak-abort-immediate)))))
+         (begin (await-immediate (present? signal)) (exit-trap T-weak-abort-immediate)))))
