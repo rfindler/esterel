@@ -66,22 +66,22 @@
 
 (define-syntax (every stx)
   (syntax-case stx ()
-    [(_ s p) #'(every/proc s (λ () p))]
-    [(_ s n p) #'(every-n/proc s n (λ () p))]))
+    [(_ s p) #'(every/proc (λ () s) (λ () p))]
+    [(_ s n p) #'(every-n/proc (λ () s) n (λ () p))]))
 
-(define (every/proc s thunk)
-  (await (present? s))
+(define (every/proc test-thunk body-thunk)
+  (await (test-thunk))
   (loop-each
-   (thunk)
-   (present? s)))
+   (body-thunk)
+   (test-thunk)))
 
-(define (every-n/proc s n thunk)
-  (let ([every-n (signal)])
-    (par (let loop ()
-           (await-n s n)
-           (emit every-n)
-           (loop))
-         (every every-n (thunk)))))
+(define (every-n/proc test-thunk n body-thunk)
+  (define every-n (signal))
+  (par (let loop ()
+         (await-n (test-thunk) n)
+         (emit every-n)
+         (loop))
+       (every (present? every-n) (body-thunk))))
 
 (define-syntax-rule
   (every-immediate s p)

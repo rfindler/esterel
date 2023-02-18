@@ -112,9 +112,9 @@
       [`nothing& (void)]
       [`halt& (halt)]
       [`(await-immediate& ,i) (await-immediate (hash-ref signals i))]
-      [`(every& ,(? symbol? s) ,body) (every (hash-ref signals s) (loop body signals traps))]
+      [`(every& ,(? symbol? s) ,body) (every (present? (hash-ref signals s)) (loop body signals traps))]
       [`(every& (,(? natural? n) ,(? symbol? s)) ,body)
-       (every (hash-ref signals s) n (loop body signals traps))]
+       (every (present? (hash-ref signals s)) n (loop body signals traps))]
       [`(every& ,s #:immediate ,body) (every-immediate (hash-ref signals s) (loop body signals traps))]
       [`(trap& ,t ,body) (with-trap T (loop body signals (hash-set traps t T)))]
       [`(exit& ,t) (exit-trap (hash-ref traps t))]
