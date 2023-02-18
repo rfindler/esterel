@@ -6,7 +6,8 @@
 
 (define (run-all-hiphop-tests)
   (for ([test (in-list (find-all-hiphop-tests))])
-    (printf "running ~a\n" test)
+    (define-values (base name dir?) (split-path test))
+    (printf "running ~a\n" name)
     (with-handlers ([exn:fail? (λ (x)
                                  ((error-display-handler)
                                   (exn-message x)
