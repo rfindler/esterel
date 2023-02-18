@@ -19,7 +19,7 @@ in @racketmodname[esterel/kernel].
 
 @defform[(loop-each body-expr test-expr)]{
 
-Starts by running @racket[body-expr] and then @racket[(halt)]ing.
+Starts by running @racket[body-expr] and then @racket[halt]ing.
  Restarts @racket[body-expr] when @racket[test-expr] becomes true.
 
  For example, this program emits @racket[S1] in every instant that @racket[S2] is
@@ -35,12 +35,12 @@ Starts by running @racket[body-expr] and then @racket[(halt)]ing.
      (emit S1)
      (not (present? S2)))))
 
- (react! r)
- (react! r)
- (react! r #:emit (list S2))
- (react! r #:emit (list S2))
- (react! r)
- (react! r)
+ (eval:check (react! r) (hash S1 #t))
+ (eval:check (react! r) (hash S1 #t S2 #f))
+ (eval:check (react! r #:emit (list S2)) (hash S2 #t))
+ (eval:check (react! r #:emit (list S2)) (hash S2 #t))
+ (eval:check (react! r) (hash S1 #t S2 #f))
+ (eval:check (react! r) (hash S1 #t S2 #f))
  ]
 }
 
@@ -67,11 +67,11 @@ Starts by running @racket[body-expr] and then @racket[(halt)]ing.
                   (loop))
                 (present? S2))
     (emit S3)))
- (react! r)
- (react! r)
- (react! r)
- (react! r)
- (react! r #:emit (list S2))
+ (eval:check (react! r) (hash S1 #t))
+ (eval:check (react! r) (hash S1 #t S2 #f))
+ (eval:check (react! r) (hash S1 #t S2 #f))
+ (eval:check (react! r) (hash S1 #t S2 #f))
+ (eval:check (react! r #:emit (list S2)) (hash S3 #t S2 #t))
  ]
 }
 
@@ -95,9 +95,9 @@ Starts by running @racket[body-expr] and then @racket[(halt)]ing.
            (emit S1))
          (await (present? S1)))
     (emit S2)))
- (react! r)
- (react! r)
- (react! r)]
+ (eval:check (react! r) (hash))
+ (eval:check (react! r) (hash S1 #f))
+ (eval:check (react! r) (hash S1 #t S2 #t))]
 }
 
 @defform[(await-n when-expr n-expr)]{
@@ -105,7 +105,7 @@ Starts by running @racket[body-expr] and then @racket[(halt)]ing.
  Pauses until @racket[n-expr] instants have passed where
  @racket[when-expr] evaluated to a true value.
 
-For example, this program emits @racket[S2] in the fifth instants; it pauses
+For example, this program emits @racket[S2] in the fifth instant; it pauses
  for three instants where @racket[S1] was present and two where it is not.
 @examples[
  #:label #f
@@ -116,12 +116,57 @@ For example, this program emits @racket[S2] in the fifth instants; it pauses
    (reaction
     (await-n (present? S1) 3)
     (emit S2)))
- (react! r)
- (react! r #:emit (list S1))
- (react! r)
- (react! r #:emit (list S1))
- (react! r #:emit (list S1))]
+ (eval:check (react! r) (hash))
+ (eval:check (react! r #:emit (list S1)) (hash S1 #t))
+ (eval:check (react! r) (hash S1 #f))
+ (eval:check (react! r #:emit (list S1)) (hash S1 #t))
+ (eval:check (react! r #:emit (list S1)) (hash S1 #t S2 #t))]
 
+}
+
+@defform*[[(every test-expr body-expr)
+           (every test-expr n-expr body-expr)]]{
+ In the first form, @racket[await]s @racket[test-expr] evaluating
+ to a true value and then starts running @racket[body-expr]; when
+ whenever @racket[test-expr] becomes true, restarts @racket[body-expr].
+ The second form is similar to the first, except that it waits for
+ @racket[test-expr] to be true @racket[n-expr] times before restarting
+ @racket[body-expr].
+
+ For example, this program emits @racket[S2] whenever @racket[S1] is present.
+ @examples[
+ #:label #f
+ #:eval esterel-eval
+ (define S1 (signal))
+ (define S2 (signal))
+ (define r1
+   (reaction
+    (every (present? S1)
+           (emit S2))))
+ (eval:check (react! r1) (hash))
+ (eval:check (react! r1 #:emit (list S1)) (hash S1 #t S2 #t))
+ (eval:check (react! r1 #:emit (list S1)) (hash S1 #t S2 #t))
+ (eval:check (react! r1) (hash S1 #f))
+ (eval:check (react! r1 #:emit (list S1)) (hash S1 #t S2 #t))
+ (eval:check (react! r1 #:emit (list S1)) (hash S1 #t S2 #t))
+ ]
+
+ Whereas, this program emits @racket[S2] every second time @racket[S1] is present.
+ @examples[
+ #:label #f
+ #:eval esterel-eval
+ (define r2
+   (reaction
+    (every (present? S1)
+           2
+           (emit S2))))
+ (react! r2)
+ (react! r2 #:emit (list S1))
+ (react! r2 #:emit (list S1))
+ (react! r2)
+ (react! r2 #:emit (list S1))
+ (react! r2 #:emit (list S1))
+ ]
 }
 
 @(close-eval esterel-eval)

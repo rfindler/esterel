@@ -119,6 +119,10 @@ Creates a new signal.
  
 }
 
+@defproc[(signal? [v any/c]) boolean?]{
+ Determines if @racket[v] is a signal, i.e. returned from @racket[signal].
+}
+
 @defproc[(signal-name [s signal?]) (or/c #f string?)]{
  Returns the name of a signal.
 
@@ -127,10 +131,6 @@ Creates a new signal.
  (define S (signal))
  (signal-name S)
  (signal-name (signal))]
-}
-
-@defproc[(signal? [v any/c]) boolean?]{
- Determines if @racket[v] is a signal, i.e. returned from @racket[signal].
 }
 
 @defproc[(signal-combine [s signal?]) (or/c #f (-> any/c any/c any/c))]{
@@ -214,10 +214,8 @@ Returns the value of @racket[s] in the current instant if @racket[pre] is @racke
         (emit S1 n))
       (pause)
       (loop (+ n 1)))))
- (react! r)
- (react! r)
- (react! r)
- (react! r)
+ (for/list ([i (in-range 5)])
+   (react! r))
  ]
 
 }
