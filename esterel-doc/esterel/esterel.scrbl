@@ -16,8 +16,8 @@ mixed with Esterel code and run from within a reaction.
 @table-of-contents[]
 
 @include-section["scribblings/overview.scrbl"]
-@include-section["scribblings/ref.scrbl"]
 @include-section["scribblings/kernel.scrbl"]
+@include-section["scribblings/ref.scrbl"]
 
 @index-section[]
 
