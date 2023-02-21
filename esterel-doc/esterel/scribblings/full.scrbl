@@ -2,16 +2,16 @@
 @(require scribble/manual)
 @title[#:tag "reference"]{Esterel Reference}
 
-@defmodule[esterel]
+@defmodule[esterel/full]
 
-The @racketmodname[esterel] library provides all of
+The @racketmodname[esterel/full] library provides all of
 the names documented here as well as the names documented
 in @racketmodname[esterel/kernel].
 
 @(require scribble/example
           (for-label racket/base
-                     esterel))
-@(define esterel-eval (make-base-eval '(require esterel)))
+                     esterel/full))
+@(define esterel-eval (make-base-eval '(require esterel/full)))
 
 @defproc[(halt) any/c]{
  Pauses in every instant, forever.

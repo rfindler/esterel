@@ -3,17 +3,17 @@
 @title[#:tag "kernel"]{Kernel Esterel Reference}
 
 @defmodule[esterel/kernel #:no-declare]
-@declare-exporting[esterel/kernel esterel]
+@declare-exporting[esterel/kernel esterel/full]
 
 The @racketmodname[esterel/kernel] and
-@racketmodname[esterel] libraries provide all of the names
-documented here; the @racketmodname[esterel] library
+@racketmodname[esterel/full] libraries provide all of the names
+documented here; the @racketmodname[esterel/full] library
 provides additional functionality.
 
 @(require scribble/example
           (for-label racket/base
-                     esterel))
-@(define esterel-eval (make-base-eval '(require esterel)))
+                     esterel/full))
+@(define esterel-eval (make-base-eval '(require esterel/full)))
 
 @section{Reactions}
 

@@ -1,8 +1,8 @@
 #lang scribble/doc
 @(require scribble/manual
           scribble/example
-          (for-label racket/base esterel))
-@(define esterel-eval (make-base-eval '(require esterel)))
+          (for-label racket/base esterel/full))
+@(define esterel-eval (make-base-eval '(require esterel/full)))
 
 @title{Esterel Semantics Overview}
 

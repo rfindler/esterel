@@ -1,5 +1,5 @@
 #lang racket/gui
-(require esterel)
+(require esterel/full)
 
 #|
 
