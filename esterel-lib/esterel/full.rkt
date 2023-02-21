@@ -1,10 +1,8 @@
 #lang racket/base
 (require "kernel.rkt"
          (for-syntax racket/base syntax/parse))
-(provide halt loop-each abort-when sustain
-         await
-         every every-immediate
-         weak-abort weak-abort-immediate
+(provide halt loop-each sustain await
+         every every-immediate abort
          (all-from-out "kernel.rkt"))
 
 (define (halt)
@@ -19,15 +17,6 @@
   (let loop ()
     (abort-when (begin (thunk) (halt)) (abort-thunk))
     (loop)))
-
-(define-syntax-rule
-  (abort-when p s)
-  (abort-when/proc (λ () p) (λ () s)))
-(define (abort-when/proc body-thunk when-thunk)
-  (with-trap T-abort-when.1
-    (with-trap T-abort-when.2
-      (par (begin (suspend (body-thunk) (when-thunk)) (exit-trap T-abort-when.1))
-           (begin (await (when-thunk)) (exit-trap T-abort-when.2))))))
 
 (define-syntax (await stx)
   (syntax-parse stx
@@ -100,6 +89,25 @@
     (emit s)
     (pause)
     (loop)))
+
+(define-syntax (abort stx)
+  (syntax-parse stx
+    [(_ body:expr ...+ #:when test:expr)
+     #'(abort-when/proc (λ () body ...) (λ () test))]
+    [(_ #:weak body:expr ...+ #:when test:expr)
+     #'(weak-abort/proc (λ () test) (λ () body ...))]
+    [(_ #:weak body:expr ...+ #:when-immediate test:expr)
+     #'(weak-abort-immediate/proc (λ () test) (λ () body ...))]))
+
+
+(define-syntax-rule
+  (abort-when p s)
+  (abort-when/proc (λ () p) (λ () s)))
+(define (abort-when/proc body-thunk when-thunk)
+  (with-trap T-abort-when.1
+    (with-trap T-abort-when.2
+      (par (begin (suspend (body-thunk) (when-thunk)) (exit-trap T-abort-when.1))
+           (begin (await (when-thunk)) (exit-trap T-abort-when.2))))))
 
 (define-syntax-rule
   (weak-abort test-expr expr1 expr2 ...)

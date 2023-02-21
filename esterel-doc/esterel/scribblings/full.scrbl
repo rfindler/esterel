@@ -44,11 +44,19 @@ Starts by running @racket[body-expr] and then @racket[halt]ing.
  ]
 }
 
-@defform[(abort-when body-expr when-expr)]{
+@defform*[[(abort body-expr ...+ #:when when-expr)
+           (abort #:weak body-expr ...+ #:when when-expr)
+           (abort #:weak body-expr ...+ #:when-immediate when-expr)]]{
 
- Terminates when @racket[body-expr] terminates or, after the
- first instant in @racket[body-expr], aborts when
- @racket[when-expr] returns a true value.
+ Terminates when @racket[body-expr] terminates or when @racket[when-expr]
+ returns a true value. If @racket[#:weak] is present, the
+ @racket[body-expr]s are executed when @racket[when-expr] is true; they
+ are skipped if @racket[#:weak] is not present. If @racket[#:when] is
+ used, the @racket[body-expr]s are executed at least once and the
+ @racket[abort] runs for at least one instant; if @racket[#:when-immediate]
+ is used, the @racket[when-expr] is tested in the first instant and
+ the expression terminates in the first instant if @racket[when-expr]
+ returns a true value.
 
  For example, this repeatedly emits @racket[S1] until
  @racket[S2] is present, in which case the entire loop
@@ -59,20 +67,57 @@ Starts by running @racket[body-expr] and then @racket[halt]ing.
  (define S1 (signal))
  (define S2 (signal))
  (define S3 (signal))
- (define r
+ (define r1
    (reaction
-    (abort-when (let loop ()
-                  (emit S1)
-                  (pause)
-                  (loop))
-                (present? S2))
+    (abort (let loop ()
+             (emit S1)
+             (pause)
+             (loop))
+           #:when (present? S2))
     (emit S3)))
- (eval:check (react! r) (hash S1 #t))
- (eval:check (react! r) (hash S1 #t S2 #f))
- (eval:check (react! r) (hash S1 #t S2 #f))
- (eval:check (react! r) (hash S1 #t S2 #f))
- (eval:check (react! r #:emit (list S2)) (hash S3 #t S2 #t))
+ (eval:check (react! r1) (hash S1 #t))
+ (eval:check (react! r1) (hash S1 #t S2 #f))
+ (eval:check (react! r1) (hash S1 #t S2 #f))
+ (eval:check (react! r1) (hash S1 #t S2 #f))
+ (eval:check (react! r1 #:emit (list S2)) (hash S3 #t S2 #t))
  ]
+
+ If @racket[S2] had been present in the first instant, that program
+ would not have terminated in the first instant, but in the second:
+
+ @examples[
+ #:label #f
+ #:eval esterel-eval
+ (define r2
+   (reaction
+    (abort (let loop ()
+             (emit S1)
+             (pause)
+             (loop))
+           #:when (present? S2))
+    (emit S3)))
+ (eval:check (react! r2 #:emit (list S2)) (hash S2 #t S1 #t))
+ (eval:check (react! r2 #:emit (list S2)) (hash S2 #t S3 #t))
+ ]
+
+ To terminate in the first instant, use @racket[#:when-immediate], so that
+ the @racket[test-expr] is evaluated in the first instant
+ @examples[
+ #:label #f
+ #:eval esterel-eval
+ (define r3
+   (reaction
+    (abort #:weak
+           (let loop ()
+             (emit S1)
+             (pause)
+             (loop))
+           #:when-immediate (present? S2))
+    (emit S3)))
+ (eval:check (react! r3 #:emit (list S2)) (hash S1 #t S2 #t S3 #t))
+ ]
+ but note that @racket[#:when-immediate] requires @racket[#:weak], so
+ @racket[S1] is also emitted.
 }
 
 @defform*[[(await when-expr)

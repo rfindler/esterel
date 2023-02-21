@@ -93,11 +93,11 @@
        (for ([i (in-range n)])
          (await (present? (hash-ref signals s))))]
       [`(abort& pre& ,s ,body1 ,body2 ...)
-       (abort-when (loop `(seq& ,body1 ,@body2) signals traps)
-                   (present? (hash-ref signals s) #:pre 1))]
+       (abort (loop `(seq& ,body1 ,@body2) signals traps)
+              #:when (present? (hash-ref signals s) #:pre 1))]
       [`(abort& ,s ,body1 ,body2 ...)
-       (abort-when (loop `(seq& ,body1 ,@body2) signals traps)
-                   (present? (hash-ref signals s)))]
+       (abort (loop `(seq& ,body1 ,@body2) signals traps)
+              #:when (present? (hash-ref signals s)))]
       [`(emit& ,s) (emit (hash-ref signals s))]
       [`(present& ,s ,thn ,els) (if (present? (hash-ref signals s))
                                     (loop thn signals traps)
@@ -120,12 +120,13 @@
       [`(exit& ,t) (exit-trap (hash-ref traps t))]
       [`(sustain& ,s) (sustain (hash-ref signals s))]
       [`(weak-abort& ,s ,e1 ,e2 ...)
-       (weak-abort (present? (hash-ref signals s))
-                   (for ([e (in-list (cons e1 e2))])
-                     (loop e signals traps)))]
+       (abort #:weak
+              (for ([e (in-list (cons e1 e2))])
+                (loop e signals traps))
+              #:when (present? (hash-ref signals s)))]
       [`(weak-abort-immediate& ,s ,e1 ,e2 ...)
-       (weak-abort-immediate
-        (present? (hash-ref signals s))
-        (for ([e (in-list (cons e1 e2))])
-          (loop e signals traps)))]
+       (abort #:weak
+              (for ([e (in-list (cons e1 e2))])
+                (loop e signals traps))
+              #:when-immediate (present? (hash-ref signals s)))]
       )))
