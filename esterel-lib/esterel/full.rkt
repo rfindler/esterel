@@ -1,8 +1,8 @@
 #lang racket/base
 (require "kernel.rkt"
-         (for-syntax racket/base))
+         (for-syntax racket/base syntax/parse))
 (provide halt loop-each abort-when sustain
-         await await-immediate await-n
+         await await-immediate
          every every-immediate
          weak-abort weak-abort-immediate
          (all-from-out "kernel.rkt"))
@@ -29,9 +29,13 @@
       (par (begin (suspend (body-thunk) (when-thunk)) (exit-trap T-abort-when.1))
            (begin (await (when-thunk)) (exit-trap T-abort-when.2))))))
 
-(define-syntax-rule
-  (await e)
-  (await/proc (λ () e)))
+(define-syntax (await stx)
+  (syntax-parse stx
+    [(_ e:expr (~optional (~seq #:n n:expr)))
+     (if (attribute n)
+         #'(await-n/proc (λ () e) n)
+         #'(await/proc (λ () e)))]))
+
 (define (await/proc thunk)
   (with-trap T-await
     (let loop ()

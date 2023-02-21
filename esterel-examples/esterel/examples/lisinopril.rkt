@@ -95,7 +95,7 @@ by Berry and Serrano, PLDI 2020
   (emit Active-true)
   (emit Alert-false)
   (abort-when (begin
-                (await-n (present? tick) d)
+                (await (present? tick) #:n d)
                 (let loop ()
                   (when (present? tick)
                     (emit Alert-true))
@@ -150,11 +150,11 @@ by Berry and Serrano, PLDI 2020
               (emit record-dose)
               (exit-trap dose-ok))
             (begin
-              (await-n tick (- max-dose-interval min-dose-interval))
+              (await tick #:n (- max-dose-interval min-dose-interval))
               (sustain no-dose-since-too-long-error))))
      (with-trap delay-passed
        (par (every try (emit try-too-close-error))
-            (begin (await-n tick min-dose-interval)
+            (begin (await tick #:n min-dose-interval)
                    (exit-trap delay-passed))))
      (loop))))
 

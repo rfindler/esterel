@@ -75,8 +75,13 @@ Starts by running @racket[body-expr] and then @racket[halt]ing.
  ]
 }
 
-@defform[(await for-expr)]{
- Pauses until @racket[for-expr] returns a true value, but at least one instant.
+@defform*[[(await when-expr)
+           (await when-expr #:n n-expr)]]{
+
+ In the first form, @racket[pause]s until @racket[when-expr]
+ returns a true value, but at least one instant. In the
+ second form, @racket[pause] until @racket[when-expr] returns
+ a true value @racket[n-expr] times.
 
  For example, this program waits two instants before
  emitting @racket[S1]. When that happens, the @racket[await]
@@ -98,15 +103,12 @@ Starts by running @racket[body-expr] and then @racket[halt]ing.
  (eval:check (react! r) (hash))
  (eval:check (react! r) (hash S1 #f))
  (eval:check (react! r) (hash S1 #t S2 #t))]
-}
 
-@defform[(await-n when-expr n-expr)]{
+ As an example of the second form, this program emits
+ @racket[S2] in the fifth instant; it pauses for three
+ instants where @racket[S1] was present and two where it is
+ not.
 
- Pauses until @racket[n-expr] instants have passed where
- @racket[when-expr] evaluated to a true value.
-
-For example, this program emits @racket[S2] in the fifth instant; it pauses
- for three instants where @racket[S1] was present and two where it is not.
 @examples[
  #:label #f
  #:eval esterel-eval
@@ -114,7 +116,7 @@ For example, this program emits @racket[S2] in the fifth instant; it pauses
  (define S2 (signal))
  (define r
    (reaction
-    (await-n (present? S1) 3)
+    (await (present? S1) #:n 3)
     (emit S2)))
  (eval:check (react! r) (hash))
  (eval:check (react! r #:emit (list S1)) (hash S1 #t))
