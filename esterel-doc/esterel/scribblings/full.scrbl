@@ -76,12 +76,15 @@ Starts by running @racket[body-expr] and then @racket[halt]ing.
 }
 
 @defform*[[(await when-expr)
-           (await when-expr #:n n-expr)]]{
+           (await when-expr #:n n-expr)
+           (await #:immediate when-expr)]]{
 
  In the first form, @racket[pause]s until @racket[when-expr]
  returns a true value, but at least one instant. In the
  second form, @racket[pause] until @racket[when-expr] returns
- a true value @racket[n-expr] times.
+ a true value @racket[n-expr] times. In the third form,
+ the value of @racket[when-expr] is tested in the first instant,
+ and thus the @racket[await] might terminate immediately.
 
  For example, this program waits two instants before
  emitting @racket[S1]. When that happens, the @racket[await]
@@ -109,7 +112,7 @@ Starts by running @racket[body-expr] and then @racket[halt]ing.
  instants where @racket[S1] was present and two where it is
  not.
 
-@examples[
+ @examples[
  #:label #f
  #:eval esterel-eval
  (define S1 (signal))
@@ -123,6 +126,20 @@ Starts by running @racket[body-expr] and then @racket[halt]ing.
  (eval:check (react! r) (hash S1 #f))
  (eval:check (react! r #:emit (list S1)) (hash S1 #t))
  (eval:check (react! r #:emit (list S1)) (hash S1 #t S2 #t))]
+
+ As an example of the third form, this program emits @racket[O] in the first
+ instant, as both of the @racket[await]s terminate in the first reaction.
+ @examples[
+ #:label #f
+ #:eval esterel-eval
+ (define S (signal))
+ (define O (signal))
+ (define r (reaction
+            (await #:immediate (not (present? S)))
+            (await #:immediate (not (present? S)))
+            (emit O)))
+ (eval:check (react! r) (hash S #f O #t))
+ ]
 
 }
 

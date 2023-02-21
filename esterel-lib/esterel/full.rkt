@@ -2,7 +2,7 @@
 (require "kernel.rkt"
          (for-syntax racket/base syntax/parse))
 (provide halt loop-each abort-when sustain
-         await await-immediate
+         await
          every every-immediate
          weak-abort weak-abort-immediate
          (all-from-out "kernel.rkt"))
@@ -34,7 +34,9 @@
     [(_ e:expr (~optional (~seq #:n n:expr)))
      (if (attribute n)
          #'(await-n/proc (λ () e) n)
-         #'(await/proc (λ () e)))]))
+         #'(await/proc (λ () e)))]
+    [(_ #:immediate e:expr)
+     #'(await-immediate/proc (λ () e))]))
 
 (define (await/proc thunk)
   (with-trap T-await
@@ -44,9 +46,6 @@
         (exit-trap T-await))
       (loop))))
 
-(define-syntax-rule
-  (await-n when-expr n-expr)
-  (await-n/proc (λ () when-expr) n-expr))
 (define (await-n/proc thunk n)
   (suspend
    (repeat n (λ () (pause)))
@@ -59,10 +58,6 @@
       (if (> n 0)
           (begin (thunk) (loop (- n 1)))
           (exit-trap T)))))
-
-(define-syntax-rule
-  (await-immediate test-expr)
-  (await-immediate/proc (λ () test-expr)))
 
 (define (await-immediate/proc test-thunk)
   (with-trap T-await-immediate
@@ -86,7 +81,7 @@
 (define (every-n/proc test-thunk n body-thunk)
   (define every-n (signal))
   (par (let loop ()
-         (await-n (test-thunk) n)
+         (await (test-thunk) #:n n)
          (emit every-n)
          (loop))
        (every (present? every-n) (body-thunk))))
@@ -95,7 +90,7 @@
   (every-immediate t p)
   (every-immediate/proc (λ () t) (λ () p)))
 (define (every-immediate/proc test-thunk body-thunk)
-  (await-immediate (test-thunk))
+  (await #:immediate (test-thunk))
   (loop-each
    (body-thunk)
    (test-thunk)))
@@ -113,7 +108,7 @@
 (define (weak-abort/proc signal body)
   (with-trap T-weak-abort
     (par (begin (body) (exit-trap T-weak-abort))
-         (begin (await-immediate (present? signal)) (exit-trap T-weak-abort)))))
+         (begin (await #:immediate (present? signal)) (exit-trap T-weak-abort)))))
 
 (define-syntax-rule
   (weak-abort-immediate signal expr1 expr2 ...)
@@ -122,4 +117,4 @@
 (define (weak-abort-immediate/proc signal body)
   (with-trap T-weak-abort-immediate
     (par (begin (body) (exit-trap T-weak-abort-immediate))
-         (begin (await-immediate (present? signal)) (exit-trap T-weak-abort-immediate)))))
+         (begin (await #:immediate (present? signal)) (exit-trap T-weak-abort-immediate)))))
