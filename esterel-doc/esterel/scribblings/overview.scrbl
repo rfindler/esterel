@@ -7,7 +7,7 @@
 @title{Esterel Semantics Overview}
 
 Esterel is a synchronous reactive programming language. It
-has imperative features combined with parallelism, but
+has imperative features combined with parallelism and aborts, but
 Esterel is deterministic, with every program guaranteed to
 produce its particular result no matter how thread
 interleaving happens. In Esterel, a program consists of a
@@ -36,9 +36,11 @@ conditional and emits @racket[O2].
                 (emit O1)
                 (emit O2))))]
 
-We can see the effect of @racket[S] not being emitted and
-@racket[O2] being emitted in the value that @racket[react!]
-returns.
+The result of @racket[react!] is a hash that tells us
+whether the signals used in this instant were present or
+not. So, we can see the effect of @racket[S] not being
+emitted and @racket[O2] being emitted because the hash maps
+@racket[S] to @racket[#f] and @racket[O2] to @racket[#t].
 
 To enter into Esterel computation, we used
 @racket[reaction]. Signals and tests for their presence are
@@ -60,7 +62,7 @@ other branch:
 
 Esterel's construct for parallelism is called @racket[par].
 It accepts an arbitrary number of sub-expressions and runs
-them in parallel with each other. But, Esterel's notion of
+them all in parallel with each other. But, Esterel's notion of
 parallelism is deterministic, this program is guaranteed to
 behave as the previous one, always emitting @racket[O1] and
 never emitting @racket[O2], even though the test for
@@ -81,11 +83,19 @@ understanding of the two parallel branches of this
 another way to think of them is that there is no causality
 relationship between the two evaluations and thus Esterel is
 free to run them however it wants, subject to other
-causality dependencies being obeyed. In this program, there
-is a causality dependency introduced between the
-@racket[(emit S)] and the @racket[(present? S)].
-Specifically, the emit @emph{causes} the call to
-@racket[present?] to return @racket[#true] and therefore
-therefore we can take only the branch that does
-@racket[(emit O1)] and not the one that does
-@racket[(emit O2)].
+causality dependencies being obeyed. In other words, to
+Esterel, the difference between combining two expression in
+parallel or sequentially is that combining them sequentially
+forces a causality ordering on them, but combining them in
+parallel does not.
+
+Even though @racket[par] did not introduce a causal
+dependency in this program, there still is a causality
+dependency introduced. Specifically, each use of
+@racket[emit] introduces a causality dependency between it
+and any uses of @racket[present?] (for the same signal). So,
+in this program, @racket[(emit S)] @emph{causes}
+the call @racket[(present? #t)] to return @racket[#true] and
+therefore therefore we can take only the branch that emits
+@racket[O1] and not the one that emits
+@racket[O2].
