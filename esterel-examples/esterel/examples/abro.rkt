@@ -16,29 +16,20 @@ given in figure 1.2
 
 (define abro
   (reaction
-   (par (loop-each
-         (begin (par (await (present? A))
-                     (await (present? B)))
-                (emit O))
-         (present? R))
-        (begin
-          #;0 (pause)
-          #;1 (emit A) (emit B) (pause)
-          #;2 (emit A) (pause)
-          #;3 (emit R) (pause)
-          #;4 (emit A) (pause)
-          #;5 (emit B) (pause)
-          #;6 (emit A) (emit B) (emit R) (pause)
-          ))))
+   (loop (par (await (present? A))
+              (await (present? B)))
+         (emit O)
+         #:each (present? R))))
 
-(define (react/o?)
-  (hash-ref (react! abro) O #f))
-(require rackunit)
+(module+ test
+  (define (react/o? #:emit [signals '()])
+    (hash-ref (react! abro #:emit signals) O #f))
+  (require rackunit)
 
-(check-equal? (react/o?) #f) ;; 0
-(check-equal? (react/o?) #t) ;; 1
-(check-equal? (react/o?) #f) ;; 2
-(check-equal? (react/o?) #f) ;; 3
-(check-equal? (react/o?) #f) ;; 4
-(check-equal? (react/o?) #t) ;; 5
-(check-equal? (react/o?) #f) ;; 6
+  (check-equal? (react/o?)                     #f)
+  (check-equal? (react/o? #:emit (list A B))   #t)
+  (check-equal? (react/o? #:emit (list A))     #f)
+  (check-equal? (react/o? #:emit (list R))     #f)
+  (check-equal? (react/o? #:emit (list A))     #f)
+  (check-equal? (react/o? #:emit (list B))     #t)
+  (check-equal? (react/o? #:emit (list A B R)) #f))

@@ -73,10 +73,10 @@
              traps)]
       [`(seq& ,es ...) (for ([e (in-list es)]) (loop e signals traps))]
       [`(loop-each& ,r ,e1 ,e2s ...)
-       (loop-each
+       (loop
         (for ([e (in-list (cons e1 e2s))])
           (loop e signals traps))
-        (present? (hash-ref signals r)))]
+        #:each (present? (hash-ref signals r)))]
       [`(loop& ,e1 ,e2s ...)
        (let loop-loop ()
          (for ([e (in-list (cons e1 e2s))])

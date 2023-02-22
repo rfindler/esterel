@@ -17,9 +17,11 @@ in @racketmodname[esterel/kernel].
  Pauses in every instant, forever.
 }
 
-@defform[(loop-each body-expr test-expr)]{
+@defform*[[(loop body-expr ...+)
+           (loop body-expr ...+ #:each test-expr)]]{
 
-Starts by running @racket[body-expr] and then @racket[halt]ing.
+In the first form, runs @racket[body-expr] over and over.
+In the second form, starts by running @racket[body-expr] and then @racket[halt]ing.
  Restarts @racket[body-expr] when @racket[test-expr] becomes true.
 
  For example, this program emits @racket[S1] in every instant that @racket[S2] is
@@ -31,9 +33,8 @@ Starts by running @racket[body-expr] and then @racket[halt]ing.
  (define S2 (signal))
  (define r
    (reaction
-    (loop-each
-     (emit S1)
-     (not (present? S2)))))
+    (loop (emit S1)
+          #:each (not (present? S2)))))
 
  (eval:check (react! r) (hash S1 #t))
  (eval:check (react! r) (hash S1 #t S2 #f))

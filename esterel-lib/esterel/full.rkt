@@ -1,7 +1,7 @@
 #lang racket/base
 (require "kernel.rkt"
          (for-syntax racket/base syntax/parse))
-(provide halt loop-each sustain await
+(provide halt loop sustain await
          every every-immediate abort
          (all-from-out "kernel.rkt"))
 
@@ -10,12 +10,19 @@
     (pause)
     (loop)))
 
-(define-syntax-rule
-  (loop-each p s)
-  (loop-each/proc (λ () p) (λ () s)))
+(define-syntax (loop stx)
+  (syntax-parse stx
+    [(_ p:expr ...+ #:each s:expr)
+     #'(loop-each/proc (λ () p ...) (λ () s))]
+    [(_ p:expr ...+)
+     #'(loop/proc (λ () p ...))]))
 (define (loop-each/proc thunk abort-thunk)
   (let loop ()
-    (abort-when (begin (thunk) (halt)) (abort-thunk))
+    (abort (thunk) (halt) #:when (abort-thunk))
+    (loop)))
+(define (loop/proc thunk)
+  (let loop ()
+    (thunk)
     (loop)))
 
 (define-syntax (await stx)
@@ -57,15 +64,17 @@
       (loop))))
 
 (define-syntax (every stx)
-  (syntax-case stx ()
-    [(_ s p) #'(every/proc (λ () s) (λ () p))]
-    [(_ s n p) #'(every-n/proc (λ () s) n (λ () p))]))
+  (syntax-parse stx
+    [(_ s p)
+     #'(every/proc (λ () s) (λ () p))]
+    [(_ s n p)
+     #'(every-n/proc (λ () s) n (λ () p))]))
 
 (define (every/proc test-thunk body-thunk)
   (await (test-thunk))
-  (loop-each
+  (loop
    (body-thunk)
-   (test-thunk)))
+   #:each (test-thunk)))
 
 (define (every-n/proc test-thunk n body-thunk)
   (define every-n (signal))
@@ -80,9 +89,9 @@
   (every-immediate/proc (λ () t) (λ () p)))
 (define (every-immediate/proc test-thunk body-thunk)
   (await #:immediate (test-thunk))
-  (loop-each
+  (loop
    (body-thunk)
-   (test-thunk)))
+   #:each (test-thunk)))
 
 (define (sustain s)
   (let loop ()
@@ -99,28 +108,17 @@
     [(_ #:weak body:expr ...+ #:when-immediate test:expr)
      #'(weak-abort-immediate/proc (λ () test) (λ () body ...))]))
 
-
-(define-syntax-rule
-  (abort-when p s)
-  (abort-when/proc (λ () p) (λ () s)))
 (define (abort-when/proc body-thunk when-thunk)
   (with-trap T-abort-when.1
     (with-trap T-abort-when.2
       (par (begin (suspend (body-thunk) (when-thunk)) (exit-trap T-abort-when.1))
-           (begin (await (when-thunk)) (exit-trap T-abort-when.2))))))
-
-(define-syntax-rule
-  (weak-abort test-expr expr1 expr2 ...)
-  (weak-abort/proc (λ () test-expr) (λ () expr1 expr2 ...)))
+           (begin (await (when-thunk))
+                  (exit-trap T-abort-when.2))))))
 
 (define (weak-abort/proc test body)
   (with-trap T-weak-abort
     (par (begin (body) (exit-trap T-weak-abort))
          (begin (await #:immediate (test)) (exit-trap T-weak-abort)))))
-
-(define-syntax-rule
-  (weak-abort-immediate test-expr expr1 expr2 ...)
-  (weak-abort-immediate/proc (λ () test-expr) (λ () expr1 expr2 ...)))
 
 (define (weak-abort-immediate/proc test body)
   (with-trap T-weak-abort-immediate
