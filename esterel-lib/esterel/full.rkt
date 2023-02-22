@@ -1,8 +1,7 @@
 #lang racket/base
 (require "kernel.rkt"
          (for-syntax racket/base syntax/parse))
-(provide halt loop sustain await
-         every every-immediate abort
+(provide halt loop abort sustain await every
          (all-from-out "kernel.rkt"))
 
 (define (halt)
@@ -65,10 +64,12 @@
 
 (define-syntax (every stx)
   (syntax-parse stx
-    [(_ s p)
-     #'(every/proc (λ () s) (λ () p))]
-    [(_ s n p)
-     #'(every-n/proc (λ () s) n (λ () p))]))
+    [(_ s #:do p ...+)
+     #'(every/proc (λ () s) (λ () p ...))]
+    [(_ s #:n n #:do p ...+)
+     #'(every-n/proc (λ () s) n (λ () p ...))]
+    [(_ #:immediate s #:do p ...+)
+     #'(every-immediate/proc (λ () s) (λ () p ...))]))
 
 (define (every/proc test-thunk body-thunk)
   (await (test-thunk))
@@ -82,11 +83,8 @@
          (await (test-thunk) #:n n)
          (emit every-n)
          (loop))
-       (every (present? every-n) (body-thunk))))
+       (every (present? every-n) #:do (body-thunk))))
 
-(define-syntax-rule
-  (every-immediate t p)
-  (every-immediate/proc (λ () t) (λ () p)))
 (define (every-immediate/proc test-thunk body-thunk)
   (await #:immediate (test-thunk))
   (loop

@@ -17,6 +17,21 @@ in @racketmodname[esterel/kernel].
  Pauses in every instant, forever.
 }
 
+@defproc[(sustain [s signal?]) any/c]{
+ Emits @racket[S] an pauses in every instant, forever.
+
+ @examples[
+ #:eval esterel-eval
+ (define S (signal))
+ (define r
+   (reaction
+    (sustain S)))
+ (eval:check (react! r) (hash S #t))
+ (eval:check (react! r) (hash S #t))
+ (eval:check (react! r) (hash S #t))
+ ]
+}
+
 @defform*[[(loop body-expr ...+)
            (loop body-expr ...+ #:each test-expr)]]{
 
@@ -189,14 +204,17 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
 
 }
 
-@defform*[[(every test-expr body-expr)
-           (every test-expr n-expr body-expr)]]{
+@defform*[[(every test-expr #:do body-expr ...+)
+           (every test-expr #:n n-expr #:do body-expr ...+)
+           (every #:immediate test-expr #:do body-expr ...+)]]{
  In the first form, @racket[await]s @racket[test-expr] evaluating
- to a true value and then starts running @racket[body-expr]; when
+ to a true value and then starts running the @racket[body-expr]s; when
  whenever @racket[test-expr] becomes true, restarts @racket[body-expr].
  The second form is similar to the first, except that it waits for
  @racket[test-expr] to be true @racket[n-expr] times before restarting
- @racket[body-expr].
+ @racket[body-expr]. In the third form, if @racket[test-expr] evaluates
+ to a true value in the current instant, the @racket[body-expr]s are evaluated
+ in the current instant.
 
  For example, this program emits @racket[S2] whenever @racket[S1] is present.
  @examples[
@@ -207,8 +225,9 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  (define r1
    (reaction
     (every (present? S1)
+           #:do
            (emit S2))))
- (eval:check (react! r1) (hash))
+ (eval:check (react! r1 #:emit (list S1)) (hash S1 #t))
  (eval:check (react! r1 #:emit (list S1)) (hash S1 #t S2 #t))
  (eval:check (react! r1 #:emit (list S1)) (hash S1 #t S2 #t))
  (eval:check (react! r1) (hash S1 #f))
@@ -223,9 +242,28 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  (define r2
    (reaction
     (every (present? S1)
-           2
+           #:n 2
+           #:do
            (emit S2))))
+ (react! r2 #:emit (list S1))
+ (react! r2 #:emit (list S1))
+ (react! r2 #:emit (list S1))
  (react! r2)
+ (react! r2 #:emit (list S1))
+ (react! r2 #:emit (list S1))
+ ]
+
+ When using @racket[#:immediate], we can emit @racket[S2] in the first instant.
+ @examples[
+ #:label #f
+ #:eval esterel-eval
+ (define r2
+   (reaction
+    (every (present? S1)
+           #:n 2
+           #:do
+           (emit S2))))
+ (react! r2 #:emit (list S1))
  (react! r2 #:emit (list S1))
  (react! r2 #:emit (list S1))
  (react! r2)

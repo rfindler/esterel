@@ -57,76 +57,76 @@
            (escape (void)))))]))
 
 (define (&->dyn expr signals)
-  (let loop ([expr expr]
-             [signals signals]
-             [traps (hash)])
+  (let reactor->esterel ([expr expr]
+                         [signals signals]
+                         [traps (hash)])
     (match expr
       [`(signal& ,(? symbol? s) ,body1 ,body2 ...)
-       (loop `(signal& (,s) ,body1 ,@body2)
-             signals
-             traps)]
+       (reactor->esterel `(signal& (,s) ,body1 ,@body2)
+                         signals
+                         traps)]
       [`(signal& (,(? symbol? signal-syms) ...) ,body1 ,body2 ...)
-       (loop `(seq& ,body1 ,@body2)
-             (for/fold ([signals signals])
-                       ([s (in-list signal-syms)])
-               (hash-set signals s (signal #:name s)))
-             traps)]
-      [`(seq& ,es ...) (for ([e (in-list es)]) (loop e signals traps))]
+       (reactor->esterel `(seq& ,body1 ,@body2)
+                         (for/fold ([signals signals])
+                                   ([s (in-list signal-syms)])
+                           (hash-set signals s (signal #:name s)))
+                         traps)]
+      [`(seq& ,es ...) (for ([e (in-list es)]) (reactor->esterel e signals traps))]
       [`(loop-each& ,r ,e1 ,e2s ...)
        (loop
         (for ([e (in-list (cons e1 e2s))])
-          (loop e signals traps))
+          (reactor->esterel e signals traps))
         #:each (present? (hash-ref signals r)))]
       [`(loop& ,e1 ,e2s ...)
        (let loop-loop ()
          (for ([e (in-list (cons e1 e2s))])
-           (loop e signals traps))
+           (reactor->esterel e signals traps))
          (loop-loop))]
       [`(par& ,es ...)
        (let p-loop ([es es])
          (cond
-           [(null? (cdr es)) (loop (car es) signals traps)]
-           [else (par (loop (car es) signals traps)
+           [(null? (cdr es)) (reactor->esterel (car es) signals traps)]
+           [else (par (reactor->esterel (car es) signals traps)
                       (p-loop (cdr es)))]))]
       [`(await& ,s) (await (present? (hash-ref signals s)))]
       [`(await& ,(? natural? n) ,s)
        (for ([i (in-range n)])
          (await (present? (hash-ref signals s))))]
       [`(abort& pre& ,s ,body1 ,body2 ...)
-       (abort (loop `(seq& ,body1 ,@body2) signals traps)
+       (abort (reactor->esterel `(seq& ,body1 ,@body2) signals traps)
               #:when (present? (hash-ref signals s) #:pre 1))]
       [`(abort& ,s ,body1 ,body2 ...)
-       (abort (loop `(seq& ,body1 ,@body2) signals traps)
+       (abort (reactor->esterel `(seq& ,body1 ,@body2) signals traps)
               #:when (present? (hash-ref signals s)))]
       [`(emit& ,s) (emit (hash-ref signals s))]
       [`(present& ,s ,thn ,els) (if (present? (hash-ref signals s))
-                                    (loop thn signals traps)
-                                    (loop els signals traps))]
+                                    (reactor->esterel thn signals traps)
+                                    (reactor->esterel els signals traps))]
       [`(present& pre& ,s ,thn ,els) (if (present? (hash-ref signals s) #:pre 1)
-                                         (loop thn signals traps)
-                                         (loop els signals traps))]
+                                         (reactor->esterel thn signals traps)
+                                         (reactor->esterel els signals traps))]
       [`(suspend& ,s ,body1 ,body2 ...)
-       (suspend (loop `(seq& ,body1 ,@body2) signals traps)
+       (suspend (reactor->esterel `(seq& ,body1 ,@body2) signals traps)
                 (present? (hash-ref signals s)))]
       [`pause& (pause)]
       [`nothing& (void)]
       [`halt& (halt)]
       [`(await-immediate& ,i) (await #:immediate (present? (hash-ref signals i)))]
-      [`(every& ,(? symbol? s) ,body) (every (present? (hash-ref signals s)) (loop body signals traps))]
+      [`(every& ,(? symbol? s) ,body) (every (present? (hash-ref signals s)) #:do (reactor->esterel body signals traps))]
       [`(every& (,(? natural? n) ,(? symbol? s)) ,body)
-       (every (present? (hash-ref signals s)) n (loop body signals traps))]
-      [`(every& ,s #:immediate ,body) (every-immediate (present? (hash-ref signals s)) (loop body signals traps))]
-      [`(trap& ,t ,body) (with-trap T (loop body signals (hash-set traps t T)))]
+       (every (present? (hash-ref signals s)) #:n n #:do (reactor->esterel body signals traps))]
+      [`(every& ,s #:immediate ,body) (every #:immediate (present? (hash-ref signals s)) #:do (reactor->esterel body signals traps))]
+      [`(trap& ,t ,body) (with-trap T (reactor->esterel body signals (hash-set traps t T)))]
       [`(exit& ,t) (exit-trap (hash-ref traps t))]
       [`(sustain& ,s) (sustain (hash-ref signals s))]
       [`(weak-abort& ,s ,e1 ,e2 ...)
        (abort #:weak
               (for ([e (in-list (cons e1 e2))])
-                (loop e signals traps))
+                (reactor->esterel e signals traps))
               #:when (present? (hash-ref signals s)))]
       [`(weak-abort-immediate& ,s ,e1 ,e2 ...)
        (abort #:weak
               (for ([e (in-list (cons e1 e2))])
-                (loop e signals traps))
+                (reactor->esterel e signals traps))
               #:when-immediate (present? (hash-ref signals s)))]
       )))

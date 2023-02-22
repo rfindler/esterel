@@ -2,10 +2,10 @@
 (require esterel/full)
 
 (define (Aux I O)
-  (every-immediate
-   I
-   (begin (pause)
-          (emit O))))
+  (every #:immediate (present? I)
+         #:do
+         (pause)
+         (emit O)))
 
 (define S1 (signal))
 (define S2 (signal))
@@ -48,9 +48,11 @@ end module
 (module+ main
   (define N 100)
   (for ([i (in-range N)])
-    (unless (equal? (react! r)
+    (define signals (react! r))
+    (unless (equal? signals
                     (hash S1 (even? i)
                           S2 (odd? i)))
-      (error 'ok.rkt "program is not ok")))
+      (error 'ok.rkt
+             "program is not ok\n  i: ~e\n  signals: ~e"
+             i signals)))
   (printf "ok was ok for ~a iterations\n" N))
-

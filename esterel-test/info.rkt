@@ -5,7 +5,8 @@
 (define deps '("base"
                "esterel-lib" "rackunit-lib"
                "parser-tools-lib"
-               "html-parsing" "html-lib"))
+               "html-parsing" "html-lib"
+               "racket-index"))
 
 (define pkg-desc "Tests for the Esterel implementation in Racket")
 

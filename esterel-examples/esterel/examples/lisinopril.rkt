@@ -152,7 +152,7 @@ by Berry and Serrano, PLDI 2020
               (await tick #:n (- max-dose-interval min-dose-interval))
               (sustain no-dose-since-too-long-error))))
      (with-trap delay-passed
-       (par (every try (emit try-too-close-error))
+       (par (every try #:do (emit try-too-close-error))
             (begin (await tick #:n min-dose-interval)
                    (exit-trap delay-passed))))
      (loop))))
