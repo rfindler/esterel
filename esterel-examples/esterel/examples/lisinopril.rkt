@@ -192,5 +192,7 @@ by Berry and Serrano, PLDI 2020
   (send messages set-label msg))
 
 
-(send f show #t)
-;(send timer start 333)
+(module+ main
+  (send f show #t)
+  ;(send timer start 333)
+  )
