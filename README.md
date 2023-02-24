@@ -16,3 +16,7 @@ Or, using the command-line
 ```sh
 raco pkg install esterel
 ```
+
+## Documentation
+
+The documentation is available locally after installation via DrRacket's help menu (search for "Esterel") or via the command-line (run `raco docs esterel`). The documentation is [also available online](https://docs.racket-lang.org/esterel/).
