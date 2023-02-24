@@ -3,7 +3,8 @@
 (define collection 'multi)
 
 (define deps '("base"
-               "esterel-lib" "rackunit-lib"
+               "esterel-lib" "esterel-doc"
+               "rackunit-lib"
                "parser-tools-lib"
                "html-parsing" "html-lib"
                "racket-index"))
