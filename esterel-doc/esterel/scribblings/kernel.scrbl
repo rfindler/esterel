@@ -166,13 +166,35 @@ Creates a new signal.
  
 }
 
-@defproc[(signal-value [s signal?] [#:pre pre natural? 0]) any/c]{
-Returns the value of @racket[s] in the current instant if @racket[pre] is @racket[0].
+@defproc[(signal-value [s signal?] [#:pre n natural? 0]) any/c]{
+Returns the value of @racket[s] in the current instant if @racket[n] is @racket[0],
+ unless it hasn't been emitted, in which case it returns the value in the previous
+ instant.
 
- If @racket[pre] is larger than zero, then returns the value
- of @racket[s] is the @racket[n]th previous instant. If @racket[pre] is
+ If @racket[n] is larger than zero, then returns the value
+ of @racket[s] is the @racket[n]th previous instant. If @racket[n] is
  larger than the value of the @racket[_pre-count-expr] passed to
  @racket[reaction], an error is raised.
+
+ @examples[
+ #:eval esterel-eval
+ (define-signals
+   S1 #:combine + S2 #:combine +
+   O1 #:combine + O2 #:combine + O3 #:combine +)
+ (define r
+   (reaction
+    #:pre 1
+    (emit S1 2)
+    (emit S1 3)
+    (emit S2 0)
+    (pause)
+    (emit S2 6)
+    (emit O1 (signal-value S1))
+    (emit O2 (signal-value S2 #:pre 1))
+    (emit O3 (signal-value S2))))
+ (eval:check (react! r) (hash S1 5 S2 0))
+ (eval:check (react! r) (hash O1 5 O2 0 O3 6 S1 #f S2 6))
+ ]
 
 }
 
