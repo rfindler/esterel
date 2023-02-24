@@ -11,7 +11,8 @@
 
 (provide
  (rename-out [-reaction reaction])
- (rename-out [-signal signal])
+ let-signal let-signals
+ define-signal define-signals
  par
  suspend
  with-trap
@@ -127,23 +128,82 @@ value for can explorations and subsequent must evaluation.
 (define current-signal-table (make-parameter #f))
 (define (in-reaction?) (and (current-signal-table) #t))
 
-(define-syntax (-signal stx)
+(define-syntax (let-signal stx)
   (syntax-parse stx
-    [(_ (~alt (~optional (~seq #:name name-expr:expr) #:name "#:name argument")
-              (~optional (~seq #:combine combine-expr) #:name "#:combine argument"))
-        ...)
+    [(_ signal:id (~optional (~seq #:combine combine-expr))
+        body:expr ... last-body:expr)
      #:declare combine-expr
      (expr/c #'(-> any/c any/c any/c)
              #:name "the #:combine argument")
-     #`(mk-signal.args (~? name-expr '#,(syntax-local-name))
-                       (~? combine-expr.c #f)
-                       #,(syntax/loc stx (quote-srcloc))
-                       )]))
+     #`(let ([signal (mk-signal.args 'signal
+                                     (~? combine-expr.c #f)
+                                     #,(syntax/loc stx (quote-srcloc))
+                                     )])
+         body ...
+         (kill-signal! signal (λ () last-body)))]))
+
+(define-syntax (let-signals stx)
+  (syntax-parse stx
+    [(_ ((~seq signal:id (~optional (~seq #:combine combine-expr))) ...)
+        body:expr ... last-body:expr)
+     #:declare combine-expr
+     (expr/c #'(-> any/c any/c any/c)
+             #:name "the #:combine argument")
+     #:fail-when (check-duplicate-identifier
+                  (syntax->list #'(signal ...)))
+     "duplicate variable name"
+     #`(let ([srcloc #,(syntax/loc stx (quote-srcloc))])
+         (let ([signal (mk-signal.args 'signal
+                                       (~? combine-expr.c #f)
+                                       (cons 'signal srcloc)
+                                       )] ...)
+           body ...
+           (kill-signal! (set signal ...) (λ () last-body))))]))
+
+(define-for-syntax (assert-top-level stx)
+  (unless (member (syntax-local-context) '(module module-begin top-level))
+    (raise-syntax-error
+     #f
+     (string-append
+      "illegal syntax;\n"
+      " may be used only at the top-level of a module\n"
+      " or at the interactive top-level")
+     stx)))
+
+(define-syntax (define-signal stx)
+  (syntax-parse stx
+    [(_ signal:id (~optional (~seq #:combine combine-expr)))
+     #:declare combine-expr
+     (expr/c #'(-> any/c any/c any/c)
+             #:name "the #:combine argument")
+     (assert-top-level stx)
+     #`(define signal
+         (mk-signal.args 'signal
+                         (~? combine-expr.c #f)
+                         #,(syntax/loc stx (quote-srcloc))))]))
+
+(define-syntax (define-signals stx)
+  (syntax-parse stx
+    [(_ (~seq signal:id (~optional (~seq #:combine combine-expr))) ...)
+     #:declare combine-expr
+     (expr/c #'(-> any/c any/c any/c)
+             #:name "the #:combine argument")
+     #:fail-when (check-duplicate-identifier
+                  (syntax->list #'(signal ...)))
+     "duplicate variable name"
+     (assert-top-level stx)
+     #`(begin
+         (define srcloc #,(syntax/loc stx (quote-srcloc)))
+         (define signal
+           (mk-signal.args 'signal
+                           (~? combine-expr.c #f)
+                           (cons 'signal srcloc)
+                           )) ...)]))
 
 (define (mk-signal.args name combine src)
   (unless (or (not name) (string? name) (symbol? name))
     (error 'signal "expected a string for the #:name argument\n  name: ~e" name))
-  (signal (if (symbol? name) (symbol->string name) name)
+  (signal (symbol->string name)
           ;; the identity of a signal, when we're in a reaction,
           ;; is eq-like in that we increment a counter for each
           ;; one, but we arrange to make sure that subsequent
@@ -161,6 +221,16 @@ value for can explorations and subsequent must evaluation.
             [else #f])
           combine))
 
+(define (kill-signal! s last-body)
+  (define signal-table (current-signal-table))
+  (cond
+    [signal-table
+     (define vals (call-with-values last-body list))
+     (channel-put (signal-table-signal-dead-chan signal-table) s)
+     (apply values vals)]
+    [else
+     (last-body)]))
+
 (define no-value-provided (gensym 'no-value-provided))
 (define (emit a-signal [value no-value-provided])
   (define signal-table (current-signal-table))
@@ -172,7 +242,22 @@ value for can explorations and subsequent must evaluation.
       (unless (signal-combine a-signal)
         (error 'emit "signal emitted with a value but has no combination function\n  signal: ~e\n  value: ~e"
                a-signal value)))
-  (channel-put (signal-table-emit-chan signal-table) (vector a-signal no-value-provided? value)))
+  (define resp-chan (make-channel))
+  (channel-put (signal-table-emit-chan signal-table) (vector a-signal no-value-provided? value resp-chan))
+  (match (channel-get resp-chan)
+    ['dead
+     (if (equal? value no-value-provided)
+         (error 'emit (string-append "signal dead;\n"
+                                     " the dynamic extent of the `let-signal` has ended\n"
+                                     "  signal: ~e")
+                a-signal)
+         (error 'emit (string-append "signal dead;\n"
+                                     " the dynamic extent of the `let-signal` has ended\n"
+                                     "  signal: ~e\n"
+                                     "  value: ~e")
+                a-signal
+                value))]
+    [_ (void)]))
   
 (define (present? a-signal #:pre [pre 0])
   (signal-value/present? #t a-signal pre))
@@ -444,6 +529,7 @@ value for can explorations and subsequent must evaluation.
 
 (struct signal-table (new-signal-chan
                       signal-chan
+                      signal-dead-chan
                       emit-chan
                       par-start-chan par-partly-done-chan
                       pause-chan instant-chan
@@ -461,7 +547,7 @@ value for can explorations and subsequent must evaluation.
   (define the-signal-table
     (signal-table (make-channel) (make-channel) (make-channel) (make-channel)
                   (make-channel) (make-channel) (make-channel) (make-channel)
-                  pre-count))
+                  (make-channel) pre-count))
   (thread (λ () (run-reaction-thread pre-count thunk the-signal-table)))
   (reaction the-signal-table))
 
@@ -490,7 +576,7 @@ value for can explorations and subsequent must evaluation.
        (current-continuation-marks)))]
     [(? exn?) (raise maybe-signals)]
     [#f (error 'react! "a reaction is already running")]
-    [else maybe-signals]))
+    [_ maybe-signals]))
 
 (struct exn:fail:not-constructive exn:fail ())
 
@@ -518,7 +604,7 @@ value for can explorations and subsequent must evaluation.
                (channel-put react-thread-done-chan #f)))
            reaction-prompt-tag))
         (thread reaction-thread-thunk))))
-  (match-define (signal-table new-signal-chan signal-chan emit-chan
+  (match-define (signal-table new-signal-chan signal-chan signal-dead-chan emit-chan
                               par-start-chan par-partly-done-chan
                               pause-chan instant-chan
                               react-thread-done-chan
@@ -625,6 +711,7 @@ value for can explorations and subsequent must evaluation.
   (struct must-state (new-signal-counter
                       signal-status
                       signal-value
+                      dead-signals
                       latest-exn
                       signal-waiters
                       paused-threads
@@ -656,6 +743,12 @@ value for can explorations and subsequent must evaluation.
   (define/contract signal-value
     (hash/c signal? any/c #:flat? #t #:immutable #t)
     (hash))
+
+  ;; these are all the signals that can no longer be emitted because the
+  ;; dynamic extent of their `let-signal` declaration is has ended
+  (define/contract dead-signals
+    (set/c signal?)
+    (set))
 
   ;; this is all of the exceptions that were raised
   ;; when running the current instant
@@ -838,6 +931,7 @@ value for can explorations and subsequent must evaluation.
           (must-state new-signal-counter
                       signal-status
                       signal-value
+                      dead-signals
                       raised-exns
                       signal-waiters
                       paused-threads
@@ -849,6 +943,7 @@ value for can explorations and subsequent must evaluation.
     (match-define (must-state _new-signal-counter
                               _signal-status
                               _signal-value
+                              _dead-signals
                               _raised-exns
                               _signal-waiters
                               _paused-threads
@@ -859,6 +954,7 @@ value for can explorations and subsequent must evaluation.
     (set! new-signal-counter _new-signal-counter)
     (set! signal-status _signal-status)
     (set! signal-value _signal-value)
+    (set! dead-signals _dead-signals)
     (set! raised-exns _raised-exns) ;; TODO: this doesn't seem right! there cannot be anything there, right?
     (set! signal-waiters _signal-waiters)
     (set! paused-threads _paused-threads)
@@ -872,19 +968,23 @@ value for can explorations and subsequent must evaluation.
   ;; of the signals to see what can be emitted (and thus, what cannot be emitted)
   ;; rb-tree : rb-tree?
   ;; signals : (hash/c signal? boolean? #:flat? #t #:immutable #t)
-  (struct starting-point (rb-tree new-signal-counter signal-status signal-value))
+  (struct starting-point (rb-tree new-signal-counter signal-status signal-value dead-signals))
   (define (rollback! a-starting-point)
-    (match-define (starting-point rb-tree rb-new-signal-counter rb-signal-status rb-signal-value) a-starting-point)
+    (match-define (starting-point rb-tree rb-new-signal-counter rb-signal-status rb-signal-value rb-dead-signals)
+      a-starting-point)
     (set! new-signal-counter rb-new-signal-counter)
     (set! signal-status rb-signal-status)
     (set! signal-value rb-signal-value)
+    (set! dead-signals rb-dead-signals)
     (set! raised-exns '())     ;;; TODO: is this right? 
     (set! signal-waiters (hash))
     (set! paused-threads (hash))
     (set! par-parents (hash))
     (set! parent->par-state (hash))
     (set! reaction-thread (rebuild-threads-from-rb-tree rb-tree)))
-  (define (get-starting-point) (starting-point (build-rb-tree-from-current-state) new-signal-counter signal-status signal-value))
+  (define (get-starting-point)
+    (starting-point (build-rb-tree-from-current-state)
+                    new-signal-counter signal-status signal-value dead-signals))
 
   (struct rb-tree () #:transparent)
 
@@ -1351,10 +1451,21 @@ value for can explorations and subsequent must evaluation.
                   [else (loop (- loop-pre 1) (cdr loop-signals-pre))]))])
            (loop)))
         (handle-evt
+         signal-dead-chan
+         (λ (signal-or-signals)
+           ;; don't try to update `signal-status` here; this guarantees
+           ;; no future emits so we'll get `signal-status` updated properly later
+           (cond
+             [(set? signal-or-signals)
+              (set! dead-signals (set-union dead-signals signal-or-signals))]
+             [else
+              (set! dead-signals (set-add dead-signals signal-or-signals))])
+           (loop)))
+        (handle-evt
          emit-chan
-         (λ (a-signal+value-provided+value)
-           (match-define (vector a-signal no-value-provided? a-value)
-             a-signal+value-provided+value)
+         (λ (a-signal+value-provided+value+resp-chan)
+           (match-define (vector a-signal no-value-provided? a-value resp-chan)
+             a-signal+value-provided+value+resp-chan)
            (define value-provided? (not no-value-provided?))
            (log-esterel-debug "~a: emitting: ~s status: ~s value: ~a"
                               (eq-hash-code (current-thread))
@@ -1367,56 +1478,62 @@ value for can explorations and subsequent must evaluation.
            (when (can? mode)
              ;; we're in can mode, so record that this signal was emitted
              (set! mode (add-emitted-signal mode a-signal)))
-           (match (hash-ref signal-status a-signal 'unknown)
-             ['unknown
-              (cond
-                [value-provided?
-                 ;; if it is a value-carrying signal, we don't yet know if this is the
-                 ;; last emit that it will see so we don't unblock the threads and we
-                 ;; don't update signal-status; we have to wait to see it is not in can
-                 ;; before we can decide we're done emitting
-                 (define new-value
-                   (if (hash-has-key? signal-value a-signal)
-                       ((signal-combine a-signal) (hash-ref signal-value a-signal) a-value)
-                       a-value))
-                 (set! signal-value (hash-set signal-value a-signal new-value))]
-                [else
-                 ;; here it isn't a value-carrying signal so we
-                 ;; set the status and wake up any blocked threads
-                 (define blocked-threads (hash-ref signal-waiters a-signal '()))
-                 (set! signal-status (hash-set signal-status a-signal #t))
-                 (for ([a-blocked-thread (in-list blocked-threads)])
-                   (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
-                   (channel-put resp-chan #t)
-                   (define parent-thread (hash-ref par-parents thread #f))
-                   (when parent-thread
-                     (define old-par-state (hash-ref parent->par-state parent-thread))
-                     (define new-par-state
-                       (struct-copy
-                        par-state old-par-state
-                        [signal-waiting (set-remove (par-state-signal-waiting old-par-state) thread)]
-                        [active (set-add (par-state-active old-par-state) thread)]))
-                     (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
-                   (add-running-thread thread))
-                 (set! signal-waiters (hash-remove signal-waiters a-signal))])
+           (cond
+             [(set-member? dead-signals a-signal)
+              (channel-put resp-chan 'dead)
               (loop)]
-             [#t
-              (cond
-                [value-provided?
-                 ;; this program is non-constructive; we won't have a #t in signal-status for
-                 ;; a value-carrying signal unless it wasn't in can. Report the error and
-                 ;; let this thread end
-                 (channel-put instant-complete-chan 'non-constructive)]
-                [else
-                 (loop)])]
-             [#f
-              (unless (and (can? mode)
-                           (or (member a-signal (can-two-choice-signals mode))
-                               (set-member? (can-one-choice-signals mode) a-signal)))
-                ;; if the above is false, then this is a signal we believe won't be emitted and yet,
-                ;; here it is emitted; let's crash.
-                (internal-error "the signal ~s has been emitted but it was not in can" a-signal))
-              (loop)])))
+             [else
+              (channel-put resp-chan (void))
+              (match (hash-ref signal-status a-signal 'unknown)
+                ['unknown
+                 (cond
+                   [value-provided?
+                    ;; if it is a value-carrying signal, we don't yet know if this is the
+                    ;; last emit that it will see so we don't unblock the threads and we
+                    ;; don't update signal-status; we have to wait to see it is not in can
+                    ;; before we can decide we're done emitting
+                    (define new-value
+                      (if (hash-has-key? signal-value a-signal)
+                          ((signal-combine a-signal) (hash-ref signal-value a-signal) a-value)
+                          a-value))
+                    (set! signal-value (hash-set signal-value a-signal new-value))]
+                   [else
+                    ;; here it isn't a value-carrying signal so we
+                    ;; set the status and wake up any blocked threads
+                    (define blocked-threads (hash-ref signal-waiters a-signal '()))
+                    (set! signal-status (hash-set signal-status a-signal #t))
+                    (for ([a-blocked-thread (in-list blocked-threads)])
+                      (match-define (blocked-thread is-present? thread resp-chan) a-blocked-thread)
+                      (channel-put resp-chan #t)
+                      (define parent-thread (hash-ref par-parents thread #f))
+                      (when parent-thread
+                        (define old-par-state (hash-ref parent->par-state parent-thread))
+                        (define new-par-state
+                          (struct-copy
+                           par-state old-par-state
+                           [signal-waiting (set-remove (par-state-signal-waiting old-par-state) thread)]
+                           [active (set-add (par-state-active old-par-state) thread)]))
+                        (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
+                      (add-running-thread thread))
+                    (set! signal-waiters (hash-remove signal-waiters a-signal))])
+                 (loop)]
+                [#t
+                 (cond
+                   [value-provided?
+                    ;; this program is non-constructive; we won't have a #t in signal-status for
+                    ;; a value-carrying signal unless it wasn't in can. Report the error and
+                    ;; let this thread end
+                    (channel-put instant-complete-chan 'non-constructive)]
+                   [else
+                    (loop)])]
+                [#f
+                 (unless (and (can? mode)
+                              (or (member a-signal (can-two-choice-signals mode))
+                                  (set-member? (can-one-choice-signals mode) a-signal)))
+                   ;; if the above is false, then this is a signal we believe won't be emitted and yet,
+                   ;; here it is emitted; let's crash.
+                   (internal-error "the signal ~s has been emitted but it was not in can" a-signal))
+                 (loop)])])))
         (handle-evt
          par-start-chan
          (λ (checkpoint/result-chan+parent+children-threads)

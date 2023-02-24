@@ -7,14 +7,14 @@
    (void)))
  (hash))
 
-(let ([s (signal)])
+(let-signal s
   (check-equal?
    (react!
     (reaction
      (present? s)))
    (hash s #f)))
 
-(let ([s (signal)])
+(let-signal s
   (check-equal?
    (react!
     (reaction
@@ -22,7 +22,7 @@
      (present? s)))
    (hash s #t)))
 
-(let ([s (signal)])
+(let-signal s
   (check-equal?
    (react!
     (reaction
@@ -31,7 +31,7 @@
       (present? s))))
    (hash s #t)))
 
-(let ([s (signal)])
+(let-signal s
   (check-equal?
    (react!
     (reaction
@@ -46,7 +46,7 @@
    (pause)))
  (hash))
 
-(let ([s (signal)])
+(let-signal s
   (define r
     (reaction
      (pause)
@@ -58,7 +58,7 @@
    (react! r)
    (hash s #t)))
 
-(let ([s (signal)])
+(let-signal s
   (define r
     (reaction
      (pause)
@@ -74,7 +74,7 @@
    (react! r)
    (hash)))
 
-(let ([s (signal)])
+(let-signal s
   (define r
     (reaction
      (present? s)
@@ -107,7 +107,7 @@
            (pause))))
  (hash))
 
-(let ([s (signal)])
+(let-signal s
   (check-equal?
    (react! (reaction
             (par
@@ -126,7 +126,7 @@
             (pause)))))
  (hash))
 
-(let ([s (signal)])
+(let-signal s
   (check-equal?
    (react!
     (reaction
@@ -162,9 +162,7 @@
               (pause)))))))
  (hash))
 
-(let ()
-  (define s1 (signal))
-  (define s2 (signal))
+(let-signals (s1 s2)
   (define r
     (reaction
      (par
@@ -178,8 +176,7 @@
   (check-equal? (react! r) (hash s1 #f s2 #t))
   (check-equal? (react! r) (hash s1 #f s2 #t)))
 
-(let ([s1 (signal)]
-      [s2 (signal)])
+(let-signals (s1 s2)
   (check-equal?
    (react!
     (reaction
@@ -189,8 +186,7 @@
        (emit s2))))
    (hash s1 #t)))
 
-(let ([s1 (signal)]
-      [s2 (signal)])
+(let-signals (s1 s2)
   (check-equal?
    (react!
     (reaction
@@ -201,8 +197,7 @@
        (emit s2))))
    (hash s1 #t)))
 
-(let ([s1 (signal)]
-      [s2 (signal)])
+(let-signals (s1 s2)
   (check-equal?
    (react!
     (reaction
@@ -215,8 +210,7 @@
        (emit s2))))
    (hash)))
 
-(let ([s1 (signal)]
-      [s2 (signal)])
+(let-signals (s1 s2)
   (check-equal?
    (react!
     (reaction
@@ -234,8 +228,7 @@
        (emit s2))))
    (hash s1 #t)))
 
-(let ([s1 (signal)]
-      [s2 (signal)])
+(let-signals (s1 s2)
   (define r
     (reaction
      (with-trap t1
@@ -245,9 +238,7 @@
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash)))
 
-(let ([s1 (signal)]
-      [s2 (signal)]
-      [s3 (signal)])
+(let-signals (s1 s2 s3)
   (define r
     (reaction
      (with-trap t1
@@ -273,9 +264,7 @@
   (check-equal? (react! r) (hash)))
 
 
-(let ()
-  (define i (signal))
-  (define o (signal))
+(let-signals (i o)
   (define r
     (reaction
      (let loop ()
@@ -290,8 +279,7 @@
   (check-equal? (react! r) (hash i #f))
   (check-equal? (react! r #:emit (list i)) (hash i #t o #t)))
 
-(let ()
-  (define O (signal))
+(let-signal O
   (define t
     (reaction
      (with-trap T
@@ -302,8 +290,7 @@
 
   (check-equal? (react! t) (hash O #t)))
 
-(let ()
-  (define O (signal))
+(let-signal O
   (define t
     (reaction
      (with-trap T
@@ -315,8 +302,7 @@
 
   (check-equal? (react! t) (hash O #t)))
 
-(let ()
-  (define O (signal))
+(let-signal O
   (define t
     (reaction
      (with-trap T
@@ -329,8 +315,7 @@
 
   (check-equal? (react! t) (hash O #t)))
 
-(let ()
-  (define O (signal))
+(let-signal O
   (define t
     (reaction
      (with-trap T
@@ -343,8 +328,7 @@
 
   (check-equal? (react! t) (hash O #t)))
 
-(let ()
-  (define O (signal))
+(let-signal O
   (define r
     (reaction
      (par
@@ -358,8 +342,7 @@
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash O #t)))
 
-(let ()
-  (define O (signal))
+(let-signal O
   (define r
     (reaction
      (par
@@ -378,8 +361,7 @@
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash O #t)))
 
-(let ()
-  (define O (signal))
+(let-signal O
   (define r
     (reaction
      (with-trap T0
@@ -399,8 +381,7 @@
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash)))
 
-(let ()
-  (define O (signal))
+(let-signal O
   (define r
     (reaction
      (with-trap T0
@@ -467,8 +448,7 @@
         (par
          (car #f))))))))
 
-(let ()
-  (define S (signal))
+(let-signal S
   (define r
     (reaction
      (with-trap T
@@ -491,23 +471,20 @@
    ;; choice for the signal value so this program is
    ;; non constructive, by that logic but we raise one
    ;; of the exceptions as that seems more helpful
-   (define s1 (signal))
-   (define s2 (signal))
-   (react!
-    (reaction
-     (par
-      (if (present? s1)
-          (void)
-          (car #f))
-      (if (present? s2)
-          (void)
-          (car #f)))))))
+   (let-signals (s1 s2)
+     (react!
+      (reaction
+       (par
+        (if (present? s1)
+            (void)
+            (car #f))
+        (if (present? s2)
+            (void)
+            (car #f))))))))
 
 ;; #:pre
 
-(let ()
-  (define S (signal))
-  (define O (signal))
+(let-signals (S O)
   (define r
     (reaction
      #:pre 2
@@ -518,10 +495,7 @@
   (check-equal? (react! r) (hash S #t))
   (check-equal? (react! r) (hash O #t)))
 
-(let ()
-  (define O1 (signal))
-  (define O2 (signal))
-  (define S (signal))
+(let-signals (S O1 O2)
   (define r
     (reaction
      #:pre 2
@@ -530,8 +504,7 @@
          (emit O2))))
   (check-equal? (react! r) (hash O2 #t)))
 
-(let ()
-  (define O (signal))
+(let-signal O
   (define r
     (reaction
      #:pre 1
@@ -544,9 +517,7 @@
    #rx"present[?]: #:pre argument too large.*maximum: 1"
    (λ () (react! r))))
 
-(let ()
-  (define S (signal))
-  (define O (signal))
+(let-signals (S O)
   (define r
     (reaction
      #:pre 1
@@ -566,18 +537,55 @@
   (check-equal? (react! r) (hash S #t))
   (check-equal? (react! r) (hash O #t)))
 
-;; signals with values
 
-(let ()
-  (define S (signal #:combine +))
+
+;                                                
+;                                                
+;                                                
+;                                                
+;                                                
+;            ;;;                             ;;; 
+;                                            ;;; 
+;    ;;;;;   ;;;   ;; ;;;  ;;; ;;    ;;;;;   ;;; 
+;   ;;;  ;;  ;;;  ;;;;;;;  ;;;;;;;  ;;;;;;;  ;;; 
+;   ;;;      ;;;  ;;; ;;;  ;;; ;;;  ;;; ;;;  ;;; 
+;   ;;;;;;   ;;;  ;;; ;;;  ;;; ;;;     ;;;;  ;;; 
+;    ;;;;;;  ;;;  ;;; ;;;  ;;; ;;;   ;; ;;;  ;;; 
+;       ;;;  ;;;  ;;; ;;;  ;;; ;;;  ;;; ;;;  ;;; 
+;   ;;  ;;;  ;;;  ;;;;;;;  ;;; ;;;  ;;;;;;;  ;;; 
+;    ;;;;;   ;;;   ;; ;;;  ;;; ;;;   ;;;;;;  ;;; 
+;                     ;;;                        
+;                 ;;;;;;;                        
+;                  ;;;;;                         
+;                                                
+;                                                
+;                                                    
+;                                                    
+;                                                    
+;                     ;;;                            
+;                     ;;;                            
+;  ;;;   ;;;  ;;;;;   ;;;  ;;; ;;;    ;;;     ;;;;;  
+;   ;;   ;;  ;;;;;;;  ;;;  ;;; ;;;   ;;;;;   ;;;  ;; 
+;   ;;; ;;;  ;;; ;;;  ;;;  ;;; ;;;  ;;; ;;;  ;;;     
+;   ;;; ;;;     ;;;;  ;;;  ;;; ;;;  ;;; ;;;  ;;;;;;  
+;    ;; ;;    ;; ;;;  ;;;  ;;; ;;;  ;;;;;;;   ;;;;;; 
+;    ;;;;;   ;;; ;;;  ;;;  ;;; ;;;  ;;;          ;;; 
+;     ;;;    ;;;;;;;  ;;;  ;;;;;;;   ;;;;;;  ;;  ;;; 
+;     ;;;     ;;;;;;  ;;;   ;; ;;;    ;;;;    ;;;;;  
+;                                                    
+;                                                    
+;                                                    
+;                                                    
+;                                                    
+
+(let-signal S #:combine +
   (check-equal?
    (react!
     (reaction
      (emit S 1)))
    (hash S 1)))
 
-(let ()
-  (define S (signal #:combine +))
+(let-signal S #:combine +
   (check-equal?
    (react!
     (reaction
@@ -585,8 +593,7 @@
      (emit S 2)))
    (hash S 3)))
 
-(let ()
-  (define S (signal #:combine +))
+(let-signal S #:combine +
   (check-exn
    #rx"signal has never been emitted"
    (λ ()
@@ -594,9 +601,7 @@
       (reaction
        (signal-value S))))))
 
-(let ()
-  (define S1 (signal #:combine +))
-  (define S2 (signal #:combine +))
+(let-signals (S1 #:combine + S2 #:combine +)
   (define r
     (reaction
      (emit S1 11)
@@ -605,9 +610,7 @@
   (check-equal? (react! r) (hash S1 11))
   (check-equal? (react! r) (hash S1 #f S2 12)))
 
-(let ()
-  (define S1 (signal #:combine +))
-  (define S2 (signal #:combine +))
+(let-signals (S1 #:combine + S2 #:combine +)
   (check-equal?
    (react!
     (reaction
@@ -616,9 +619,7 @@
      (emit S2 (+ 2 (signal-value S1)))))
    (hash S1 3 S2 5)))
 
-(let ()
-  (define S1 (signal #:combine +))
-  (define S2 (signal #:combine +))
+(let-signals (S1 #:combine + S2 #:combine +)
   (check-equal?
    (react!
     (reaction
@@ -627,8 +628,7 @@
           (emit S1 2))))
    (hash S1 3 S2 4)))
 
-(let ()
-  (define S1 (signal #:combine +))
+(let-signals (S1 #:combine + S2 #:combine +)
   (check-exn
    #rx"not constructive"
    (λ ()
@@ -638,9 +638,7 @@
        (signal-value S1)
        (emit S1 2))))))
 
-(let ()
-  (define S1 (signal #:combine +))
-  (define S2 (signal #:combine +))
+(let-signals (S1 #:combine + S2 #:combine +)
   (define r
     (reaction
      (emit S1 44)
@@ -655,9 +653,7 @@
   (react! r)
   (check-equal? (react! r) (hash S1 #f S2 #f)))
 
-(let ()
-  (define S1 (signal #:combine +))
-  (define S2 (signal #:combine +))
+(let-signals (S1 #:combine + S2 #:combine +)
   (define r
     (reaction
      (emit S1 #f)
@@ -672,8 +668,7 @@
   (react! r)
   (check-equal? (react! r) (hash S2 1 S1 #f)))
 
-(let ()
-  (define S (signal #:combine +))
+(let-signals (S #:combine +)
   (define r
     (reaction
      (emit S 1)
@@ -682,9 +677,7 @@
   (check-equal? (react! r) (hash S 1))
   (check-equal? (react! r) (hash S 2)))
 
-(let ()
-  (define S (signal #:combine +))
-  (define O (signal))
+(let-signals (S #:combine + O)
   (define r
     (reaction
      #:pre 2
@@ -695,9 +688,7 @@
   (check-equal? (react! r) (hash S 1))
   (check-equal? (react! r) (hash O #t)))
 
-(let ()
-  (define S (signal #:combine +))
-  (define O (signal))
+(let-signals (O S #:combine +)
   (define r
     (reaction
      #:pre 2
@@ -713,15 +704,13 @@
   (check-equal? (react! r) (hash S 2 O #t))
   (check-equal? (react! r) (hash O #t)))
 
-(let ()
-  (define S (signal #:combine +))
+(let-signal S #:combine +
   (define r
     (reaction
      (present? S)))
   (check-equal? (react! r) (hash S #f)))
 
-(let ()
-  (define S (signal #:combine +))
+(let-signal S #:combine +
   (define r
     (reaction
      (emit S 0)
@@ -729,8 +718,7 @@
   (check-equal? (react! r)
                 (hash S 0)))
 
-(let ()
-  (define S (signal #:combine +))
+(let-signal S #:combine +
   (define r
     (reaction
      (emit S 0)
@@ -739,17 +727,14 @@
   (check-equal? (react! r)
                 (hash S 0)))
 
-(let ()
-  (define S (signal #:combine +))
+(let-signal S #:combine +
   (define r
     (reaction
      (present? S)))
   (check-equal? (react! r #:emit (list (cons S 0)))
                 (hash S 0)))
 
-(let ()
-  (define S (signal #:combine +))
-  (define O (signal))
+(let-signals (S #:combine + O)
   (define r
     (reaction
      (let loop ()
@@ -761,11 +746,48 @@
   (check-equal? (react! r #:emit (list (cons S 1))) (hash S 1))
   (check-equal? (react! r #:emit (list (cons S 2))) (hash S 2 O #t)))
 
+
+;                                                             
+;                                                             
+;                                                             
+;                                                             
+;                                                             
+;                                                             
+;                                                             
+;   ;;; ;;     ;;;    ;;; ;;          ;;;      ;;;    ;;; ;;  
+;   ;;;;;;;   ;;;;;   ;;;;;;;        ;;;;;    ;;;;;   ;;;;;;; 
+;   ;;; ;;;  ;;; ;;;  ;;; ;;;       ;;; ;;;  ;;; ;;;  ;;; ;;; 
+;   ;;; ;;;  ;;; ;;;  ;;; ;;; ;;;;  ;;;      ;;; ;;;  ;;; ;;; 
+;   ;;; ;;;  ;;; ;;;  ;;; ;;; ;;;;  ;;;      ;;; ;;;  ;;; ;;; 
+;   ;;; ;;;  ;;; ;;;  ;;; ;;;       ;;; ;;;  ;;; ;;;  ;;; ;;; 
+;   ;;; ;;;   ;;;;;   ;;; ;;;        ;;;;;    ;;;;;   ;;; ;;; 
+;   ;;; ;;;    ;;;    ;;; ;;;         ;;;      ;;;    ;;; ;;; 
+;                                                             
+;                                                             
+;                                                             
+;                                                                      
+;                                                                      
+;              ;                             ;   ;;;                   
+;            ;;;                           ;;;                         
+;    ;;;;;  ;;;;;; ;;; ;;;;; ;;;    ;;;   ;;;;;; ;;; ;;;   ;;;   ;;;   
+;   ;;;  ;; ;;;;;; ;;;;; ;;; ;;;   ;;;;;  ;;;;;; ;;;  ;;   ;;   ;;;;;  
+;   ;;;      ;;;   ;;;   ;;; ;;;  ;;; ;;;  ;;;   ;;;  ;;; ;;;  ;;; ;;; 
+;   ;;;;;;   ;;;   ;;;   ;;; ;;;  ;;;      ;;;   ;;;  ;;; ;;;  ;;; ;;; 
+;    ;;;;;;  ;;;   ;;;   ;;; ;;;  ;;;      ;;;   ;;;   ;; ;;   ;;;;;;; 
+;       ;;;  ;;;   ;;;   ;;; ;;;  ;;; ;;;  ;;;   ;;;   ;;;;;   ;;;     
+;   ;;  ;;;  ;;;;; ;;;   ;;;;;;;   ;;;;;   ;;;;; ;;;    ;;;     ;;;;;; 
+;    ;;;;;    ;;;; ;;;    ;; ;;;    ;;;     ;;;; ;;;    ;;;      ;;;;  
+;                                                                      
+;                                                                      
+;                                                                      
+;                                                                      
+;                                                                      
+
+
 (check-exn
  #rx"not constructive"
  (λ ()
-   (let ([SO1 (signal)]
-         [SO2 (signal)])
+   (let-signals (SO1 SO2)
      (define r
        (reaction
         (par
@@ -789,7 +811,7 @@
 (check-exn
  #rx"not constructive"
  (λ ()
-   (let ([S (signal)])
+   (let-signal S
      (define r
        (reaction
         (if (present? S)
@@ -800,7 +822,7 @@
 (check-exn
  #rx"not constructive"
  (λ ()
-   (let ([S (signal)])
+   (let-signal S
      (define r
        (reaction
         (if (present? S)
@@ -811,7 +833,7 @@
 (check-exn
  #rx"not constructive"
  (λ ()
-   (let ([S (signal)])
+   (let-signal S
      (define r
        (reaction
         (if (present? S)
@@ -822,16 +844,14 @@
 (check-exn
  #rx"not constructive"
  (λ ()
-   (let ([S (signal)])
+   (let-signal S
      (define r
        (reaction
         (present? S)
         (emit S)))
      (react! r))))
 
-(let ([S1 (signal)]
-      [S2 (signal)]
-      [O (signal)])
+(let-signals (S1 S2 O)
   (define r
     (reaction
      (if (present? S1)
@@ -842,9 +862,7 @@
   (check-equal? (react! r)
                 (hash S1 #f S2 #f O #t)))
 
-(let ([S1 (signal)]
-      [S2 (signal)]
-      [O (signal)])
+(let-signals (S1 S2 O)
   (define r
     (reaction
      (if (present? S1)
@@ -855,11 +873,7 @@
   (check-equal? (react! r)
                 (hash S1 #f S2 #f O #t)))
 
-(let ([S1 (signal)]
-      [S2 (signal)]
-      [S3 (signal)]
-      [S4 (signal)]
-      [S5 (signal)])
+(let-signals (S1 S2 S3 S4 S5)
   (define r
     (reaction
      (if (present? S1)
@@ -877,10 +891,7 @@
   (check-equal? (react! r)
                 (hash S1 #f S2 #f S3 #f S4 #f S4 #f S5 #f)))
 
-(let ()
-  (define S1 (signal #:combine +))
-  (define O1 (signal))
-  (define O2 (signal))
+(let-signals (S1 #:combine + O1 O2)
   (define r
     (reaction
      (emit S1 #f)
@@ -893,10 +904,7 @@
   (check-equal? (react! r)
                 (hash S1 #f O2 #t)))
 
-(let ()
-  (define S1 (signal #:combine +))
-  (define O1 (signal))
-  (define O2 (signal))
+(let-signals (S1 #:combine + O1 O2)
   (define r
     (reaction
      (emit S1 #t)
@@ -909,10 +917,7 @@
   (check-equal? (react! r)
                 (hash S1 #f O1 #t)))
 
-(let ()
-  (define S1 (signal #:combine +))
-  (define O1 (signal))
-  (define O2 (signal))
+(let-signals (S1 #:combine + O1 O2)
   (define r
     (reaction
      (par (emit S1 3)
@@ -923,10 +928,7 @@
   (check-equal? (react! r)
                 (hash S1 3 O1 #t)))
 
-(let ()
-  (define S1 (signal #:combine +))
-  (define O1 (signal))
-  (define O2 (signal))
+(let-signals (S1 #:combine + O1 O2)
   (define r
     (reaction
      (par (emit S1 3)
@@ -939,19 +941,53 @@
                 (hash S1 8 O1 #t)))
 
 
-;; the next tests explore various
-;; "dynamically created" signal
-;; scenarios might play out.
 
-(let ()
+;                                                                  
+;                                                                  
+;                                                                  
+;                                                                  
+;                                                                  
+;       ;;;                                           ;;;          
+;       ;;;                                                        
+;    ;; ;;; ;;;   ;;; ;;; ;;    ;;;;;   ;;; ;; ;;;    ;;;    ;;;   
+;   ;;;;;;;  ;;   ;;  ;;;;;;;  ;;;;;;;  ;;;;;;;;;;;   ;;;   ;;;;;  
+;   ;;; ;;;  ;;; ;;;  ;;; ;;;  ;;; ;;;  ;;; ;;; ;;;   ;;;  ;;; ;;; 
+;   ;;; ;;;  ;;; ;;;  ;;; ;;;     ;;;;  ;;; ;;; ;;;   ;;;  ;;;     
+;   ;;; ;;;   ;; ;;   ;;; ;;;   ;; ;;;  ;;; ;;; ;;;   ;;;  ;;;     
+;   ;;; ;;;   ;;;;;   ;;; ;;;  ;;; ;;;  ;;; ;;; ;;;   ;;;  ;;; ;;; 
+;   ;;;;;;;   ;;;;;   ;;; ;;;  ;;;;;;;  ;;; ;;; ;;;   ;;;   ;;;;;  
+;    ;; ;;;    ;;;    ;;; ;;;   ;;;;;;  ;;; ;;; ;;;   ;;;    ;;;   
+;              ;;;                                                 
+;           ;;;;;                                                  
+;           ;;;;;                                                  
+;                                                                  
+;                                                         
+;                                                         
+;            ;;;                             ;;;          
+;                                            ;;;          
+;    ;;;;;   ;;;   ;; ;;;  ;;; ;;    ;;;;;   ;;;   ;;;;;  
+;   ;;;  ;;  ;;;  ;;;;;;;  ;;;;;;;  ;;;;;;;  ;;;  ;;;  ;; 
+;   ;;;      ;;;  ;;; ;;;  ;;; ;;;  ;;; ;;;  ;;;  ;;;     
+;   ;;;;;;   ;;;  ;;; ;;;  ;;; ;;;     ;;;;  ;;;  ;;;;;;  
+;    ;;;;;;  ;;;  ;;; ;;;  ;;; ;;;   ;; ;;;  ;;;   ;;;;;; 
+;       ;;;  ;;;  ;;; ;;;  ;;; ;;;  ;;; ;;;  ;;;      ;;; 
+;   ;;  ;;;  ;;;  ;;;;;;;  ;;; ;;;  ;;;;;;;  ;;;  ;;  ;;; 
+;    ;;;;;   ;;;   ;; ;;;  ;;; ;;;   ;;;;;;  ;;;   ;;;;;  
+;                     ;;;                                 
+;                 ;;;;;;;                                 
+;                  ;;;;;                                  
+;                                                         
+;                                                         
+
+
+(let-signal S
   (define (signals->names ht)
     (for/hash ([(k v) (in-hash ht)])
       (values (signal-name k) v)))
-  (define S (signal))
   (define r
     (reaction
      (present? S)
-     (present? (let ([S2 (signal)]) S2))))
+     (present? (let-signal S2 S2))))
   (check-equal? (signals->names (react! r))
                 (hash "S" #f  "S2" #f)))
 
@@ -961,11 +997,9 @@
       (values (signal-name k) v)))
   (define r
     (reaction
-     (let ([S1 (signal)])
+     (let-signal S1
        (present? S1)
-       (let ([S2 (signal)]
-             [O1 (signal)]
-             [O2 (signal)])
+       (let-signals (S2 O1 O2)
          (par (emit S2)
               (if (present? S2)
                   (emit O1)
@@ -979,11 +1013,9 @@
       (values (signal-name k) v)))
   (define r
     (reaction
-     (let ([S1 (signal)])
+     (let-signal S1
        (present? S1)
-       (let ([S2 (signal)]
-             [O1 (signal)]
-             [O2 (signal)])
+       (let-signals (S2 O1 O2)
          (if (present? S2)
              (emit O1)
              (emit O2))))))
@@ -996,16 +1028,15 @@
       (values (signal-name k) v)))
   (define r
     (reaction
-     (let ([S1 (signal)])
+     (let-signal S1
        (present? S1)
-       (let ([S2 (signal)]
-             [O1 (signal)]
-             [O2 (signal)])
+       (let-signals (S2 O1 O2)
          (if (present? S2)
              (emit O1)
              (emit O2))))))
   (check-equal? (signals->names (react! r))
                 (hash "S1" #f "S2" #f "O2" #t)))
+
 
 (let ()
   (define (signals->names ht)
@@ -1013,27 +1044,30 @@
       (values (signal-name k) v)))
   (define r
     (reaction
-     (let ([S1 (signal)]
-           [O1 (signal)]
-           [O2 (signal)])
-       (present? S1)
-       (let ([S2 (signal)])
-         (define S3
-           (if (present? S2)
-               (let ([S3 (signal)])
-                 (emit S3)
-                 S3)
-               (let ([S3 (signal)])
-                 S3)))
-         (if (present? S3)
-             (emit O1)
-             (emit O2))))))
+     (let-signals
+      (s1 s2)
+      (present? s1)
+      (emit s2))))
   (check-equal? (signals->names (react! r))
-                (hash "S1" #f "S2" #f "S3" #f "O2" #t)))
+                (hash "s1" #f "s2" #t)))
 
+(check-exn
+ #rx"emit:.*dynamic extent"
+ (λ ()
+   (react!
+    (reaction
+     (emit (let-signal s1 s1))))))
 
-
-
+;; make sure that, when we're not in a reaction,
+;; the last expression is in tail position
+(check-equal?
+ (continuation-mark-set->list
+  (with-continuation-mark 'x 1
+    (let-signal S
+                (with-continuation-mark 'x 2
+                  (current-continuation-marks))))
+  'x)
+ (list 2))
 
 
 
@@ -1060,9 +1094,7 @@
 ;                                                                 
 
 ;; popl 2019 figure 2
-(let ([sl (signal)]
-      [so1 (signal)]
-      [so2 (signal)])
+(let-signals (sl so1 so2)
   (check-equal?
    (react!
     (reaction
@@ -1073,9 +1105,7 @@
    (hash sl #t so1 #t)))
 
 ;; popl 2019 figure 3
-(let ([sl (signal)]
-      [so1 (signal)]
-      [so2 (signal)])
+(let-signals (sl so1 so2)
   (check-equal?
    (react!
     (reaction
@@ -1088,9 +1118,7 @@
 
 
 ;; popl 2019 figure 4
-(let ([sl (signal)]
-      [so1 (signal)]
-      [so2 (signal)])
+(let-signals (sl so1 so2)
   (check-equal?
    (react!
     (reaction
@@ -1100,8 +1128,7 @@
    (hash sl #f so2 #t)))
 
 ;; popl 2019 figure 5
-(let ([sl1 (signal)]
-      [sl2 (signal)])
+(let-signals (sl1 sl2)
   (check-exn
    #rx"not constructive"
    (λ ()
@@ -1113,9 +1140,7 @@
 
 
 ;; popl 2019 figure 6
-(let ([sl (signal)]
-      [so1 (signal)]
-      [so2 (signal)])
+(let-signals (sl so1 so2)
   (define r
     (reaction
      (par
@@ -1129,11 +1154,7 @@
    (hash sl #t)))
 
 ;; popl 2019 figure 7
-(let ([sl1 (signal)]
-      [sl2 (signal)]
-      [sl3 (signal)]
-      [so1 (signal)]
-      [so2 (signal)])
+(let-signals (sl1 sl2 sl3 so1 so2)
   (define r
     (reaction
      (par
@@ -1156,7 +1177,7 @@
 (check-exn
  #rx"not constructive"
  (λ ()
-   (let ([s1 (signal)])
+   (let-signal s1
      (react!
       (reaction
        (if (present? s1)
@@ -1164,7 +1185,7 @@
            (emit s1)))))))
 
 ;; popl 2019, figure 9
-(let ([s1 (signal)])
+(let-signal s1
   (check-exn
    #rx"not constructive"
    (λ ()
@@ -1179,7 +1200,7 @@
 (check-exn
  #rx"not constructive"
  (λ ()
-   (let ([s1 (signal)])
+   (let-signal s1
      (react!
       (reaction
        (if (present? s1)
@@ -1190,7 +1211,7 @@
 (check-exn
  #rx"not constructive"
  (λ ()
-   (let ([s1 (signal)])
+   (let-signal s1
      (react!
       (reaction
        (if (present? s1) (void) (void))
@@ -1200,8 +1221,7 @@
 (check-exn
  exn:fail:not-constructive?
  (λ ()
-   (let ([sl1 (signal)]
-         [sl2 (signal)])
+   (let-signals (sl1 sl2)
      (react!
       (reaction
        (par
@@ -1210,8 +1230,7 @@
                (emit sl1))))))))
 
 ;; popl 2019, figure 25
-(let ([s-outer (signal)]
-      [s-inner (signal)])
+(let-signals (s-outer s-inner)
   (check-equal?
    (react!
     (reaction

@@ -9,10 +9,7 @@ given in figure 1.2
 
 |#
 
-(define A (signal))
-(define B (signal))
-(define R (signal))
-(define O (signal))
+(define-signals A B R O)
 
 (define abro
   (reaction

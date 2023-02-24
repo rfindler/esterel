@@ -27,9 +27,7 @@ not set, the program takes the else branch of the
 conditional and emits @racket[O2].
 
 @examples[#:label #f #:eval esterel-eval #:no-prompt
-          (define S (signal))
-          (define O1 (signal))
-          (define O2 (signal))
+          (define-signals S O1 O2)
           (react!
            (reaction
             (if (present? S)

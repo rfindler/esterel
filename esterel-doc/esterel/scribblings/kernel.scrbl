@@ -29,7 +29,7 @@ provides additional functionality.
  expected to be a natural number. It is a limit on the
  history that's saved for signals in previous instants.
  It defaults to @racket[0].
- 
+
 }
 
 @defproc[(react! [r reaction?]
@@ -57,11 +57,11 @@ provides additional functionality.
  If the reaction is not constructive, an exception (that is
  recognized by @racket[exn:fail:not-constructive?]) is
  raised.
- 
+
  @examples[
  #:eval esterel-eval
- (define S1 (signal))
- (define S2 (signal))
+ (define-signal S1)
+ (define-signal S2)
  (react! (reaction (emit S1)))
  (react! (reaction (if (present? S1) (void) (emit S2))))
  (react! (reaction (if (present? S1) (void) (emit S2)))
@@ -79,58 +79,74 @@ provides additional functionality.
 
  Returns @racket[#t] if it is called in the dynamic extent
  of one of the expressions in a @racket[reaction].
- 
+
 }
 
 @defproc[(exn:fail:not-constructive? [v any/c]) boolean?]{
 
  Recognizes the exception that @racket[react!] raises when
  the reaction is not constructive.
- 
+
 }
 
 @section{Signals}
 
-@defform[(signal maybe-name maybe-combine)
-         #:grammar ([maybe-name
-                     (code:line)
-                     (code:line #:name name-expr)]
-                    [maybe-combine
+@defform[(let-signal signal-id maybe-combine
+           body-expr ...+)
+         #:grammar ([maybe-combine
                      (code:line)
                      (code:line #:combine combine-expr)])]{
-Creates a new signal.
-
- The signal's name is the result of @racket[name-expr] or,
- if @racket[name-expr] is not supplied, and one cannot be inferred
- from the context, it has no name.
- @examples[
- #:eval esterel-eval
- (define S1 (signal))
- (signal-name S1)
-
- (signal-name (signal))
-
- (signal-name (signal #:name "S2"))]
+ Creates a new signal.
 
  If @racket[#:combine] is supplied, this is value-carrying
  signal, otherwise not. Multiple emissions of the signal are
  combined using the result of @racket[combine-expr], a binary
  function that is assumed to be associative and commutative.
- 
+
+ The result of the @racket[let-signal] expression is the
+ result of the last expression. If @racket[let-signal] is
+ used in the dynamic extent of @racket[reaction], the last
+ @racket[body-expr] is not in tail position with respect to
+ the @racket[let-signal], but otherwise it is.
+
+ If @racket[let-signal] is invoked from within
+ @racket[reaction] then, once the last body expression has
+ finished evaluation, the @racket[signal] becomes dead,
+ meaning that passing it to @racket[emit] results in an
+ error.
+}
+
+@defform[(let-signals (signal-id maybe-combine ...)
+           body-expr ...+)]{
+ Like @racket[let-signals], but creates multiple signals.
+}
+
+@defform[(define-signal signal-id maybe-combine)]{
+  Creates a signal and binds it to @racket[signal-id].
+
+ The signals that @racket[define-signal] creates have
+ indefinite extent (i.e., the signal will not become dead
+ unlike the signals created by @racket[let-signal] and
+ @racket[let-signals]), but @racket[define-signal] can be
+ used only at the module top-level or at the interactive
+ top-level.
+}
+
+@defform[(define-signals signal-id maybe-combine ...)]{
+ Like @racket[define-signal], but creates multiple signals.
 }
 
 @defproc[(signal? [v any/c]) boolean?]{
  Determines if @racket[v] is a signal, i.e. returned from @racket[signal].
 }
 
-@defproc[(signal-name [s signal?]) (or/c #f string?)]{
+@defproc[(signal-name [s signal?]) string?]{
  Returns the name of a signal.
 
  @examples[
  #:eval esterel-eval
- (define S (signal))
- (signal-name S)
- (signal-name (signal))]
+ (define-signal S)
+ (eval:check (signal-name S) "S")]
 }
 
 @defproc[(signal-combine [s signal?]) (or/c #f (-> any/c any/c any/c))]{
@@ -150,9 +166,9 @@ Creates a new signal.
 
  @examples[
  #:eval esterel-eval
- (define S (signal))
- (define O1 (signal))
- (define O2 (signal))
+ (define-signal S)
+ (define-signal O1)
+ (define-signal O2)
  (react! (reaction (if (present? S) (emit O1) (emit O2))))
  (define r
    (reaction
@@ -163,7 +179,6 @@ Creates a new signal.
  (react! r)
  (react! r)
  ]
- 
 }
 
 @defproc[(signal-value [s signal?] [#:pre n natural? 0]) any/c]{
@@ -200,11 +215,12 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
 
 @defproc*[([(emit [s (signal?)]) void?]
            [(emit [s (signal?)] [v any/c]) void?])]{
-                                                    
+
  Emits @racket[s]. If one argument is passed, then @racket[s]
  must not be a value-carrying signal. If two arguments are
  passed then @racket[s] must be a value-carrying signal and
  the value @racket[v] is emitted.
+
 }
 
 @section{Control Operations}
@@ -228,7 +244,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  the value of @racket[n] is carried forward from instant to instant.
  @examples[
  #:eval esterel-eval
- (define S1 (signal #:combine +))
+ (define-signal S1 #:combine +)
  (define r
    (reaction
     (let loop ([n 0])
@@ -236,8 +252,13 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
         (emit S1 n))
       (pause)
       (loop (+ n 1)))))
- (for/list ([i (in-range 5)])
-   (react! r))
+ (eval:check (for/list ([i (in-range 5)])
+               (react! r))
+             (list (hash S1 0)
+                   (hash)
+                   (hash S1 2)
+                   (hash)
+                   (hash S1 4)))
  ]
 
 }
@@ -254,8 +275,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
 
  @examples[
  #:eval esterel-eval
- (define S1 (signal))
- (define S2 (signal))
+ (define-signals S1 S2)
  (define r
    (reaction
     (par
@@ -268,10 +288,10 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
         (emit S1)
         (loop))
       (present? S2)))))
- (react! r)
- (react! r)
- (react! r)
- (react! r)
+ (eval:check (react! r) (hash))
+ (eval:check (react! r) (hash S2 #t))
+ (eval:check (react! r) (hash S1 #t S2 #f))
+ (eval:check (react! r) (hash S1 #t S2 #f))
  ]
 }
 
@@ -285,8 +305,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  the second instant to not have @racket[S1] emitted.
  @examples[
  #:eval esterel-eval
- (define S1 (signal))
- (define S2 (signal))
+ (define-signals S1 S2)
  (define r
    (reaction
     (with-trap t
@@ -294,11 +313,11 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
              (emit S1)
              (exit-trap t)
              (emit S2))
-           (begin 
+           (begin
              (pause)
              (emit S1))))))
- (react! r)
- (react! r)
+ (eval:check (react! r) (hash S1 #t))
+ (eval:check (react! r) (hash))
  ]
 }
 

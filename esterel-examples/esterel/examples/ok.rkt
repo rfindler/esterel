@@ -7,8 +7,7 @@
          (pause)
          (emit O)))
 
-(define S1 (signal))
-(define S2 (signal))
+(define-signals S1 S2)
 
 (define r
   (reaction

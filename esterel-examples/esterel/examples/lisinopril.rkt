@@ -110,27 +110,30 @@ by Berry and Serrano, PLDI 2020
 (define max-dose-interval 34)
 (define min-dose-interval 8)
 
-(define tick (signal))
+(define-signal tick)
 
-(define try (signal))
-(define try-active-true (signal))
-(define try-active-false (signal))
-(define try-alert-true (signal))
-(define try-alert-false (signal))
+(define-signals
+  try
+  try-active-true
+  try-active-false
+  try-alert-true
+  try-alert-false)
 
-(define confirm (signal))
-(define confirm-active-true (signal))
-(define confirm-active-false (signal))
-(define confirm-alert-true (signal))
-(define confirm-alert-false (signal))
+(define-signals
+  confirm
+  confirm-active-true
+  confirm-active-false
+  confirm-alert-true
+  confirm-alert-false)
 
-(define deliver-dose (signal))
-(define in-dose-window (signal))
-(define try-not-in-window-warning (signal))
-(define no-dose-since-too-long-error (signal))
-(define try-too-close-error (signal))
+(define-signals
+  deliver-dose
+  in-dose-window
+  try-not-in-window-warning
+  no-dose-since-too-long-error
+  try-too-close-error)
 
-(define record-dose (signal))
+(define-signal record-dose)
 
 (define r
   (reaction

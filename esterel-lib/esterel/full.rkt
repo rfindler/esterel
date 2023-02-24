@@ -78,12 +78,12 @@
    #:each (test-thunk)))
 
 (define (every-n/proc test-thunk n body-thunk)
-  (define every-n (signal))
-  (par (let loop ()
-         (await (test-thunk) #:n n)
-         (emit every-n)
-         (loop))
-       (every (present? every-n) #:do (body-thunk))))
+  (let-signal every-n
+    (par (let loop ()
+           (await (test-thunk) #:n n)
+           (emit every-n)
+           (loop))
+         (every (present? every-n) #:do (body-thunk)))))
 
 (define (every-immediate/proc test-thunk body-thunk)
   (await #:immediate (test-thunk))
