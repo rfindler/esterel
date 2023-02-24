@@ -1,17 +1,4 @@
 #lang racket/base
-(require racket/fixnum)
-
-;; these two functions (->fx and fxmix-hash-code) should
-;; be replaced with a dependency on racket/hash-code and
-;; a call to hash-code-combine once the next release is out.
-(define (->fx v [who '->fx])
-  (cond
-    [(fixnum? v) v]
-    [(exact-integer? v) (bitwise-and v (most-positive-fixnum))]
-    [else (raise-argument-error who "exact-integer?" v)]))
-(define (fxmix-hash-code hc)
-  (let ([hc2 (fx+/wraparound hc (fxlshift/wraparound (fx+/wraparound hc 1) 10))])
-    (fxxor hc2 (fxrshift/logical hc2 6))))
 
 (define (mk-write-proc get-name what)
   (define (write-proc a-signal port mode)
@@ -58,7 +45,8 @@
    (define (hash-mode-proc self rec mode)
      (define self-id (signal-identity self))
      (cond
-       [self-id (fxmix-hash-code (->fx (equal-hash-code self-id)))]
+       ;; bitwise-xor should be replaced by a call to hash-code-mix after 8.9 is out
+       [self-id (bitwise-xor (equal-hash-code self-id))]
        [else (eq-hash-code self)]))])
 
 (struct trap (name counter escape)
