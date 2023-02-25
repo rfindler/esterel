@@ -539,6 +539,7 @@
 
 
 
+
 ;                                                
 ;                                                
 ;                                                
@@ -851,6 +852,21 @@
         (emit S)))
      (react! r))))
 
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (let-signal S
+     (react!
+      (reaction
+       (let-signal S2
+         (cond
+           [(present? S)
+            (emit S2)]
+           [else
+            (if (present? S2)
+                (emit S)
+                (void))])))))))
+
 (let-signals (S1 S2 O)
   (define r
     (reaction
@@ -1069,7 +1085,28 @@
   'x)
  (list 2))
 
-
+(let ()
+  (define (signals->names* ht)
+    (for/fold ([h (hash)])
+              ([(s v) (in-hash ht)])
+      (define k (signal-name s))
+      (hash-set h k (set-add (hash-ref h k set) v))))
+  ;; we don't pick up the first S2 because
+  ;; it doesn't affect the computation
+  (check-equal?
+   (let-signal S
+     (signals->names*
+      (react!
+       (reaction
+        (if (present? S)
+            (let-signal S2
+              (emit S2))
+            (let-signal S2
+              (if (present? S2)
+                  (emit S)
+                  (void))))))))
+   (hash "S" (set #f)
+         "S2" (set #f))))
 
 
 ;                                                                 
