@@ -15,7 +15,8 @@ mixed with Esterel code and run from within a reaction.
 
 @table-of-contents[]
 
-@include-section["scribblings/overview.scrbl"]
+@include-section["scribblings/eir-for-racket.scrbl"]
+@include-section["scribblings/eir-for-esterel.scrbl"]
 @include-section["scribblings/kernel.scrbl"]
 @include-section["scribblings/full.scrbl"]
 
