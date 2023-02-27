@@ -9,6 +9,13 @@
          racket/math
          (for-syntax racket/base syntax/parse))
 
+
+(define (pre-cond-reaction-check who)
+  (cond
+    [(in-reaction?) #t]
+    [else
+     "must be run from within the dynamic extent of `reaction`"]))
+
 (provide
  (rename-out [-reaction reaction])
  let-signal let-signals
@@ -33,29 +40,35 @@
                                    boolean?)]
                         #:immutable #t #:kind 'flat))]
   [in-reaction? (-> boolean?)]
-  [present? (->* (signal?)
-                 (#:pre natural?)
-                 #:pre (in-reaction?)
-                 boolean?)]
+
+  ;; the uses of `values` here (and below) is to avoid
+  ;; a bug in 8.8's racket/contract library; they can
+  ;; be removed when 8.9 comes out
+  [present? (values
+             (->* (signal?)
+                  (#:pre natural?)
+                  #:pre/desc (pre-cond-reaction-check 'present?)
+                  boolean?))]
 
   ;; when a signal is not emitted it will return the
   ;; previous instant's value from signal-value, following
   ;; _The ESTEREL synchronous programming language: design,
   ;; semantics, implementation*_ by Berry and Gonthier
-  [signal-value (->* ((and/c signal? signal-combine))
-                     ;; NB when we go "too far" with #:pre the values are just #f,
-                     ;; even if the signal never had that value... is this okay?
-                     (#:pre natural?)
-                     #:pre (in-reaction?)
-                     any/c)]
+  [signal-value (values
+                 (->* ((and/c signal? signal-combine))
+                      ;; NB when we go "too far" with #:pre the values are just #f,
+                      ;; even if the signal never had that value... is this okay?
+                      (#:pre natural?)
+                      #:pre/desc (pre-cond-reaction-check 'signal-value)
+                      any/c))]
   [signal? (-> any/c boolean?)]
   [signal-name (-> signal? (or/c #f string?))]
   [signal-combine (-> signal? (or/c #f (-> any/c any/c any)))]
-  [emit (->* (signal?)
-             (any/c)
-             #:pre (in-reaction?)
-             void?)]
-  [pause (->* () #:pre (in-reaction?) void?)]
+  [emit (values (->* (signal?)
+                     (any/c)
+                     #:pre/desc (pre-cond-reaction-check 'emit)
+                     void?))]
+  [pause (values (->* () #:pre/desc (pre-cond-reaction-check 'pause) void?))]
   [exit-trap (-> trap? any)]
   [trap? (-> any/c boolean?)]
   [exn:fail:not-constructive? (-> any/c boolean?)]))
