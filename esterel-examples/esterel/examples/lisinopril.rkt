@@ -112,21 +112,21 @@ by Berry and Serrano, PLDI 2020
 
 (define-signal tick)
 
-(define-signals
+(define-signal
   try
   try-active-true
   try-active-false
   try-alert-true
   try-alert-false)
 
-(define-signals
+(define-signal
   confirm
   confirm-active-true
   confirm-active-false
   confirm-alert-true
   confirm-alert-false)
 
-(define-signals
+(define-signal
   deliver-dose
   in-dose-window
   try-not-in-window-warning

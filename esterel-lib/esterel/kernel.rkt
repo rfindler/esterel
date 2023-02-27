@@ -18,8 +18,8 @@
 
 (provide
  (rename-out [-reaction reaction])
- let-signal let-signals
- define-signal define-signals
+ let-signal
+ define-signal
  par
  suspend
  with-trap
@@ -141,37 +141,34 @@ value for can explorations and subsequent must evaluation.
 (define current-signal-table (make-parameter #f))
 (define (in-reaction?) (and (current-signal-table) #t))
 
+(begin-for-syntax
+  (define-splicing-syntax-class signal-name
+    #:attributes (name combine-proc)
+    (pattern
+      (~seq name:id #:combine combine)
+      #:declare combine
+      (expr/c #'(-> any/c any/c any/c)
+              #:name "the #:combine argument")
+      #:attr combine-proc #'combine.c)
+    (pattern
+      name:id
+      #:attr combine-proc #'#f)))
+
 (define-syntax (let-signal stx)
   (syntax-parse stx
-    [(_ signal:id (~optional (~seq #:combine combine-expr))
+    [(_ (signal:signal-name ...)
         body:expr ... last-body:expr)
-     #:declare combine-expr
-     (expr/c #'(-> any/c any/c any/c)
-             #:name "the #:combine argument")
-     #`(let ([signal (mk-signal.args 'signal
-                                     (~? combine-expr.c #f)
-                                     #,(syntax/loc stx (quote-srcloc))
-                                     )])
-         body ...
-         (kill-signal! signal (λ () last-body)))]))
-
-(define-syntax (let-signals stx)
-  (syntax-parse stx
-    [(_ ((~seq signal:id (~optional (~seq #:combine combine-expr))) ...)
-        body:expr ... last-body:expr)
-     #:declare combine-expr
-     (expr/c #'(-> any/c any/c any/c)
-             #:name "the #:combine argument")
      #:fail-when (check-duplicate-identifier
-                  (syntax->list #'(signal ...)))
+                  (syntax->list #'(signal.name ...)))
      "duplicate variable name"
      #`(let ([srcloc #,(syntax/loc stx (quote-srcloc))])
-         (let ([signal (mk-signal.args 'signal
-                                       (~? combine-expr.c #f)
-                                       (cons 'signal srcloc)
-                                       )] ...)
+         (let ([signal.name
+                (mk-signal.args 'signal.name
+                                signal.combine-proc
+                                (cons 'signal.name srcloc)
+                                )] ...)
            body ...
-           (kill-signal! (set signal ...) (λ () last-body))))]))
+           (kill-signal! (set signal.name ...) (λ () last-body))))]))
 
 (define-for-syntax (assert-top-level stx)
   (unless (member (syntax-local-context) '(module module-begin top-level))
@@ -183,39 +180,23 @@ value for can explorations and subsequent must evaluation.
       " or at the interactive top-level")
      stx)))
 
+
 (define-syntax (define-signal stx)
   (syntax-parse stx
-    [(_ signal:id (~optional (~seq #:combine combine-expr)))
-     #:declare combine-expr
-     (expr/c #'(-> any/c any/c any/c)
-             #:name "the #:combine argument")
-     (assert-top-level stx)
-     #`(define signal
-         (mk-signal.args 'signal
-                         (~? combine-expr.c #f)
-                         #,(syntax/loc stx (quote-srcloc))))]))
-
-(define-syntax (define-signals stx)
-  (syntax-parse stx
-    [(_ (~seq signal:id (~optional (~seq #:combine combine-expr))) ...)
-     #:declare combine-expr
-     (expr/c #'(-> any/c any/c any/c)
-             #:name "the #:combine argument")
+    [(_ signal:signal-name ...)
      #:fail-when (check-duplicate-identifier
-                  (syntax->list #'(signal ...)))
+                  (syntax->list #'(signal.name ...)))
      "duplicate variable name"
      (assert-top-level stx)
      #`(begin
          (define srcloc #,(syntax/loc stx (quote-srcloc)))
-         (define signal
-           (mk-signal.args 'signal
-                           (~? combine-expr.c #f)
-                           (cons 'signal srcloc)
+         (define signal.name
+           (mk-signal.args 'signal.name
+                           signal.combine-proc
+                           (cons 'signal.name srcloc)
                            )) ...)]))
 
 (define (mk-signal.args name combine src)
-  (unless (or (not name) (string? name) (symbol? name))
-    (error 'signal "expected a string for the #:name argument\n  name: ~e" name))
   (signal (symbol->string name)
           ;; the identity of a signal, when we're in a reaction,
           ;; is eq-like in that we increment a counter for each

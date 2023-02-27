@@ -21,18 +21,18 @@ The example can be extended to n signals, in which case the innermost signal has
 
 |#
 
-(define-signals s1_and_s2 s1_and_not_s2 not_s1_and_s2 not_s1_and_not_s2)
+(define-signal s1_and_s2 s1_and_not_s2 not_s1_and_s2 not_s1_and_not_s2)
 
 (define r
   (reaction
    (let loop ()
      (with-trap t1
-       (let-signal s1
+       (let-signal (s1)
          (par
           (begin (pause) (emit s1) (exit-trap t1))
           (let loop ()
             (with-trap t2
-              (let-signal s2
+              (let-signal (s2)
                 (par
                  (begin (pause) (emit s2) (exit-trap t2))
                  (let loop ()

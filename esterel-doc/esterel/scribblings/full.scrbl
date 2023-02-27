@@ -44,7 +44,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
 @examples[
  #:label #f
  #:eval esterel-eval
- (define-signals S1 S2)
+ (define-signal S1 S2)
  (define r
    (reaction
     (loop (emit S1)
@@ -79,7 +79,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  @examples[
  #:label #f
  #:eval esterel-eval
- (define-signals S1 S2 S3)
+ (define-signal S1 S2 S3)
  (define r1
    (reaction
     (abort (let loop ()
@@ -151,7 +151,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  @examples[
  #:label #f
  #:eval esterel-eval
- (define-signals S1 S2)
+ (define-signal S1 S2)
  (define r
    (reaction
     (par (begin
@@ -172,7 +172,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  @examples[
  #:label #f
  #:eval esterel-eval
- (define-signals S1 S2)
+ (define-signal S1 S2)
  (define r
    (reaction
     (await (present? S1) #:n 3)
@@ -188,7 +188,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  @examples[
  #:label #f
  #:eval esterel-eval
- (define-signals S O)
+ (define-signal S O)
  (define r (reaction
             (await #:immediate (not (present? S)))
             (await #:immediate (not (present? S)))
@@ -214,7 +214,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  @examples[
  #:label #f
  #:eval esterel-eval
- (define-signals S1 S2)
+ (define-signal S1 S2)
  (define r1
    (reaction
     (every (present? S1)

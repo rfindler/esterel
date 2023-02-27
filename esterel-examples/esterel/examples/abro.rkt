@@ -9,7 +9,7 @@ given in figure 1.2
 
 |#
 
-(define-signals A B R O)
+(define-signal A B R O)
 
 (define abro
   (reaction

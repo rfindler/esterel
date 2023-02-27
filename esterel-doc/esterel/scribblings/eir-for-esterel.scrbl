@@ -40,7 +40,7 @@ Here's a first example of setting up an Esterel computation
 that alternates between emitting a pair of two signals in
 each instant:
 @ex[
- (eval:no-prompt (define-signals S1 S2))
+ (eval:no-prompt (define-signal S1 S2))
  (eval:no-prompt
   (define r
     (reaction

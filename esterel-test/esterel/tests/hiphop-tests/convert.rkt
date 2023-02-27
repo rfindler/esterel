@@ -111,13 +111,13 @@ of this macro ....
              [init-hash-x init-hash])
          (cond
            [(equal? signals-names '(signal-name ...))
-            (let-signals (signal-name ...)
-                         (let ([signals-table-id
-                                (for/fold ([hash init-hash-x])
-                                          ([name (in-list '(signal-name ...))]
-                                           [val (in-list (list signal-name ...))])
-                                  (hash-set hash name val))])
-                           body))] ...
+            (let-signal (signal-name ...)
+                        (let ([signals-table-id
+                               (for/fold ([hash init-hash-x])
+                                         ([name (in-list '(signal-name ...))]
+                                          [val (in-list (list signal-name ...))])
+                                 (hash-set hash name val))])
+                          body))] ...
            [else
             (error 'with-signals-table "unknown signals\n  names: ~s\n  srcloc: ~a:~a"
                    signals-names

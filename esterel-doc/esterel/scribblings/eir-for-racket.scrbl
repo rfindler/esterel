@@ -74,7 +74,7 @@ to indicate that it should be off. Here's how we declare the
 signals:
 
 @ex[
- (define-signals red orange green)]
+ (define-signal red orange green)]
 
 This introduces three new Racket variables, @racket[red],
 @racket[orange], and @racket[green], bound to signals.
@@ -131,7 +131,7 @@ program, because @racket[S] is not set, the program takes
 the else branch of the conditional and emits @racket[O2].
 
 @examples[#:label #f #:eval esterel-eval #:no-prompt
-          (define-signals S O1 O2)
+          (define-signal S O1 O2)
           (react!
            (reaction
             (if (present? S)
