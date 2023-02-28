@@ -83,12 +83,18 @@ Esterel in Racket:
 The function @racket[Aux] consumes two parameters, named
 @racket[I] and @racket[O], that are meant to be signals and
 thus it must be called from within the dynamic extent of
-@racket[reaction].
+@racket[reaction]. This raises another key aspect of the
+integration between Esterel and Racket: signals are simply
+values at the Racket level and can be passed to and returned
+from Racket functions, as other Racket values can. To use a
+signal, it must be passed to a function. In this example it
+is passed to @racket[present?] which returns a boolean
+indicating if the signal is present in this instant.
 
-If it is called outside of @racket[reaction] there is no
-static checking but an error will be raised because
-@racket[present?] checks to make sure it is called dynamically
-within a @racket[reaction]:
+If @racket[Aux] is called outside of @racket[reaction] there
+is no compile-time error but instead, a runtime error is
+raised because @racket[present?] checks to make sure it is
+called dynamically within a @racket[reaction]:
 
 @ex[
     (eval:error (Aux S1 S2))
@@ -117,5 +123,5 @@ emitting @racket[S1] and @racket[S2]
 
 This time, however, we see the unemitted signal in the
 result of @racket[react!], because the program observed the
-absence of the signals via the @racket[present?] function.
-
+absence of the signals via the use of the @racket[present?]
+function.

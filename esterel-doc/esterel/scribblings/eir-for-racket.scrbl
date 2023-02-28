@@ -47,7 +47,7 @@ ever. As such, the Esterel portion of the computation is
 dynamically segregated from the ordinary Racket portion,
 using the keyword @racket[reaction]. Also, in Esterel, the
 program variables that make up the changing, mutable state
-of the program are called @tech{signals} to avoid possible
+of the program are called signals to avoid possible
 confusion.@note{Esterel computations do not check or
  guarantee that Racket code run during an instant is pure,
  and surprising behavior may result if Racket code uses
@@ -65,7 +65,7 @@ that red is coming soon so either slow in preparation to
 stop or finish transiting the intersection, and green means
 that it is safe to transit the intersection.
 
-To control the lights we will use three @tech{signals}. A
+To control the lights we will use three signals. A
 signal in Esterel has two states: either it is present or it
 is absent. Signals can also carry values when they are
 present, but to control our traffic light, we'll just use
@@ -74,9 +74,10 @@ to indicate that it should be off. Here's how we declare the
 signals:
 
 @ex[
- (define-signal red orange green)]
+ (eval:no-prompt
+  (define-signal red orange green))]
 
-This introduces three new Racket variables, @racket[red],
+This introduces three new Racket identifiers, @racket[red],
 @racket[orange], and @racket[green], bound to signals.
 
 To run an Esterel program, we need to wrap the code in
@@ -87,12 +88,13 @@ starters, let's just make a traffic signal that is
 permanently green. Here's the code to do that:
 
 @ex[
- (define forever-green
-   (reaction
-    (let loop ()
-      (emit green)
-      (pause)
-      (loop))))
+ (eval:no-prompt
+  (define forever-red
+    (reaction
+     (let loop ()
+       (emit red)
+       (pause)
+       (loop)))))
  ]
 
 Looking at the code line by line, we see @racket[reaction],
@@ -111,18 +113,113 @@ code, we need to use @racket[react!]. Each time we invoke
 always @racket[green].
 
 @ex[
- (react! forever-green)
- (react! forever-green)
- (react! forever-green)
+ (react! forever-red)
+ (react! forever-red)
+ (react! forever-red)
  ]
 
+In Esterel, repeatedly emitting a specific signal and
+pausing is a common pattern and is captured via the function
+@racket[sustain]. Accordingly, this is the same program, but
+written more compactly:
 
+@ex[
+ (eval:no-prompt
+  (define forever-red
+    (reaction
+     (sustain red))))
+ ]
+
+Of course, we would like our traffic signal to change color
+so cars can pass through the intersection. Let's say that
+our green should last two minutes, and then orange for four
+seconds, and then we'll change to red. To set this up, we'll
+introduce a signal that is emitted every second:
+
+@ex[
+ (eval:no-prompt
+  (define-signal second))
+ ]
+
+And now we turn to the loop that emits
+@racket[forever-read]. A Rackety approach to this problem
+might be to change the loop so that it has a parameter and
+it counts the number of instants that passed where
+@racket[second] is emitted, and based on that, emit the
+correct signal.
+
+Instead, and because aborting is completely safe and
+reliable in Esterel, we can separate the code that is
+emitting the signal from the code that decides how long to
+wait, letting those the two tasks of emitting the red light
+and deciding when it is done be handled in parallel, like
+this:
+
+@racketblock[
+ (par (abort (sustain red)
+             #:when (present? next-stage))
+      (begin (await (present? second) #:n (* 4 60))
+             (emit next-stage)))
+   ]
+
+The Esterel form @racket[par] runs each of its
+subexpressions (in this case, the @racket[abort] and the
+@racket[begin]) in parallel to each other; it finishes when
+both of them finish. The @racket[abort] runs its first
+argument (the call to @racket[sustain]) until the code
+following the @racket[#:when] returns @racket[#t], at which
+point it aborts it, which terminates the first branch of the
+@racket[par]. Meanwhile, the second branch of the
+@racket[par] runs the @racket[await], which waits until
+there have been @racket[(* 4 60)] instants when
+@racket[second] is present. After that, the @racket[await]
+call returns, in that same instant, the
+@racket[(emit next-stage)] happens, ending the entire
+expression.
+
+Let's wrap all this up into a helper function:
+@ex[
+ (eval:no-prompt
+  (define (traffic-light-stage color seconds)
+    (let-signal (next-stage)
+      (par (abort (sustain color)
+                  #:when (present? next-stage))
+           (begin (await (present? second) #:n seconds)
+                  (emit next-stage))))))
+ ]
+
+and use @racket[let-signal] to make a local signal,
+@racket[next-stage], which is available only in the body.
+
+Now, let's run a reaction that repeatedly runs the traffic light
+@ex[
+ (eval:no-prompt
+  (define three-stages
+    (reaction
+     (traffic-light-stage green (* 4 60))
+     (traffic-light-stage orange 4)
+     (traffic-light-stage red 2))))
+ (react! three-stages #:emit (list second))
+ (react! three-stages #:emit (list second))
+ (for ([i (in-range (* 4 60))])
+   (react! three-stages #:emit (list second)))
+ (react! three-stages #:emit (list second))
+ (react! three-stages #:emit (list second))
+ (react! three-stages #:emit (list second))
+ ]
+
+This code runs the @racket[sustain] call until the signal
+@racket[next-stage] is present, at which point it aborts the
+loop inside @racket[sustain] and we continue on to whatever
+code follows. Then, we can, in parallel to that loop make
+write code that will emit @racket[next-stage] when enough
+time has passed, using @racket[await].
 
 @section{Causality}
 
 Inside a single instant, instead of a totally ordered linear
 notion of time we have, instead, a weaker notion of time,
-called causality that determines the flow of the
+called causality, that determines the flow of the
 computation.
 
 In order to see how these aspects of Esterel computation
