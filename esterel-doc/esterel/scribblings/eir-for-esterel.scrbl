@@ -170,20 +170,20 @@ Because we're in the larger context of Racket, we do not
 rule out this kind of program statically. Indeed, it is fine
 for a signal to leave the lexical environment where it is
 created, as long as it does not leave the dynamic extent of
-the @racket[let-signal]. For example, we may wish to pass it
+the @racket[with-signal]. For example, we may wish to pass it
 to a helper function, as in the example above when we used
 @tt{Aux}.
 
 More generally, a program where signals flow around the
 program entering and leaving other functions and being
 stored in data structures is all be fine, as long as the
-@racket[let-signal] form does not terminate before the
+@racket[with-signal] form does not terminate before the
 signal is emitted.
 
 Thus, we have a dynamic check associated with @racket[emit]
 that signals an error when a signal has outlived the dynamic
 extent of its creation. Here's an example. The signal
-@racket[s1] is created by the @racket[let-signal] form and
+@racket[s1] is created by the @racket[with-signal] form and
 then is returned from it and ends up being bound to the
 identifier @racket[a-signal-outside-its-extent].
 
@@ -192,13 +192,13 @@ identifier @racket[a-signal-outside-its-extent].
      (react!
       (reaction
        (define a-signal-outside-its-extent
-         (let-signal (s1)
+         (with-signal (s1)
            s1))
        (emit a-signal-outside-its-extent))))
 
     ]
 
-At this point, since the @racket[let-signal] form has
+At this point, since the @racket[with-signal] form has
 exited, Can should be able to know that the signal is not
 going to be emitted. To ensure that that deduction that Can
 makes is legal, @racket[emit] raises an error instead of

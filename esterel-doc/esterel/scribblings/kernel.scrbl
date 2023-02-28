@@ -90,39 +90,56 @@ provides additional functionality.
 
 @section{Signals}
 
-@defform[(let-signal (signal ...)
+@defform[(with-signal (signal ...)
            body-expr ...+)
          #:grammar ([signal
                      (code:line signal-id maybe-combine)]
                     [maybe-combine
                      (code:line)
                      (code:line #:combine combine-expr)])]{
- Creates a new signal.
+ Creates new signals and binds them to the the @racket[signal-id]s.
 
- If @racket[#:combine] is supplied, this is value-carrying
- signal, otherwise not. Multiple emissions of the signal are
+ Each signal suffixed with @racket[#:combine] is a value-carrying
+ signal, and those without are not. Multiple emissions of the signal are
  combined using the result of @racket[combine-expr], a binary
  function that is assumed to be associative and commutative.
 
- The result of the @racket[let-signal] expression is the
- result of the last expression. If @racket[let-signal] is
+ The result of the @racket[with-signal] expression is the
+ result of the last expression. If @racket[with-signal] is
  used in the dynamic extent of @racket[reaction], the last
  @racket[body-expr] is not in tail position with respect to
- the @racket[let-signal], but otherwise it is.
+ the @racket[with-signal], but otherwise it is.
 
- If @racket[let-signal] is invoked from within
- @racket[reaction] then, once the last body expression has
- finished evaluation, the @racket[signal] becomes dead,
- meaning that passing it to @racket[emit] results in an
- error.
+ Also, if @racket[with-signal] is invoked from within
+ @racket[reaction], then the signals may not be emitted
+ once the last @racket[body-expr] is evaluated (it will result in
+ an error from @racket[emit] if they are).
+
+ @examples[
+ #:eval esterel-eval
+ (react!
+  (reaction
+   (with-signal (s1 s2)
+     (unless (present? s2)
+       (emit s1)))))
+
+ (react!
+  (reaction
+   (with-signal (s1 s2 #:combine + s3 s4 #:combine *)
+     (emit s1)
+     (emit s2 22)
+     (emit s2 33))))
+ ]
+ 
 }
 
 @defform[(define-signal signal ...)]{
-  Creates signals and binds them to the @racket[signal-id]s.
+ Creates signals and binds them to the @racket[_signal-id]s
+ in each @racket[signal].
 
  The signals that @racket[define-signal] creates have
  indefinite extent (i.e., the signal will not become dead
- unlike the signals created by @racket[let-signal]),
+ unlike the signals created by @racket[with-signal]),
  but @racket[define-signal] can be
  used only at the module top-level or at the interactive
  top-level.
@@ -130,6 +147,12 @@ provides additional functionality.
 
 @defproc[(signal? [v any/c]) boolean?]{
  Determines if @racket[v] is a signal, i.e. returned from @racket[signal].
+ @examples[
+ #:eval esterel-eval
+ (with-signal (s1)
+   (signal? s1))
+ (signal? "not a signal, but a string")
+ ]
 }
 
 @defproc[(signal-name [s signal?]) string?]{
@@ -144,6 +167,13 @@ provides additional functionality.
 @defproc[(signal-combine [s signal?]) (or/c #f (-> any/c any/c any/c))]{
  Returns the combining operation for @racket[s], or @racket[#f] if
  @racket[s] is not a value-carrying signal.
+
+ @examples[
+ #:eval esterel-eval
+ (with-signal (s1 s2 #:combine +)
+   (values (signal-combine s1)
+           (signal-combine s2)))
+ ]
 }
 
 @defproc[(present? [s signal?]

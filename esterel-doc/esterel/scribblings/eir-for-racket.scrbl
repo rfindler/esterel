@@ -181,14 +181,14 @@ Let's wrap all this up into a helper function:
 @ex[
  (eval:no-prompt
   (define (traffic-light-stage color seconds)
-    (let-signal (next-stage)
+    (with-signal (next-stage)
       (par (abort (sustain color)
                   #:when (present? next-stage))
            (begin (await (present? second) #:n seconds)
                   (emit next-stage))))))
  ]
 
-and use @racket[let-signal] to make a local signal,
+and use @racket[with-signal] to make a local signal,
 @racket[next-stage], which is available only in the body.
 
 Now, let's run a reaction that repeatedly runs the traffic light

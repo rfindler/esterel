@@ -18,7 +18,7 @@
 
 (provide
  (rename-out [-reaction reaction])
- let-signal
+ with-signal
  define-signal
  par
  suspend
@@ -154,7 +154,7 @@ value for can explorations and subsequent must evaluation.
       name:id
       #:attr combine-proc #'#f)))
 
-(define-syntax (let-signal stx)
+(define-syntax (with-signal stx)
   (syntax-parse stx
     [(_ (signal:signal-name ...)
         body:expr ... last-body:expr)
@@ -242,11 +242,11 @@ value for can explorations and subsequent must evaluation.
     ['dead
      (if (equal? value no-value-provided)
          (error 'emit (string-append "signal dead;\n"
-                                     " the dynamic extent of the `let-signal` has ended\n"
+                                     " the dynamic extent of the `with-signal` has ended\n"
                                      "  signal: ~e")
                 a-signal)
          (error 'emit (string-append "signal dead;\n"
-                                     " the dynamic extent of the `let-signal` has ended\n"
+                                     " the dynamic extent of the `with-signal` has ended\n"
                                      "  signal: ~e\n"
                                      "  value: ~e")
                 a-signal
@@ -739,7 +739,7 @@ value for can explorations and subsequent must evaluation.
     (hash))
 
   ;; these are all the signals that can no longer be emitted because the
-  ;; dynamic extent of their `let-signal` declaration is has ended
+  ;; dynamic extent of their `with-signal` declaration is has ended
   (define/contract dead-signals
     (set/c signal?)
     (set))

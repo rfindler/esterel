@@ -27,12 +27,12 @@ The example can be extended to n signals, in which case the innermost signal has
   (reaction
    (let loop ()
      (with-trap t1
-       (let-signal (s1)
+       (with-signal (s1)
          (par
           (begin (pause) (emit s1) (exit-trap t1))
           (let loop ()
             (with-trap t2
-              (let-signal (s2)
+              (with-signal (s2)
                 (par
                  (begin (pause) (emit s2) (exit-trap t2))
                  (let loop ()
