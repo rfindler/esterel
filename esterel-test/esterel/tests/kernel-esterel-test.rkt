@@ -1,6 +1,10 @@
 #lang racket
 (require esterel/kernel rackunit)
 
+(define (non-constructive-exn? x)
+  (and (exn:fail:not-constructive? x)
+       (regexp-match? #rx"not constructive" (exn-message x))))
+
 (check-equal?
  (react!
   (reaction
@@ -631,7 +635,7 @@
 
 (with-signal (S1 #:combine + S2 #:combine +)
   (check-exn
-   #rx"not constructive"
+   non-constructive-exn?
    (λ ()
      (react!
       (reaction
@@ -786,7 +790,7 @@
 
 
 (check-exn
- #rx"not constructive"
+ non-constructive-exn?
  (λ ()
    (with-signal (SO1 SO2)
      (define r
@@ -810,7 +814,7 @@
      (react! r))))
 
 (check-exn
- #rx"not constructive"
+ non-constructive-exn?
  (λ ()
    (with-signal (S)
      (define r
@@ -821,7 +825,7 @@
      (react! r))))
 
 (check-exn
- #rx"not constructive"
+ non-constructive-exn?
  (λ ()
    (with-signal (S)
      (define r
@@ -832,7 +836,7 @@
      (react! r))))
 
 (check-exn
- #rx"not constructive"
+ non-constructive-exn?
  (λ ()
    (with-signal (S)
      (define r
@@ -843,7 +847,7 @@
      (react! r))))
 
 (check-exn
- #rx"not constructive"
+ non-constructive-exn?
  (λ ()
    (with-signal (S)
      (define r
@@ -853,7 +857,7 @@
      (react! r))))
 
 (check-exn
- #rx"not constructive"
+ non-constructive-exn?
  (λ ()
    (with-signal (S)
      (react!
@@ -1166,7 +1170,7 @@
 ;; popl 2019 figure 5
 (with-signal (sl1 sl2)
   (check-exn
-   #rx"not constructive"
+   non-constructive-exn?
    (λ ()
      (react!
       (reaction
@@ -1211,7 +1215,7 @@
 
 ;; popl 2019, figure 8
 (check-exn
- #rx"not constructive"
+ non-constructive-exn?
  (λ ()
    (with-signal (s1)
      (react!
@@ -1223,7 +1227,7 @@
 ;; popl 2019, figure 9
 (with-signal (s1)
   (check-exn
-   #rx"not constructive"
+   non-constructive-exn?
    (λ ()
      (react!
       (reaction
@@ -1234,7 +1238,7 @@
 
 ;; popl 2019, figure 10 example 1
 (check-exn
- #rx"not constructive"
+ non-constructive-exn?
  (λ ()
    (with-signal (s1)
      (react!
@@ -1245,7 +1249,7 @@
 
 ;; popl 2019, figure 10 example 1
 (check-exn
- #rx"not constructive"
+ non-constructive-exn?
  (λ ()
    (with-signal (s1)
      (react!
