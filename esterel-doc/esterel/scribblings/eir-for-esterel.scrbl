@@ -83,7 +83,7 @@ So, to abstract over repeated patterns in Esterel code, we
 simply define Racket functions. As an example, consider the
 function @racket[Aux], that demonstrates a few more features
 of Esterel in Racket, using @racket[every] with with the
-keywords @racket[#:immedate] and @racket[#:do].
+keywords @racket[#:immediate] and @racket[#:do].
 
 @ex[
  (eval:no-prompt

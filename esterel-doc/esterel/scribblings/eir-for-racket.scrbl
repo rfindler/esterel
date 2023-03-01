@@ -45,17 +45,18 @@ Of course, Esterel's enforcement of determinacy during each
 @tech{instant} applies only to Esterel programs and Esterel
 threads; Racket's threads are not required to explicitly
 pause and remain as complex and difficult to reason about as
-ever. As such, the Esterel portion of the computation is
+ever.@note{Even worse, Esterel computations do not check or
+ guarantee that Racket code run during an instant is pure,
+ and surprising behavior may result if Racket code uses
+ mutation while it is running in an Esterel context. We
+ return to this point in @secref["sec:conts"]; for now,
+ simply imagine only pure Racket code running alongside
+ Esterel.} As such, the Esterel portion of the computation is
 dynamically segregated from the ordinary Racket portion,
 using the keyword @racket[reaction]. Also, in Esterel, the
 program variables that make up the changing, mutable state
 of the program are called signals to avoid possible
-confusion.@note{Esterel computations do not check or
- guarantee that Racket code run during an instant is pure,
- and surprising behavior may result if Racket code uses
- mutation while it is running in an Esterel context. We
- return to this point later; for now, simply imagine only
- pure Racket code running alongside Esterel.}
+confusion.
 
 @section{A Traffic Light}
 
@@ -292,7 +293,7 @@ dependency introduced. Specifically, each use of
 @racket[emit] introduces a causality dependency between it
 and any uses of @racket[present?] (for the same signal). So,
 in this program, @racket[(emit S)] @emph{causes}
-the call @racket[(present? #t)] to return @racket[#true] and
+the call @racket[(present? S)] to return @racket[#true] and
 therefore therefore we can take only the branch that emits
 @racket[O1] and not the one that emits
 @racket[O2].
@@ -326,3 +327,43 @@ in the program before the call to @racket[present?] passing
 causality perspective, since there is nothing that can cause
 @racket[S] to be present, @racket[S] must be absent.
 Accordingly this program is an error.
+
+@section[#:tag "sec:conts"]{Using Continuations to Replay
+ Reactions and How Mutation Causes Trouble}
+
+This section tries to explain, at a high-level how Esterel
+in Racket runs code in order to convey an intuition for how
+using Racket-level state goes wrong inside a
+@racket[reaction].
+
+When a program runs inside a reaction, it runs in two modes.
+It first runs in ``must'' mode where @racket[present?] does
+not return @racket[#f], but instead blocks
+(@racket[present?] might return @racket[#t] if an
+@racket[emit] for the corresponding signal happens). In this
+mode, the code is running very much like regular Racket code
+runs; internally @racket[par] is creating racket-level
+threads and @racket[with-trap] creates an
+@tech[#:doc '(lib "scribblings/reference/reference.scrbl")]{escape
+ continuation}.
+
+At some point, however, all of the threads that are still
+running get blocked on calls to @racket[present?] where the
+corresponding signals have not yet been emitted. At this
+point, the program enters ``can'' mode. It collects the set
+of all of the continuations of all of the threads that are
+blocked in this manner and then runs each of them forward
+multiple times, once for each possible assignments of absent
+and present to each of the signals that's being blocked on.
+After this completes, either some of those signals were
+never emitted during this process, or the program is
+non-constructive. If there were some signals that were never
+emitted, they are set to absent and we return to ``must''
+mode. If all of the blocking signals were emitted during at
+least one of these runs, the program aborts with the
+non-constructive error.
+
+Accordingly, if one of the threads performs some mutation,
+then that mutation is not rolled back by the continuations,
+so it will happen possibly a large number of times and
+certainly more than just once.
