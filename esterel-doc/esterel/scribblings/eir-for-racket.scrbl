@@ -325,8 +325,14 @@ for @racket[S] to be present. There is nothing that happens
 in the program before the call to @racket[present?] passing
 @racket[S] (and thus no emits happen). Thus, from a
 causality perspective, since there is nothing that can cause
-@racket[S] to be present, @racket[S] must be absent.
-Accordingly this program is an error.
+@racket[S] to be present, @racket[S] must be absent. In
+order for this program to be error-free, the
+@racket[(emit S)] that happens in the then branch is
+effectively causing information flow to go ``backwards'',
+against causation, as @racket[present?] cannot decide to
+return @racket[#t] without looking into the future beyond
+the moment where it is invoked. Accordingly this program is
+an error.
 
 @section[#:tag "sec:conts"]{Using Continuations to Replay
  Reactions and How Mutation Causes Trouble}
