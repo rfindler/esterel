@@ -136,7 +136,7 @@ by Berry and Serrano, PLDI 2020
 (define-signal record-dose)
 
 (define r
-  (reaction
+  (esterel
    (let loop ()
      (with-trap dose-ok
        (par (begin

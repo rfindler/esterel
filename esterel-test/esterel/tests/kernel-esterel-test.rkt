@@ -7,21 +7,21 @@
 
 (check-equal?
  (react!
-  (reaction
+  (esterel
    (void)))
  (hash))
 
 (with-signal (s)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (present? s)))
    (hash s #f)))
 
 (with-signal (s)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (emit s)
      (present? s)))
    (hash s #t)))
@@ -29,7 +29,7 @@
 (with-signal (s)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (par
       (begin (emit s) #f)
       (present? s))))
@@ -38,7 +38,7 @@
 (with-signal (s)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (par
       (present? s)
       (present? s))))
@@ -46,13 +46,13 @@
 
 (check-equal?
  (react!
-  (reaction
+  (esterel
    (pause)))
  (hash))
 
 (with-signal (s)
   (define r
-    (reaction
+    (esterel
      (pause)
      (emit s)))
   (check-equal?
@@ -64,7 +64,7 @@
 
 (with-signal (s)
   (define r
-    (reaction
+    (esterel
      (pause)
      (emit s)
      (pause)))
@@ -80,7 +80,7 @@
 
 (with-signal (s)
   (define r
-    (reaction
+    (esterel
      (present? s)
      (pause)
      (emit s)
@@ -98,14 +98,14 @@
 
 
 (check-equal?
- (react! (reaction
+ (react! (esterel
           (par
            (pause)
            (void))))
  (hash))
 
 (check-equal?
- (react! (reaction
+ (react! (esterel
           (par
            (pause)
            (pause))))
@@ -113,14 +113,14 @@
 
 (with-signal (s)
   (check-equal?
-   (react! (reaction
+   (react! (esterel
             (par
              (pause)
              (emit s))))
    (hash s #t)))
 
 (check-equal?
- (react! (reaction
+ (react! (esterel
           (par
            (par
             (pause)
@@ -133,7 +133,7 @@
 (with-signal (s)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (par
       (par
        (present? s)
@@ -144,7 +144,7 @@
    (hash s #f)))
 
 (check-equal?
- (react! (reaction
+ (react! (esterel
           (par
            (par
             (par
@@ -168,7 +168,7 @@
 
 (with-signal (s1 s2)
   (define r
-    (reaction
+    (esterel
      (par
       (let loop ()
         (suspend (begin (pause) (emit s2))
@@ -183,7 +183,7 @@
 (with-signal (s1 s2)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (with-trap t
        (emit s1)
        (exit-trap t)
@@ -193,7 +193,7 @@
 (with-signal (s1 s2)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (with-trap t
        (par
         (emit s1)
@@ -204,7 +204,7 @@
 (with-signal (s1 s2)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (with-trap t1
        (with-trap t2
          (par
@@ -217,7 +217,7 @@
 (with-signal (s1 s2)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (with-trap t1
        (with-trap t2
          (with-trap t3
@@ -234,7 +234,7 @@
 
 (with-signal (s1 s2)
   (define r
-    (reaction
+    (esterel
      (with-trap t1
        (par
         (begin (pause) (emit s1))
@@ -244,7 +244,7 @@
 
 (with-signal (s1 s2 s3)
   (define r
-    (reaction
+    (esterel
      (with-trap t1
        (par
         (begin (pause) (emit s1))
@@ -256,7 +256,7 @@
 
 (let ()
   (define r
-    (reaction
+    (esterel
      (with-trap T1
        (par
         (exit-trap T1)))
@@ -270,7 +270,7 @@
 
 (with-signal (i o)
   (define r
-    (reaction
+    (esterel
      (let loop ()
        (when (present? i)
          (emit o))
@@ -285,7 +285,7 @@
 
 (with-signal (O)
   (define t
-    (reaction
+    (esterel
      (with-trap T
        (par
         (pause)
@@ -296,7 +296,7 @@
 
 (with-signal (O)
   (define t
-    (reaction
+    (esterel
      (with-trap T
        (par
         (par
@@ -308,7 +308,7 @@
 
 (with-signal (O)
   (define t
-    (reaction
+    (esterel
      (with-trap T
        (par
         (par
@@ -321,7 +321,7 @@
 
 (with-signal (O)
   (define t
-    (reaction
+    (esterel
      (with-trap T
        (par
         (par
@@ -334,7 +334,7 @@
 
 (with-signal (O)
   (define r
-    (reaction
+    (esterel
      (par
       (with-trap T
         (par
@@ -348,7 +348,7 @@
 
 (with-signal (O)
   (define r
-    (reaction
+    (esterel
      (par
       (with-trap T1
         (par
@@ -367,7 +367,7 @@
 
 (with-signal (O)
   (define r
-    (reaction
+    (esterel
      (with-trap T0
        (par
         (with-trap T1
@@ -387,7 +387,7 @@
 
 (with-signal (O)
   (define r
-    (reaction
+    (esterel
      (with-trap T0
        (par
         (with-trap T1
@@ -410,14 +410,14 @@
  #rx"expected: pair[?].* given: #f"
  (λ ()
    (react!
-    (reaction
+    (esterel
      (car #f)))))
 
 (check-exn
  #rx"expected: pair[?].* given: #f"
  (λ ()
    (react!
-    (reaction
+    (esterel
      (par
       (car #f))))))
 
@@ -425,7 +425,7 @@
  #rx"expected: pair[?].* given: #f"
  (λ ()
    (react!
-    (reaction
+    (esterel
      (par
       (pause)
       (car #f))))))
@@ -434,7 +434,7 @@
  #rx"expected: pair[?].* given: #f"
  (λ ()
    (react!
-    (reaction
+    (esterel
      (with-trap T
        (par
         (exit-trap T)
@@ -444,7 +444,7 @@
  #rx"expected: pair[?].* given: #f"
  (λ ()
    (react!
-    (reaction
+    (esterel
      (with-trap T
        (par
         (par
@@ -454,7 +454,7 @@
 
 (with-signal (S)
   (define r
-    (reaction
+    (esterel
      (with-trap T
        (par
         (par
@@ -477,7 +477,7 @@
    ;; of the exceptions as that seems more helpful
    (with-signal (s1 s2)
      (react!
-      (reaction
+      (esterel
        (par
         (if (present? s1)
             (void)
@@ -490,7 +490,7 @@
 
 (with-signal (S O)
   (define r
-    (reaction
+    (esterel
      #:pre 2
      (emit S)
      (pause)
@@ -501,7 +501,7 @@
 
 (with-signal (S O1 O2)
   (define r
-    (reaction
+    (esterel
      #:pre 2
      (if (present? S #:pre 1)
          (emit O1)
@@ -510,7 +510,7 @@
 
 (with-signal (O)
   (define r
-    (reaction
+    (esterel
      #:pre 1
      (pause)
      (pause)
@@ -523,7 +523,7 @@
 
 (with-signal (S O)
   (define r
-    (reaction
+    (esterel
      #:pre 1
      (pause)
      (par
@@ -586,14 +586,14 @@
 (with-signal (S #:combine +)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (emit S 1)))
    (hash S 1)))
 
 (with-signal (S #:combine +)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (emit S 1)
      (emit S 2)))
    (hash S 3)))
@@ -603,12 +603,12 @@
    #rx"signal has never been emitted"
    (λ ()
      (react!
-      (reaction
+      (esterel
        (signal-value S))))))
 
 (with-signal (S1 #:combine + S2 #:combine +)
   (define r
-    (reaction
+    (esterel
      (emit S1 11)
      (pause)
      (emit S2 (+ 1 (signal-value S1)))))
@@ -618,7 +618,7 @@
 (with-signal (S1 #:combine + S2 #:combine +)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (emit S1 1)
      (emit S1 2)
      (emit S2 (+ 2 (signal-value S1)))))
@@ -627,7 +627,7 @@
 (with-signal (S1 #:combine + S2 #:combine +)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (par (emit S1 1)
           (emit S2 (+ 1 (signal-value S1)))
           (emit S1 2))))
@@ -638,14 +638,14 @@
    non-constructive-exn?
    (λ ()
      (react!
-      (reaction
+      (esterel
        (emit S1 1)
        (signal-value S1)
        (emit S1 2))))))
 
 (with-signal (S1 #:combine + S2 #:combine +)
   (define r
-    (reaction
+    (esterel
      (emit S1 44)
      (emit S2 55)
      (pause)
@@ -660,7 +660,7 @@
 
 (with-signal (S1 #:combine + S2 #:combine +)
   (define r
-    (reaction
+    (esterel
      (emit S1 #f)
      (emit S2 55)
      (pause)
@@ -675,7 +675,7 @@
 
 (with-signal (S #:combine +)
   (define r
-    (reaction
+    (esterel
      (emit S 1)
      (pause)
      (emit S 2)))
@@ -684,7 +684,7 @@
 
 (with-signal (S #:combine + O)
   (define r
-    (reaction
+    (esterel
      #:pre 2
      (emit S 1)
      (pause)
@@ -695,7 +695,7 @@
 
 (with-signal (O S #:combine +)
   (define r
-    (reaction
+    (esterel
      #:pre 2
      (emit S 1)
      (pause)
@@ -711,13 +711,13 @@
 
 (with-signal (S #:combine +)
   (define r
-    (reaction
+    (esterel
      (present? S)))
   (check-equal? (react! r) (hash S #f)))
 
 (with-signal (S #:combine +)
   (define r
-    (reaction
+    (esterel
      (emit S 0)
      (present? S)))
   (check-equal? (react! r)
@@ -725,7 +725,7 @@
 
 (with-signal (S #:combine +)
   (define r
-    (reaction
+    (esterel
      (emit S 0)
      (present? S)
      (present? S)))
@@ -734,14 +734,14 @@
 
 (with-signal (S #:combine +)
   (define r
-    (reaction
+    (esterel
      (present? S)))
   (check-equal? (react! r #:emit (list (cons S 0)))
                 (hash S 0)))
 
 (with-signal (S #:combine + O)
   (define r
-    (reaction
+    (esterel
      (let loop ()
        (when (and (present? S) (= (signal-value S) 2))
          (emit O))
@@ -794,7 +794,7 @@
  (λ ()
    (with-signal (SO1 SO2)
      (define r
-       (reaction
+       (esterel
         (par
          (par
           (par
@@ -818,7 +818,7 @@
  (λ ()
    (with-signal (S)
      (define r
-       (reaction
+       (esterel
         (if (present? S)
             (emit S)
             (void))))
@@ -829,7 +829,7 @@
  (λ ()
    (with-signal (S)
      (define r
-       (reaction
+       (esterel
         (if (present? S)
             (void)
             (emit S))))
@@ -840,7 +840,7 @@
  (λ ()
    (with-signal (S)
      (define r
-       (reaction
+       (esterel
         (if (present? S)
             (emit S)
             (emit S))))
@@ -851,7 +851,7 @@
  (λ ()
    (with-signal (S)
      (define r
-       (reaction
+       (esterel
         (present? S)
         (emit S)))
      (react! r))))
@@ -861,7 +861,7 @@
  (λ ()
    (with-signal (S)
      (react!
-      (reaction
+      (esterel
        (with-signal (S2)
          (cond
            [(present? S)
@@ -873,7 +873,7 @@
 
 (with-signal (S1 S2 O)
   (define r
-    (reaction
+    (esterel
      (if (present? S1)
          (if (present? S2)
              (void)
@@ -884,7 +884,7 @@
 
 (with-signal (S1 S2 O)
   (define r
-    (reaction
+    (esterel
      (if (present? S1)
          (void)
          (if (present? S2)
@@ -895,7 +895,7 @@
 
 (with-signal (S1 S2 S3 S4 S5)
   (define r
-    (reaction
+    (esterel
      (if (present? S1)
          (void)
          (if (present? S2)
@@ -913,7 +913,7 @@
 
 (with-signal (S1 #:combine + O1 O2)
   (define r
-    (reaction
+    (esterel
      (emit S1 #f)
      (pause)
      (if (signal-value S1)
@@ -926,7 +926,7 @@
 
 (with-signal (S1 #:combine + O1 O2)
   (define r
-    (reaction
+    (esterel
      (emit S1 #t)
      (pause)
      (if (signal-value S1)
@@ -939,7 +939,7 @@
 
 (with-signal (S1 #:combine + O1 O2)
   (define r
-    (reaction
+    (esterel
      (par (emit S1 3)
           (if (signal-value S1)
               (emit O1)
@@ -950,7 +950,7 @@
 
 (with-signal (S1 #:combine + O1 O2)
   (define r
-    (reaction
+    (esterel
      (par (emit S1 3)
           (emit S1 5)
           (if (signal-value S1)
@@ -1005,7 +1005,7 @@
     (for/hash ([(k v) (in-hash ht)])
       (values (signal-name k) v)))
   (define r
-    (reaction
+    (esterel
      (present? S)
      (present? (with-signal (S2) S2))))
   (check-equal? (signals->names (react! r))
@@ -1016,7 +1016,7 @@
     (for/hash ([(k v) (in-hash ht)])
       (values (signal-name k) v)))
   (define r
-    (reaction
+    (esterel
      (with-signal (S1)
        (present? S1)
        (with-signal (S2 O1 O2)
@@ -1032,7 +1032,7 @@
     (for/hash ([(k v) (in-hash ht)])
       (values (signal-name k) v)))
   (define r
-    (reaction
+    (esterel
      (with-signal (S1)
        (present? S1)
        (with-signal (S2 O1 O2)
@@ -1047,7 +1047,7 @@
     (for/hash ([(k v) (in-hash ht)])
       (values (signal-name k) v)))
   (define r
-    (reaction
+    (esterel
      (with-signal (S1)
        (present? S1)
        (with-signal (S2 O1 O2)
@@ -1063,7 +1063,7 @@
     (for/hash ([(k v) (in-hash ht)])
       (values (signal-name k) v)))
   (define r
-    (reaction
+    (esterel
      (with-signal (s1 s2)
        (present? s1)
        (emit s2))))
@@ -1074,10 +1074,10 @@
  #rx"emit:.*dynamic extent"
  (λ ()
    (react!
-    (reaction
+    (esterel
      (emit (with-signal (s1) s1))))))
 
-;; make sure that, when we're not in a reaction,
+;; make sure that, when we're not in a esterel,
 ;; the last expression is in tail position
 (check-equal?
  (continuation-mark-set->list
@@ -1100,7 +1100,7 @@
    (with-signal (S)
      (signals->names*
       (react!
-       (reaction
+       (esterel
         (if (present? S)
             (with-signal (S2)
               (emit S2))
@@ -1137,7 +1137,7 @@
 (with-signal (sl so1 so2)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (emit sl)
      (if (present? sl)
          (emit so1)
@@ -1148,7 +1148,7 @@
 (with-signal (sl so1 so2)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (par
       (emit sl)
       (if (present? sl)
@@ -1161,7 +1161,7 @@
 (with-signal (sl so1 so2)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (if (present? sl)
          (emit so1)
          (emit so2))))
@@ -1173,7 +1173,7 @@
    non-constructive-exn?
    (λ ()
      (react!
-      (reaction
+      (esterel
        (par
         (when (present? sl1) (emit sl2))
         (when (present? sl2) (emit sl1))))))))
@@ -1182,7 +1182,7 @@
 ;; popl 2019 figure 6
 (with-signal (sl so1 so2)
   (define r
-    (reaction
+    (esterel
      (par
       (begin (pause) (emit sl))
       (if (present? sl) (emit so1) (emit so2)))))
@@ -1196,7 +1196,7 @@
 ;; popl 2019 figure 7
 (with-signal (sl1 sl2 sl3 so1 so2)
   (define r
-    (reaction
+    (esterel
      (par
       (if (present? sl1)
           (if (present? sl2)
@@ -1219,7 +1219,7 @@
  (λ ()
    (with-signal (s1)
      (react!
-      (reaction
+      (esterel
        (if (present? s1)
            (void)
            (emit s1)))))))
@@ -1230,7 +1230,7 @@
    non-constructive-exn?
    (λ ()
      (react!
-      (reaction
+      (esterel
        (if (present? s1)
            (emit s1)
            (void)))))))
@@ -1242,7 +1242,7 @@
  (λ ()
    (with-signal (s1)
      (react!
-      (reaction
+      (esterel
        (if (present? s1)
            (emit s1)
            (emit s1)))))))
@@ -1253,7 +1253,7 @@
  (λ ()
    (with-signal (s1)
      (react!
-      (reaction
+      (esterel
        (if (present? s1) (void) (void))
        (emit s1))))))
 
@@ -1263,7 +1263,7 @@
  (λ ()
    (with-signal (sl1 sl2)
      (react!
-      (reaction
+      (esterel
        (par
         (when (present? sl1) (emit sl2))
         (begin (when (present? sl2) pause)
@@ -1273,7 +1273,7 @@
 (with-signal (s-outer s-inner)
   (check-equal?
    (react!
-    (reaction
+    (esterel
      (begin
        (present? s-outer)
        (when (present? s-inner) (emit s-outer)))))

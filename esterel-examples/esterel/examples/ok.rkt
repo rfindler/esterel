@@ -10,7 +10,7 @@
 (define-signal S1 S2)
 
 (define r
-  (reaction
+  (esterel
    (emit S1)
    (par (Aux S1 S2)
         (Aux S2 S1))))

@@ -83,23 +83,23 @@ This introduces three new Racket identifiers, @racket[red],
 @racket[orange], and @racket[green], bound to signals.
 
 To run an Esterel program, we need to wrap the code in
-@racket[reaction]. Any code or helper functions can be
-invoked from within a reaction; the restriction that Esterel
-code must be inside a reaction is a dynamic restriction. For
+@racket[esterel]. Any code or helper functions can be
+invoked from inside. That is, Esterel
+code runs in the dynamic extent of @racket[esterel]. For
 starters, let's just make a traffic signal that is
 permanently red. Here's the code to do that:
 
 @ex[
  (eval:no-prompt
   (define forever-red
-    (reaction
+    (esterel
      (let loop ()
        (emit red)
        (pause)
        (loop)))))
  ]
 
-Looking at the code line by line, we see @racket[reaction],
+Looking at the code line by line, we see @racket[esterel],
 which wraps our Esterel program, then a recursive loop
 definition, followed by @racket[(emit red)] which causes
 the signal @racket[red] to be emitted and thus present.
@@ -128,7 +128,7 @@ written more compactly:
 @ex[
  (eval:no-prompt
   (define forever-red
-    (reaction
+    (esterel
      (sustain red))))
  ]
 
@@ -197,7 +197,7 @@ Now, we can write a reaction that repeatedly runs the traffic light:
 @ex[
  (eval:no-prompt
   (define three-stages
-    (reaction
+    (esterel
      (traffic-light-stage green (* 4 60))
      (traffic-light-stage orange 4)
      (traffic-light-stage red 2))))
@@ -239,7 +239,7 @@ the else branch of the conditional and emits @racket[O2].
 @examples[#:label #f #:eval esterel-eval
           (eval:no-prompt (define-signal S O1 O2))
           (react!
-           (reaction
+           (esterel
             (if (present? S)
                 (emit O1)
                 (emit O2))))]
@@ -254,7 +254,7 @@ conditional, as in this program, we causes the conditional
 to take the other branch:
 @examples[#:label #f #:eval esterel-eval
           (react!
-           (reaction
+           (esterel
             (emit S)
             (if (present? S)
                 (emit O1)
@@ -269,7 +269,7 @@ test for @racket[S] is done in parallel to the emission of
 @racket[S].
 
 @examples[#:label #f #:eval esterel-eval
-          (react! (reaction
+          (react! (esterel
                    (par (emit S)
                         (if (present? S)
                             (emit O1)
@@ -307,12 +307,12 @@ example:
 
 @examples[#:label #f #:eval esterel-eval
           (eval:no-prompt
-           (define non-causal-reaction
-             (reaction
+           (define non-causal
+             (esterel
               (if (present? S)
                   (emit S)
                   (emit S)))))
-          (eval:error (react! non-causal-reaction))]
+          (eval:error (react! non-causal))]
 
 When looking at this program from a simple logical
 perspective, we can see that it makes no sense for
@@ -340,9 +340,9 @@ an error.
 This section tries to explain, at a high-level how Esterel
 in Racket runs code in order to convey an intuition for how
 using Racket-level state goes wrong inside a
-@racket[reaction].
+@racket[esterel].
 
-When a program runs inside a reaction, it runs in two modes.
+When a program runs within an @tech{instant}, it runs in two modes.
 It first runs in ``must'' mode where @racket[present?] does
 not return @racket[#f], but instead blocks
 (@racket[present?] might return @racket[#t] if an

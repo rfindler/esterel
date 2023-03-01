@@ -24,7 +24,7 @@ in @racketmodname[esterel/kernel].
  #:eval esterel-eval
  (define-signal S)
  (define r
-   (reaction
+   (esterel
     (sustain S)))
  (eval:check (react! r) (hash S #t))
  (eval:check (react! r) (hash S #t))
@@ -46,7 +46,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  #:eval esterel-eval
  (define-signal S1 S2)
  (define r
-   (reaction
+   (esterel
     (loop (emit S1)
           #:each (not (present? S2)))))
 
@@ -81,7 +81,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  #:eval esterel-eval
  (define-signal S1 S2 S3)
  (define r1
-   (reaction
+   (esterel
     (abort (let loop ()
              (emit S1)
              (pause)
@@ -102,7 +102,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  #:label #f
  #:eval esterel-eval
  (define r2
-   (reaction
+   (esterel
     (abort (let loop ()
              (emit S1)
              (pause)
@@ -119,7 +119,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  #:label #f
  #:eval esterel-eval
  (define r3
-   (reaction
+   (esterel
     (abort #:weak
            (let loop ()
              (emit S1)
@@ -153,7 +153,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  #:eval esterel-eval
  (define-signal S1 S2)
  (define r
-   (reaction
+   (esterel
     (par (begin
            (pause)
            (pause)
@@ -174,7 +174,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  #:eval esterel-eval
  (define-signal S1 S2)
  (define r
-   (reaction
+   (esterel
     (await (present? S1) #:n 3)
     (emit S2)))
  (eval:check (react! r) (hash))
@@ -184,12 +184,12 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  (eval:check (react! r #:emit (list S1)) (hash S1 #t S2 #t))]
 
  As an example of the third form, this program emits @racket[O] in the first
- instant, as both of the @racket[await]s terminate in the first reaction.
+ instant, as both of the @racket[await]s terminate in the first @tech{instant}.
  @examples[
  #:label #f
  #:eval esterel-eval
  (define-signal S O)
- (define r (reaction
+ (define r (esterel
             (await #:immediate (not (present? S)))
             (await #:immediate (not (present? S)))
             (emit O)))
@@ -216,7 +216,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  #:eval esterel-eval
  (define-signal S1 S2)
  (define r1
-   (reaction
+   (esterel
     (every (present? S1)
            #:do
            (emit S2))))
@@ -233,7 +233,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  #:label #f
  #:eval esterel-eval
  (define r2
-   (reaction
+   (esterel
     (every (present? S1)
            #:n 2
            #:do
@@ -251,7 +251,7 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  #:label #f
  #:eval esterel-eval
  (define r2
-   (reaction
+   (esterel
     (every (present? S1)
            #:n 2
            #:do

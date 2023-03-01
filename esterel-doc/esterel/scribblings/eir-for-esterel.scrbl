@@ -35,7 +35,7 @@ code into DrRacket's definitions window and hit the
 (define-signal A B R O)
 
 (define abro
-  (reaction
+  (esterel
    (loop (par (await (present? A))
               (await (present? B)))
          (emit O)
@@ -49,15 +49,15 @@ code into DrRacket's definitions window and hit the
 
 The first line declares the language and the second line
 loads the Esterel in Racket implementation. Each Esterel
-program has to be encapsulated inside @racket[reaction];
+program has to be encapsulated inside @racket[esterel];
 this is a dynamic restriction, not a static one. Code inside
-@racket[reaction] can call arbitrary helper functions and,
+@racket[esterel] can call arbitrary helper functions and,
 indeed, things like @racket[loop] and @racket[emit] are
 defined as Racket macros and functions inside the Racket
 library @racketmodname[esterel/full].
 
-Code inside @racket[reaction] doesn't run when the
-@racket[reaction] form is evaluated, however. Instead, it
+Code inside @racket[esterel] doesn't run when the
+@racket[esterel] form is evaluated, however. Instead, it
 returns a value that encapsulates the Esterel computation.
 When that value is passed to the function @racket[react!], a
 single instant is run and the values of signals are returned
@@ -97,7 +97,7 @@ keywords @racket[#:immediate] and @racket[#:do].
 The function @racket[Aux] is an ordinary Racket function and
 it consumes two parameters, named @racket[I] and @racket[O].
 The parameters are meant to be signals and thus it must be
-called from within the dynamic extent of @racket[reaction].
+called from within the dynamic extent of @racket[esterel].
 
 Here is some code that defines two signals and then, in
 parallel, invokes @racket[Aux] twice; once with @racket[I]
@@ -109,7 +109,7 @@ other way around.
   (define-signal S1 S2))
  (eval:no-prompt
   (define r
-    (reaction
+    (esterel
      (emit S1)
      (par (Aux S1 S2)
           (Aux S2 S1)))))
@@ -134,7 +134,7 @@ erroneous will raise errors as they execute instead of being
 ruled out by a compiler statically.
 
 As one example of a runtime error, here is what happens when
-@racket[Aux] is called from outside of @racket[reaction]:
+@racket[Aux] is called from outside of @racket[esterel]:
 
 @ex[
     (eval:error (Aux S1 S2))
@@ -143,9 +143,9 @@ As one example of a runtime error, here is what happens when
 This is a dynamic check that happens inside
 @racket[present?], and several other Esterel functions. They
 check if they are being used in the dynamic extent of
-@racket[reaction] and, if not, raise an error. The function
-@racket[in-reaction?] returns @racket[#t] when code is
-currently executing inside a reaction and @racket[#f]
+@racket[esterel] and, if not, raise an error. The function
+@racket[in-esterel?] returns @racket[#t] when code is
+currently executing during an instant and @racket[#f]
 otherwise.
 
 @section{Signals as Values}
@@ -190,7 +190,7 @@ identifier @racket[a-signal-outside-its-extent].
 @ex[
     (eval:error
      (react!
-      (reaction
+      (esterel
        (define a-signal-outside-its-extent
          (with-signal (s1)
            s1))

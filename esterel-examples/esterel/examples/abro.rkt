@@ -12,7 +12,7 @@ given in figure 1.2
 (define-signal A B R O)
 
 (define abro
-  (reaction
+  (esterel
    (loop (par (await (present? A))
               (await (present? B)))
          (emit O)

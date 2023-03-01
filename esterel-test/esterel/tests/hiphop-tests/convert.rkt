@@ -13,7 +13,7 @@
      (define (go signals)
        (define has-pre?
          (let loop ([expr expr]) (match expr [(cons a b) (or (loop a) (loop b))] ['pre& #t] [_ #f])))
-       (define r (reaction #:pre (if has-pre? 1 0) (&->dyn expr signals)))
+       (define r (esterel #:pre (if has-pre? 1 0) (&->dyn expr signals)))
        (let/ec escape
          (for ([input-output (in-list input-outputs)]
                [i (in-naturals)])
@@ -50,7 +50,7 @@
                           #:when (output-signal? signal))
                   signal)]))
            (unless (equal? expected-outputs actual-outputs)
-             (eprintf "reaction ~a (counting from 0):\n  file ~a\n  expected ~s\n       got ~s\n"
+             (eprintf "instant ~a (counting from 0):\n  file ~a\n  expected ~s\n       got ~s\n"
                       i fn expected-outputs actual-outputs)
              (escape (void))))))
      (with-signals-table signals (hash) (append si so sio)

@@ -10,21 +10,21 @@
          (for-syntax racket/base syntax/parse))
 
 
-(define (pre-cond-reaction-check who)
+(define (pre-cond-check)
   (cond
-    [(in-reaction?) #t]
+    [(in-esterel?) #t]
     [else
-     "must be run from within the dynamic extent of `reaction`"]))
+     "must be run from within the dynamic extent of `esterel`"]))
 
 (provide
- (rename-out [-reaction reaction])
+ (rename-out [-esterel esterel])
  with-signal
  define-signal
  par
  suspend
  with-trap
  (contract-out
-  [react! (->* (reaction?)
+  [react! (->* (esterel?)
                (#:emit (listof
                         (or/c (and/c signal? (not/c signal-combine))
                               (cons/c (and/c signal? signal-combine)
@@ -39,7 +39,7 @@
                                    any/c
                                    boolean?)]
                         #:immutable #t #:kind 'flat))]
-  [in-reaction? (-> boolean?)]
+  [in-esterel? (-> boolean?)]
 
   ;; the uses of `values` here (and below) is to avoid
   ;; a bug in 8.8's racket/contract library; they can
@@ -47,7 +47,7 @@
   [present? (values
              (->* (signal?)
                   (#:pre natural?)
-                  #:pre/desc (pre-cond-reaction-check 'present?)
+                  #:pre/desc (pre-cond-check)
                   boolean?))]
 
   ;; when a signal is not emitted it will return the
@@ -59,16 +59,16 @@
                       ;; NB when we go "too far" with #:pre the values are just #f,
                       ;; even if the signal never had that value... is this okay?
                       (#:pre natural?)
-                      #:pre/desc (pre-cond-reaction-check 'signal-value)
+                      #:pre/desc (pre-cond-check)
                       any/c))]
   [signal? (-> any/c boolean?)]
   [signal-name (-> signal? (or/c #f string?))]
   [signal-combine (-> signal? (or/c #f (-> any/c any/c any)))]
   [emit (values (->* (signal?)
                      (any/c)
-                     #:pre/desc (pre-cond-reaction-check 'emit)
+                     #:pre/desc (pre-cond-check)
                      void?))]
-  [pause (values (->* () #:pre/desc (pre-cond-reaction-check 'pause) void?))]
+  [pause (values (->* () #:pre/desc (pre-cond-check) void?))]
   [exit-trap (-> trap? any)]
   [trap? (-> any/c boolean?)]
   [exn:fail:not-constructive? (-> any/c boolean?)]))
@@ -76,9 +76,9 @@
 
 #|
 
-When starting a reaction, we create a new thread that has
+When starting an `esterel`, we create a new thread that has
 the state of all the emitted signals, the `instant loop` thread.
-Then we also put the argument to `reaction` in its own thread,
+Then we also put the argument to `esterel` in its own thread,
 and all of the operations (emit, pause, etc) all communicate
 with the instant loop thread to determine the value of signals
 and to set them.
@@ -123,23 +123,19 @@ progress in the computation. So the question is how do we know
 if this signal is the "same" signal for other can exploration
 or for must execution? The way we do this is to collect the source
 location of the signal when it is created and pair that with a
-counter that is specific to the reaction where it is being
-used. Then, the reaction can reset the counter back to the same
+counter that is specific to the instant where it is being
+used. Then, we can reset the counter back to the same
 value for can explorations and subsequent must evaluation.
-(One problem here -- if someone creates a signal during one
- reaction and then uses it for another one, something strange can
- happen. Probably this can be dealt with, with extra stuff....
- assuming the basic strategy is sound.)
 |#
 
 (define-logger esterel)
 (define-logger esterel-par)
 
 (struct checkpoint-request (resp-chan))
-(define reaction-prompt-tag (make-continuation-prompt-tag 'reaction))
+(define esterel-prompt-tag (make-continuation-prompt-tag 'esterel))
 
 (define current-signal-table (make-parameter #f))
-(define (in-reaction?) (and (current-signal-table) #t))
+(define (in-esterel?) (and (current-signal-table) #t))
 
 (begin-for-syntax
   (define-splicing-syntax-class signal-name
@@ -198,7 +194,7 @@ value for can explorations and subsequent must evaluation.
 
 (define (mk-signal.args name combine src)
   (signal (symbol->string name)
-          ;; the identity of a signal, when we're in a reaction,
+          ;; the identity of a signal, when we're in an instant,
           ;; is eq-like in that we increment a counter for each
           ;; one, but we arrange to make sure that subsequent
           ;; runs in must mode get the same signal as an earlier
@@ -278,7 +274,7 @@ value for can explorations and subsequent must evaluation.
          (λ (k)
            (channel-put (checkpoint-request-resp-chan maybe-val) k)
            resp-chan)
-         reaction-prompt-tag))]
+         esterel-prompt-tag))]
       [(signal-never-before-emitted)
        (error 'signal-value
               "signal has never been emitted\n  signal: ~e" a-signal)]
@@ -297,7 +293,7 @@ value for can explorations and subsequent must evaluation.
        #`(par/proc (list thunks ...)))]))
 
 (define (par/proc thunks)
-  (unless (in-reaction?) (error 'par "not in a reaction"))
+  (unless (in-esterel?) (error 'par "not in `esterel`"))
   (define s (make-semaphore 0))
   (define before-par-trap-counter (get-current-trap-counter))
   (define result-chans+children-threads
@@ -335,7 +331,7 @@ value for can explorations and subsequent must evaluation.
               (λ (k)
                 (channel-put checkpoint-resp-chan-or-final-result (vector before-par-trap-counter k))
                 (values pending-result-chans+par-threads checkpoint-or-par-result-chan))
-              reaction-prompt-tag))
+              esterel-prompt-tag))
            (when (set-empty? pending-result-chans+par-threads)
              (internal-error "asked for a par checkpoint with no children"))
            (loop new-pending-result-chans+par-threads new-checkpoint-or-par-result-chan)]
@@ -366,7 +362,7 @@ value for can explorations and subsequent must evaluation.
 ;; this function creates the par children thread when a par is first encountered
 ;; and it also creates the threads for when we fall back to a previous state
 ;; to run in can mode. It doesn't create the main
-;; reaction thread but probably things should be cleaned up a bit so it can.
+;; esterel thread but probably things should be cleaned up a bit so it can.
 ;; if before-par-trap-counter isn't #f, then we know we're creating a par child
 ;; thread and we set up that machinery; we don't need the marks it the thread is
 ;; the outermost thread because the code that looks up the marks knows what to
@@ -399,13 +395,13 @@ value for can explorations and subsequent must evaluation.
                   (begin
                     (call-with-continuation-prompt
                      thunk
-                     reaction-prompt-tag)
+                     esterel-prompt-tag)
                     #f)))))))]
       [else
        (λ ()
          (call-with-continuation-prompt
           thunk
-          reaction-prompt-tag))]))
+          esterel-prompt-tag))]))
   ;; this renaming doesn't work when rebuilding the threads currently
   (define thunk-name (object-name thunk))
   (thread (if thunk-name
@@ -445,7 +441,7 @@ value for can explorations and subsequent must evaluation.
          (λ (k)
            (channel-put val k)
            resp-chan)
-         reaction-prompt-tag))]
+         esterel-prompt-tag))]
       [else
        (define iter
          (continuation-mark-set->iterator
@@ -471,7 +467,7 @@ value for can explorations and subsequent must evaluation.
 
 (define suspend-mark (gensym 'suspend))
 (define (suspend/proc body signal-thunk)
-  (unless (in-reaction?) (error 'suspend "not in a reaction"))
+  (unless (in-esterel?) (error 'suspend "not in `esterel`"))
   (with-continuation-mark suspend-mark signal-thunk
     ;; we don't want the body to be in tail position
     (begin0
@@ -530,23 +526,23 @@ value for can explorations and subsequent must evaluation.
                       react-thread-done-chan
                       pre-count))
   
-(struct reaction (signal-table) #:mutable)
-(define-syntax (-reaction stx)
+(struct esterel (signal-table) #:mutable)
+(define-syntax (-esterel stx)
   (syntax-parse stx
     [(_ #:pre pre-expr:expr e1:expr e2:expr ...)
-     #'(reaction/proc pre-expr (λ () e1 e2 ...))]
+     #'(esterel/proc pre-expr (λ () e1 e2 ...))]
     [(_ e1:expr e2:expr ...)
-     #'(reaction/proc 0 (λ () e1 e2 ...))]))
-(define (reaction/proc pre-count thunk)
+     #'(esterel/proc 0 (λ () e1 e2 ...))]))
+(define (esterel/proc pre-count thunk)
   (define the-signal-table
     (signal-table (make-channel) (make-channel) (make-channel) (make-channel)
                   (make-channel) (make-channel) (make-channel) (make-channel)
                   (make-channel) pre-count))
-  (thread (λ () (run-reaction-thread pre-count thunk the-signal-table)))
-  (reaction the-signal-table))
+  (thread (λ () (run-esterel-thread pre-count thunk the-signal-table)))
+  (esterel the-signal-table))
 
-(define (react! a-reaction #:emit [signals-to-emit '()])
-  (define signal-table (reaction-signal-table a-reaction))
+(define (react! an-esterel #:emit [signals-to-emit '()])
+  (define signal-table (esterel-signal-table an-esterel))
   (define maybe-signals
     (cond
       [(equal? signal-table 'non-constructive)
@@ -560,7 +556,7 @@ value for can explorations and subsequent must evaluation.
        (define maybe-signals (channel-get instant-complete-chan))
        (when (or (equal? maybe-signals 'non-constructive)
                  (exn? maybe-signals))
-         (set-reaction-signal-table! a-reaction maybe-signals))
+         (set-esterel-signal-table! an-esterel maybe-signals))
        maybe-signals]))
   (match maybe-signals
     ['non-constructive
@@ -569,17 +565,17 @@ value for can explorations and subsequent must evaluation.
        "react!: the program is not constructive"
        (current-continuation-marks)))]
     [(? exn?) (raise maybe-signals)]
-    [#f (error 'react! "a reaction is already running")]
+    [#f (error 'react! "an instant is already running")]
     [_ maybe-signals]))
 
 (struct exn:fail:not-constructive exn:fail ())
 
-(define (run-reaction-thread pre-count thunk the-signal-table)
+(define (run-esterel-thread pre-count thunk the-signal-table)
   (define first-instant-sema (make-semaphore 0))
-  (define reaction-thread
+  (define esterel-thread
     (let ([first-instant-sema first-instant-sema])
       (parameterize ([current-signal-table the-signal-table])
-        (define (reaction-thread-thunk)
+        (define (esterel-thread-thunk)
           (semaphore-wait first-instant-sema)
           (call-with-continuation-prompt
            (λ ()
@@ -596,8 +592,8 @@ value for can explorations and subsequent must evaluation.
                      (escape (void))]))
                 thunk)
                (channel-put react-thread-done-chan #f)))
-           reaction-prompt-tag))
-        (thread reaction-thread-thunk))))
+           esterel-prompt-tag))
+        (thread esterel-thread-thunk))))
   (match-define (signal-table new-signal-chan signal-chan signal-dead-chan emit-chan
                               par-start-chan par-partly-done-chan
                               pause-chan instant-chan
@@ -711,7 +707,7 @@ value for can explorations and subsequent must evaluation.
                       paused-threads
                       par-parents
                       parent->par-state
-                      reaction-thread))
+                      esterel-thread))
   ;; saved-must-state : (or/c #f must-state?)
   ;; #f when we're in must mode and must-state? when we're in can mode
   (define saved-must-state #f)
@@ -777,11 +773,11 @@ value for can explorations and subsequent must evaluation.
     (hash))
 
   ;; (set/c hash)
-  ;; all of the threads in the reaction that are:
+  ;; all of the threads in the instant that are:
   ;;    - not blocked on a signal
   ;;    - not paused
   ;;    - not a par-parent thread
-  (define running-threads (set reaction-thread))
+  (define running-threads (set esterel-thread))
   (define/contract (add-running-thread t)
     (-> thread? void?)
     (when (set-member? running-threads t)
@@ -931,7 +927,7 @@ value for can explorations and subsequent must evaluation.
                       paused-threads
                       par-parents
                       parent->par-state
-                      reaction-thread)))
+                      esterel-thread)))
 
   (define (restore-must-state)
     (match-define (must-state _new-signal-counter
@@ -943,7 +939,7 @@ value for can explorations and subsequent must evaluation.
                               _paused-threads
                               _par-parents
                               _parent->par-state
-                              _reaction-thread)
+                              _esterel-thread)
       saved-must-state)
     (set! new-signal-counter _new-signal-counter)
     (set! signal-status _signal-status)
@@ -954,7 +950,7 @@ value for can explorations and subsequent must evaluation.
     (set! paused-threads _paused-threads)
     (set! par-parents _par-parents)
     (set! parent->par-state _parent->par-state)
-    (set! reaction-thread _reaction-thread)
+    (set! esterel-thread _esterel-thread)
     (set! saved-must-state #f))
 
   ;; the `starting-point` struct holds information about the starting point
@@ -975,7 +971,7 @@ value for can explorations and subsequent must evaluation.
     (set! paused-threads (hash))
     (set! par-parents (hash))
     (set! parent->par-state (hash))
-    (set! reaction-thread (rebuild-threads-from-rb-tree rb-tree)))
+    (set! esterel-thread (rebuild-threads-from-rb-tree rb-tree)))
   (define (get-starting-point)
     (starting-point (build-rb-tree-from-current-state)
                     new-signal-counter signal-status signal-value dead-signals))
@@ -1002,7 +998,7 @@ value for can explorations and subsequent must evaluation.
   (define (build-rb-tree-from-current-state)
     (define k-chan (make-channel))
     (define a-checkpoint-request (checkpoint-request k-chan))
-    (let loop ([thread reaction-thread])
+    (let loop ([thread esterel-thread])
       (cond
         [(hash-has-key? parent->par-state thread)
          (match-define (par-state checkpoint/result-chan signal-waiting paused active a-trap)
@@ -1032,7 +1028,7 @@ value for can explorations and subsequent must evaluation.
         [else (internal-error "lost a thread ~s" thread)])))
 
   ;; rebuild-threads-from-rb-tree : rb-tree? -> thread
-  ;; returns the new reaction thread
+  ;; returns the new thread that'll run a can exploration
   (define (rebuild-threads-from-rb-tree rb-tree)
     (let loop ([rb-tree rb-tree]
                [par-child-result-chan #f]
@@ -1229,7 +1225,7 @@ value for can explorations and subsequent must evaluation.
          [(pair? raised-exns)
           (channel-put instant-complete-chan (car raised-exns))
           ;; there was an exception while running so just report that
-          ;; and give up on this reaction; currently throwing away
+          ;; and give up on this instant; currently throwing away
           ;; exceptions if there are multiples; not sure what to do about that
           (void)]
          [(can? mode)
@@ -1595,10 +1591,10 @@ value for can explorations and subsequent must evaluation.
         (handle-evt
          react-thread-done-chan
          (λ (exn)
-           (log-esterel-debug "~a: main reaction thread done, ~s" (eq-hash-code (current-thread)) exn)
+           (log-esterel-debug "~a: main thread done, ~s" (eq-hash-code (current-thread)) exn)
            (log-par-state)
            (when (exn? exn) (set! raised-exns (cons exn raised-exns)))
-           (remove-running-thread reaction-thread)
+           (remove-running-thread esterel-thread)
            (loop)))
         )])))
 

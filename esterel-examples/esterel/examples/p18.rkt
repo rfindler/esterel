@@ -24,7 +24,7 @@ The example can be extended to n signals, in which case the innermost signal has
 (define-signal s1_and_s2 s1_and_not_s2 not_s1_and_s2 not_s1_and_not_s2)
 
 (define r
-  (reaction
+  (esterel
    (let loop ()
      (with-trap t1
        (with-signal (s1)

@@ -15,15 +15,15 @@ provides additional functionality.
                      esterel/full))
 @(define esterel-eval (make-base-eval '(require esterel/full)))
 
-@section{Reactions}
+@section{Running Esterel Code}
 
-@defform[(reaction maybe-pre expr ...)
+@defform[(esterel maybe-pre expr ...)
          #:grammar
          ([maybe-pre (code:line) (code:line #:pre pre-count-expr)])]{
 
- Creates an Esterel reaction that, when passed to
- @racket[react!] will evaluate the @racket[expr]s in a
- context where @racket[in-reaction?] returns @racket[#t].
+ Returns a value that, when passed to
+ @racket[react!], will evaluate the @racket[expr]s in a
+ context where @racket[in-esterel?] returns @racket[#t].
 
  If present, the value of @racket[pre-count-expr] is
  expected to be a natural number. It is a limit on the
@@ -32,7 +32,7 @@ provides additional functionality.
 
 }
 
-@defproc[(react! [r reaction?]
+@defproc[(react! [r esterel?]
                  [#:emit signals
                   (listof
                    (or/c (and/c signal? (not/c signal-combine))
@@ -47,44 +47,44 @@ provides additional functionality.
  Runs one instant of @racket[r].
 
  If @racket[signals] are supplied, they are emitted at the
- start of the reaction; valued signals must be paired with
+ start of the @tech{instant}; valued signals must be paired with
  values.
 
  The result has the values of signals that were emitted and,
  if a signal's lack of emission affected the computation, it
  is also included in the resulting hash.
 
- If the reaction is not constructive, an exception (that is
+ If the code is not constructive, an exception (that is
  recognized by @racket[exn:fail:not-constructive?]) is
  raised.
 
  @examples[
  #:eval esterel-eval
  (define-signal S1 S2)
- (react! (reaction (emit S1)))
- (react! (reaction (if (present? S1) (void) (emit S2))))
- (react! (reaction (if (present? S1) (void) (emit S2)))
+ (react! (esterel (emit S1)))
+ (react! (esterel (if (present? S1) (void) (emit S2))))
+ (react! (esterel (if (present? S1) (void) (emit S2)))
          #:emit (list S1))
- (eval:error (react! (reaction (if (present? S1) (emit S1) (void)))))
+ (eval:error (react! (esterel (if (present? S1) (emit S1) (void)))))
  ]
 
 }
 
-@defproc[(reaction? [v any/c]) boolean?]{
- Recognizes the result of @racket[reaction].
+@defproc[(esterel? [v any/c]) boolean?]{
+ Recognizes the result of @racket[esterel].
 }
 
-@defproc[(in-reaction?) boolean?]{
+@defproc[(in-esterel?) boolean?]{
 
  Returns @racket[#t] if it is called in the dynamic extent
- of one of the expressions in a @racket[reaction].
+ of one of the expressions in a @racket[esterel].
 
 }
 
 @defproc[(exn:fail:not-constructive? [v any/c]) boolean?]{
 
- Recognizes the exception that @racket[react!] raises when
- the reaction is not constructive.
+ Recognizes the exception that @racket[react!] raises when an
+ @tech{instant} is not constructive.
 
 }
 
@@ -106,25 +106,25 @@ provides additional functionality.
 
  The result of the @racket[with-signal] expression is the
  result of the last expression. If @racket[with-signal] is
- used in the dynamic extent of @racket[reaction], the last
+ used in the dynamic extent of @racket[esterel], the last
  @racket[body-expr] is not in tail position with respect to
  the @racket[with-signal], but otherwise it is.
 
  Also, if @racket[with-signal] is invoked from within
- @racket[reaction], then the signals may not be emitted
+ @racket[esterel], then the signals may not be emitted
  once the last @racket[body-expr] is evaluated (it will result in
  an error from @racket[emit] if they are).
 
  @examples[
  #:eval esterel-eval
  (react!
-  (reaction
+  (esterel
    (with-signal (s1 s2)
      (unless (present? s2)
        (emit s1)))))
 
  (react!
-  (reaction
+  (esterel
    (with-signal (s1 s2 #:combine + s3 s4 #:combine *)
      (emit s1)
      (emit s2 22)
@@ -184,16 +184,16 @@ provides additional functionality.
  If @racket[pre] is larger than zero, returns whether or not
  @racket[s] was present in previous instants. If @racket[pre]
  is larger than the value of the @racket[_pre-count-expr]
- passed to @racket[reaction], an error is raised.
+ passed to @racket[esterel], an error is raised.
 
  @examples[
  #:eval esterel-eval
  (define-signal S)
  (define-signal O1)
  (define-signal O2)
- (react! (reaction (if (present? S) (emit O1) (emit O2))))
+ (react! (esterel (if (present? S) (emit O1) (emit O2))))
  (define r
-   (reaction
+   (esterel
     #:pre 1
     (emit S)
     (pause)
@@ -211,7 +211,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  If @racket[n] is larger than zero, then returns the value
  of @racket[s] is the @racket[n]th previous instant. If @racket[n] is
  larger than the value of the @racket[_pre-count-expr] passed to
- @racket[reaction], an error is raised.
+ @racket[esterel], an error is raised.
 
  @examples[
  #:eval esterel-eval
@@ -219,7 +219,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
    S1 #:combine + S2 #:combine +
    O1 #:combine + O2 #:combine + O3 #:combine +)
  (define r
-   (reaction
+   (esterel
     #:pre 1
     (emit S1 2)
     (emit S1 3)
@@ -268,7 +268,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  #:eval esterel-eval
  (define-signal S1 #:combine +)
  (define r
-   (reaction
+   (esterel
     (let loop ([n 0])
       (when (even? n)
         (emit S1 n))
@@ -299,7 +299,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  #:eval esterel-eval
  (define-signal S1 S2)
  (define r
-   (reaction
+   (esterel
     (par
      (begin (pause)
             (emit S2)
@@ -329,7 +329,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  #:eval esterel-eval
  (define-signal S1 S2)
  (define r
-   (reaction
+   (esterel
     (with-trap t
       (par (begin
              (emit S1)
