@@ -70,7 +70,7 @@ and instants more concrete, let's look at some code that
 controls a traffic signal with three lights: red, orange,
 and green. Red means that cars should stop; orange means
 that red is coming soon, so either slow in preparation to
-stop, or finish transiting the intersection; green means
+stop or finish transiting the intersection; green means
 that it is safe to transit the intersection.
 
 To control the lights we will use three signals. A
@@ -150,7 +150,7 @@ introduce a signal that is emitted every second:
  ]
 
 And now we turn to the loop that emits
-@racket[forever-read]. A Rackety approach to this problem
+@racket[forever-red]. A Rackety approach to this problem
 might be to change the loop so that it has a parameter and
 it counts the number of instants that passed where
 @racket[second] is emitted, and based on that, emit the
@@ -175,12 +175,12 @@ subexpressions (in this case, the @racket[abort] and the
 after both of them finish. The @racket[abort] runs its first
 argument (the call to @racket[sustain]) until the code
 following the @racket[#:when] returns @racket[#t], at which
-point it aborts it. That abort is the only way to terminates
+point it aborts it. That abort is the only way to terminate
 the first branch of the @racket[par]. Meanwhile, the second
 branch of the @racket[par] runs the @racket[await], which
 waits until there have been @racket[(* 4 60)] instants when
 @racket[second] is present. After that, the @racket[await]
-call returns and, in that same instant, emits
+call returns and, in that same instant, the emit of
 @racket[next-stage] happens, ending the entire @racket[par]
 expression.
 
@@ -306,7 +306,7 @@ therefore therefore we can take only the branch that emits
 
 This notion of causality determining the behavior of the
 program also comes with the possibility of a new kind of
-error, namely ones with causality loops. Such programs in
+error, namely ones with causality problems. Such programs in
 Esterel are called ``non constructive'' and @racket[react!]
 will raise an error when it encounters one. Here's an
 example:
@@ -345,18 +345,17 @@ an error.
 
 This section tries to explain, at a high-level how Esterel
 in Racket runs code in order to convey an intuition for how
-using Racket-level state goes wrong inside a
+using Racket-level mutable state goes wrong inside
 @racket[esterel].
 
 When a program runs within an @tech{instant}, it runs in two
-modes: ``can mode'' and ``must mode''; see
-@citet[EsterelConstructiveBook]'s @italic{Constructive
- Semantics of Esterel} for a fuller description of the Can
-and Must functions that these modes mimic.
-
-First, the program runs in ``must mode'' where
-@racket[present?] does not return @racket[#f], but instead
-blocks (@racket[present?] might return @racket[#t] if an
+modes: ``can mode'' and ``must mode''.@note{See
+ @citet[EsterelConstructiveBook]'s @italic{Constructive
+  Semantics of Esterel} for a fuller description of the Can
+ and Must functions that these modes mimic.} First, the
+program runs in ``must mode'' where @racket[present?] does
+not return @racket[#f], but instead blocks
+(@racket[present?] might return @racket[#t] if an
 @racket[emit] for the corresponding signal happens). In this
 mode, the code is running very much like regular Racket code
 runs; internally @racket[par] is creating racket-level
