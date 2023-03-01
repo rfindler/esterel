@@ -37,7 +37,7 @@ entire Esterel program sees that only that new state.
 Furthermore, each instant is explicitly represented
 in the program via the primitive operation @racket[pause].
 In particular, each thread must, after some finite amount of
-time, either invoke @racket[pause] (or terminate or be
+time, invoke @racket[pause] (or terminate or be
 aborted) and the time between these pauses always has a single
 consistent state, visible to the entire computation.
 
@@ -45,18 +45,22 @@ Of course, Esterel's enforcement of determinacy during each
 @tech{instant} applies only to Esterel programs and Esterel
 threads; Racket's threads are not required to explicitly
 pause and remain as complex and difficult to reason about as
-ever.@note{Even worse, Esterel computations do not check or
- guarantee that Racket code run during an instant is pure,
- and surprising behavior may result if Racket code uses
- mutation while it is running in an Esterel context. We
- return to this point in @secref["sec:conts"]; for now,
- simply imagine only pure Racket code running alongside
- Esterel.} As such, the Esterel portion of the computation is
-dynamically segregated from the ordinary Racket portion,
-using the keyword @racket[reaction]. Also, in Esterel, the
-program variables that make up the changing, mutable state
-of the program are called signals to avoid possible
-confusion.
+ever.
+
+Separating Esterel computation from normal imperative Racket
+computation, however, is simply a matter of wrapping
+@racket[esterel] around some expressions. Any code that runs
+in the dynamic extent of those expressions is treated as
+Esterel code. Unfortunately, ordinary Racket mutable
+variables do not automatically become Esterel-like; instead,
+the Esterel code must use @tech{signal}s for any values that
+change over time. Unfortunately, Esterel computations do not
+check or guarantee that Racket code run during an instant is
+otherwise pure, and surprising behavior may result if Racket
+code uses mutation while it is running in an Esterel
+context. We return to this point in @secref["sec:conts"];
+for now, simply imagine only pure Racket code running
+alongside Esterel.
 
 @section{A Traffic Light}
 
@@ -68,19 +72,20 @@ that red is coming soon, so either slow in preparation to
 stop, or finish transiting the intersection; green means
 that it is safe to transit the intersection.
 
-To control the lights we will use three signals. A signal in
-Esterel has two states: either it is present or it is
-absent. Signals can also carry values when they are present,
-but to control our traffic light, we'll just use presence to
-indicate that the light should be on and absence to indicate
-that it should be off. Here's how we declare the signals:
+To control the lights we will use three signals. A
+@deftech{signal} in Esterel has two states: either it is
+present or it is absent. Signals can also carry values when
+they are present, but to control our traffic light, we'll
+just use presence to indicate that the light should be on
+and absence to indicate that it should be off. Here's how we
+declare the signals:
 
 @ex[
  (eval:no-prompt
   (define-signal red orange green))]
 
 This introduces three new Racket identifiers, @racket[red],
-@racket[orange], and @racket[green], bound to signals.
+@racket[orange], and @racket[green], each bound to a signal.
 
 To run an Esterel program, we need to wrap the code in
 @racket[esterel]. Any code or helper functions can be
