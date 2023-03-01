@@ -2,7 +2,8 @@
 @(require scribble/manual
           scribble/bnf
           scribble/struct
-          scribble/eval)
+          scribble/eval
+          esterel/scribblings/bib)
 
 @title{Esterel in Racket}
 
@@ -20,8 +21,9 @@ mixed with Esterel code and run from within a reaction.
 @include-section["scribblings/kernel.scrbl"]
 @include-section["scribblings/full.scrbl"]
 
-@index-section[]
+@generate-bibliography[]
 
+@index-section[]
 
 @; Needs a timeout for testing:
 @(module* test racket/base

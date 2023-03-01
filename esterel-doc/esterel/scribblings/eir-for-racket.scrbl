@@ -2,6 +2,7 @@
 @(require scribble/manual
           scribble/example
           scriblib/footnote
+          "bib.rkt"
           (for-label racket/base esterel/full))
 @(define esterel-eval (make-base-eval '(require esterel/full)))
 @(define-syntax-rule (ex expr ...)
@@ -347,10 +348,15 @@ in Racket runs code in order to convey an intuition for how
 using Racket-level state goes wrong inside a
 @racket[esterel].
 
-When a program runs within an @tech{instant}, it runs in two modes.
-It first runs in ``must'' mode where @racket[present?] does
-not return @racket[#f], but instead blocks
-(@racket[present?] might return @racket[#t] if an
+When a program runs within an @tech{instant}, it runs in two
+modes: ``can mode'' and ``must mode''; see
+@citet[EsterelConstructiveBook]'s @italic{Constructive
+ Semantics of Esterel} for a fuller description of the Can
+and Must functions that these modes mimic.
+
+First, the program runs in ``must mode'' where
+@racket[present?] does not return @racket[#f], but instead
+blocks (@racket[present?] might return @racket[#t] if an
 @racket[emit] for the corresponding signal happens). In this
 mode, the code is running very much like regular Racket code
 runs; internally @racket[par] is creating racket-level
@@ -361,7 +367,7 @@ threads and @racket[with-trap] creates an
 At some point, however, all of the threads that are still
 running get blocked on calls to @racket[present?] where the
 corresponding signals have not yet been emitted. At this
-point, the program enters ``can'' mode. It collects the set
+point, the program enters ``can mode''. It collects the set
 of all of the continuations of all of the threads that are
 blocked in this manner and then runs each of them forward
 multiple times, once for each possible assignments of absent
@@ -369,8 +375,8 @@ and present to each of the signals that's being blocked on.
 After this completes, either some of those signals were
 never emitted during this process, or the program is
 non-constructive. If there were some signals that were never
-emitted, they are set to absent and we return to ``must''
-mode. If all of the blocking signals were emitted during at
+emitted, they are set to absent and we return to ``must
+mode''. If all of the blocking signals were emitted during at
 least one of these runs, the program aborts with the
 non-constructive error.
 
