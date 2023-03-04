@@ -1,0 +1,25 @@
+#lang rhombus/static/and_meta
+import:
+  esterel/kernel open
+  lib("esterel/private/full.rkt"):
+    expose #{loop-each/proc}
+    expose #{loop/proc}
+
+export:
+  all_from(esterel/kernel)
+  loop
+  
+expr.macro
+| 'loop: $body
+         ...':
+    '#{loop/proc}(fun ():
+                    $body
+                    ...)'
+| 'loop:
+     $body
+     ...
+     ~each $restart':
+    '#{loop-each/proc}(fun ():
+                         $body
+                         ...,
+                       fun (): $restart)'

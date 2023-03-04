@@ -1,0 +1,33 @@
+#lang rhombus/static/and_meta
+import:
+  lib("esterel/kernel.rkt")
+  lib("esterel/private/kernel.rkt") as pkernel:
+    expose #{mk-signal.args}
+    expose #{esterel/proc}
+  lib("syntax/location.rkt"):
+    expose #{quote-srcloc}
+
+export:
+  def_signal
+  esterel
+
+defn.macro 'def_signal: $id ...':
+  def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
+  'def $id : #{mk-signal.args}(#'$id, #false, $srclocs)
+   ...'
+
+expr.macro 'esterel:
+              $body
+              ...':
+  '#{esterel/proc}(fun ():
+                     $body
+                     ...)'
+
+/*
+expr.macro 'esterel: $body':
+  'kernel.#{esterel/proc} (fun (): $body)'
+
+expr.macro 'react: $arg':
+  expr_meta.pack_s_exp(['rkt_react', expr_meta.pack_expr(arg)])
+
+*/

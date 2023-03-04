@@ -1,7 +1,8 @@
 #lang racket/base
 (require "kernel.rkt"
          (for-syntax racket/base syntax/parse))
-(provide halt loop abort sustain await every)
+(provide halt loop abort sustain await every
+         loop-each/proc loop/proc)
 
 (define (halt)
   (let loop ()

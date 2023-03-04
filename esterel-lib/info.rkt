@@ -2,7 +2,7 @@
 
 (define collection 'multi)
 
-(define deps '("base"))
+(define deps '("base" "rhombus-prototype"))
 
 (define pkg-desc "Esterel implementation in Racket")
 

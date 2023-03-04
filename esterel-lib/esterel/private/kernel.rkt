@@ -28,7 +28,11 @@
  exit-trap
  trap?
  exn:fail:not-constructive?
- esterel?)
+ esterel?
+
+ ;; private bindings provided for rhombus layer
+ mk-signal.args
+ esterel/proc)
 
 
 #|
@@ -142,7 +146,7 @@ value for can explorations and subsequent must evaluation.
      "duplicate variable name"
      (assert-top-level stx)
      #`(begin
-         (define srcloc #,(syntax/loc stx (quote-srcloc)))
+         (define srcloc (quote-srcloc #,stx))
          (define signal.name
            (mk-signal.args 'signal.name
                            signal.combine-proc
