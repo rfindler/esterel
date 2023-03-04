@@ -2,7 +2,8 @@
 (require "kernel.rkt"
          (for-syntax racket/base syntax/parse))
 (provide halt loop abort sustain await every
-         loop-each/proc loop/proc)
+         loop-each/proc loop/proc
+         await/proc await-n/proc await-immediate/proc)
 
 (define (halt)
   (let loop ()

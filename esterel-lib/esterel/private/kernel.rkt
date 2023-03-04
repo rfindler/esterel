@@ -32,7 +32,8 @@
 
  ;; private bindings provided for rhombus layer
  mk-signal.args
- esterel/proc)
+ esterel/proc
+ par/proc)
 
 
 #|

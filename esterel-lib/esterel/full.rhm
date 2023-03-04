@@ -4,14 +4,19 @@ import:
   lib("esterel/private/full.rkt"):
     expose #{loop-each/proc}
     expose #{loop/proc}
+    expose #{await/proc}
+    expose #{await-n/proc}
+    expose #{await-immediate/proc}
 
 export:
   all_from(esterel/kernel)
   loop
+  await
   
 expr.macro
-| 'loop: $body
-         ...':
+| 'loop:
+     $body
+     ...':
     '#{loop/proc}(fun ():
                     $body
                     ...)'
@@ -23,3 +28,15 @@ expr.macro
                          $body
                          ...,
                        fun (): $restart)'
+
+expr.macro
+| 'await $when':
+    ~stronger_than ||
+    '#{await/proc}(fun (): $when)'
+// have to figure out this is going to parse!
+/*
+| 'await $when ~n $n':
+    '#{await-n/proc}(fun (): $when, $n)'
+| 'await ~immediate $when':
+    '#{await-immediate/proc}(fun (): $when)'
+*/

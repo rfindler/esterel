@@ -1,15 +1,20 @@
 #lang rhombus/static/and_meta
 import:
-  lib("esterel/kernel.rkt")
+  lib("esterel/kernel.rkt"):
+    expose #{signal-value}
   lib("esterel/private/kernel.rkt") as pkernel:
     expose #{mk-signal.args}
     expose #{esterel/proc}
+    expose #{par/proc}
   lib("syntax/location.rkt"):
     expose #{quote-srcloc}
 
 export:
   def_signal
   esterel
+  ¿
+  ||
+  emit
 
 defn.macro 'def_signal: $id ...':
   def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
@@ -23,11 +28,12 @@ expr.macro 'esterel:
                      $body
                      ...)'
 
-/*
-expr.macro 'esterel: $body':
-  'kernel.#{esterel/proc} (fun (): $body)'
+operator ¿ x:
+  ~stronger_than ||
+  #{signal-value}(x)
 
-expr.macro 'react: $arg':
-  expr_meta.pack_s_exp(['rkt_react', expr_meta.pack_expr(arg)])
+expr.macro '$left || $right':
+  '#{par/proc}([fun (): $left, fun(): $right])'
 
-*/
+fun emit(s):
+  kernel.emit(s)
