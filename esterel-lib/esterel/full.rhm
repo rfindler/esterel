@@ -16,18 +16,18 @@ export:
 expr.macro
 | 'loop:
      $body
-     ...':
-    '#{loop/proc}(fun ():
-                    $body
-                    ...)'
-| 'loop:
-     $body
      ...
      ~each $restart':
     '#{loop-each/proc}(fun ():
                          $body
                          ...,
                        fun (): $restart)'
+| 'loop:
+     $body
+     ...':
+    '#{loop/proc}(fun ():
+                    $body
+                    ...)'
 
 expr.macro
 | 'await $when':

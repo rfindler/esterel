@@ -16,6 +16,15 @@ def abro:
       emit(O)
       ~each ¿R
 
+react(abro)
+react(abro,~emit: [A,B])
+react(abro,~emit: [A])
+react(abro,~emit: [R])
+react(abro,~emit: [A])
+react(abro,~emit: [B])
+react(abro,~emit: [A,B,R])
+
+
 /*
 with_signal {A, B ~combine +, C}:
   body
