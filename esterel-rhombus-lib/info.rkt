@@ -2,9 +2,9 @@
 
 (define collection 'multi)
 
-(define deps '("base"))
+(define deps '("base" "rhombus-prototype" "esterel-lib"))
 
-(define pkg-desc "Esterel implementation in Racket")
+(define pkg-desc "Esterel implementation in Rhombus")
 
 (define pkg-authors '(robby))
 
