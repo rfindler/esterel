@@ -438,10 +438,8 @@ value for can explorations and subsequent must evaluation.
 
 (define-syntax (with-trap stx)
   (syntax-parse stx
-    [(_ t:identifier body1 body ...)
-     #'(let/ec escape
-         (let ([t (build-trap 't escape)])
-           (with-trap/proc t (λ () body1 body ...))))]))
+    [(_ t:identifier body ...+)
+     #'(with-trap/proc 't (λ (t) body ...))]))
 
 (define (build-trap name escape)
   (trap name (get-current-trap-counter) escape))
@@ -450,14 +448,16 @@ value for can explorations and subsequent must evaluation.
 (define trap-counter-mark (gensym 'trap-counter))
 (define trap-start-of-par-mark (gensym 'trap-counter))
 
-(define (with-trap/proc trap body)
-  (define counter (trap-counter trap))
-  (with-continuation-mark trap-counter-mark (+ counter 1)
-    ;; we don't need to add something to block
-    ;; multiple uses of the mark because the let/ec
-    ;; introduces a non-tail context (for repeated
-    ;; `with-mark`s).
-    (body)))
+(define (with-trap/proc trap-name body)
+  (let/ec escape
+    (define trap (build-trap trap-name escape))
+    (define counter (trap-counter trap))
+    (with-continuation-mark trap-counter-mark (+ counter 1)
+      ;; we don't need to add something to block
+      ;; multiple uses of the mark because the let/ec
+      ;; introduces a non-tail context (for repeated
+      ;; `with-mark`s).
+      (body trap))))
 
 ;; internally, this might be called with an exception, but from the
 ;; outside, it is called only with traps (thanks to the contract) and
