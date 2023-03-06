@@ -16,10 +16,13 @@ export:
   esterel
   ¿
   ||
+  par
   emit
   react
   with_trap
+  exit_trap
   with_signals
+  pause
 
 defn.macro 'def_signal: $id ...':
   def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
@@ -50,9 +53,10 @@ fun react(r, ~emit: signals = []):
 expr.macro 'with_trap $t:
               $body
               ...':
-  '#{with-trap/proc}(#'$t,fun (t):
+  '#{with-trap/proc}(#'$t,fun ($t):
                             $body
                             ...)'
+
 expr.macro 'with_signals {$id, ...}:
               $first_bodies
               ...
@@ -64,3 +68,17 @@ expr.macro 'with_signals {$id, ...}:
      $first_bodies
      ...
      #{kill-signals!}([$id,...],fun (): $last_body)'
+
+expr.macro 'par
+            | $body
+              ...
+            | ...':
+  '#{par/proc}([fun ():
+                  $body
+                  ..., ...])'
+
+expr.macro 'pause':
+  'kernel.pause()'
+
+fun exit_trap(t):
+  kernel.#{exit-trap}(t)
