@@ -6,6 +6,7 @@ import:
     expose #{mk-signal.args}
     expose #{esterel/proc}
     expose #{par/proc}
+    expose #{with-trap/proc}
   lib("syntax/location.rkt"):
     expose #{quote-srcloc}
 
@@ -16,6 +17,7 @@ export:
   ||
   emit
   react
+  with_trap
 
 defn.macro 'def_signal: $id ...':
   def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
@@ -42,3 +44,10 @@ fun emit(s):
 
 fun react(r, ~emit: signals = []):
   kernel.#{react!}(r, ~emit: signals)
+
+expr.macro 'with_trap $t:
+              $body
+              ...':
+  '#{with-trap/proc}(#'$t,fun (t):
+                            $body
+                            ...)'
