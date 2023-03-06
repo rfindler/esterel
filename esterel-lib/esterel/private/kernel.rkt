@@ -34,7 +34,8 @@
  mk-signal.args
  esterel/proc
  par/proc
- with-trap/proc)
+ with-trap/proc
+ kill-signals!)
 
 
 #|
@@ -127,7 +128,7 @@ value for can explorations and subsequent must evaluation.
                                 (cons 'signal.name srcloc)
                                 )] ...)
            body ...
-           (kill-signal! (set signal.name ...) (λ () last-body))))]))
+           (kill-signals! (set signal.name ...) (λ () last-body))))]))
 
 (define-for-syntax (assert-top-level stx)
   (unless (member (syntax-local-context) '(module module-begin top-level))
@@ -174,7 +175,7 @@ value for can explorations and subsequent must evaluation.
             [else #f])
           combine))
 
-(define (kill-signal! s last-body)
+(define (kill-signals! s last-body)
   (define signal-table (current-signal-table))
   (cond
     [signal-table
