@@ -7,18 +7,17 @@
 
 (define (light this-ts that-ts)
   (match-define (ts this-green this-orange this-red) this-ts)
-  (match-define (ts that-green that-orange that-red) that-ts)
+  (match-define (ts that-green _ that-red) that-ts)
   (loop
-   (unless (or (present? that-green)
-               (present? that-orange))
-     (traffic-light-stage this-green (* 4 60))
-     (traffic-light-stage this-orange 4)
-     (traffic-light-stage this-red 2))
-   (with-trap T
-     (par (sustain this-red)
+   (unless (present? that-green)
+     (traffic-light-stage this-green 90)
+     (traffic-light-stage this-orange 4))
+   (with-signal (restart)
+     (par (abort (sustain this-red)
+                 #:when (present? restart))
           (begin (await (present? that-red))
-                 (exit-trap T))))
-   (pause)))
+                 (await (present? second) #:n 2)
+                 (emit restart))))))
 
 (define (traffic-light-stage color seconds)
   (with-signal (next-stage)
@@ -96,11 +95,11 @@
           (set! p (traffic-signals-pict (n-instants 10)))
           (refresh-gui))])
   (new button%
-       [label "1 minute"]
+       [label "30 seconds"]
        [parent bp]
        [callback
         (λ _
-          (set! p (traffic-signals-pict (n-instants 60)))
+          (set! p (traffic-signals-pict (n-instants 30)))
           (refresh-gui))])
   (define (refresh-gui)
     (send c refresh)

@@ -19,28 +19,32 @@ program guaranteed to produce its particular result no
 matter how the various threads run or which threads are
 aborted.
 
-One way to think of imperative computation is to imagine
-that all of the current values of all of the variables in
-the program, collected together, as a single state and steps
-in the computation changing this state as the program
-executes. In this sense, Esterel is an imperative
-programming language but, unlike more conventional
-imperative programming languages, Esterel's state changes
-are more restricted, giving the programmer more guarantees
-about the behavior of the program.
+One way to think of imperative computation is as if the
+program goes through a series of different states, where
+each step in the computation updates a bunch of variables,
+causing the program to be in a new state. In this sense, the
+computation proceeds through a series of different states as
+it executes and the programmer, to be able to understand and
+modify the program, must think about these state changes
+when imagining the program's behavior. In this sense,
+Esterel is an imperative programming language but, unlike
+more conventional imperative programming languages,
+Esterel's state changes are more restricted, giving the
+programmer more guarantees about the behavior of the
+program.
 
-Computation in Esterel is broken up in a series of
-@deftech{instants} (also called @deftech{reactions}). Within
-each instant, the entire program always sees a coherent,
-single state. That is, within an instant there are no state
-changes; instead each instant computes a new state and the
-entire Esterel program sees that only that new state.
-Furthermore, each instant is explicitly represented
-in the program via the primitive operation @racket[pause].
-In particular, each thread must, after some finite amount of
-time, invoke @racket[pause] (or terminate or be
-aborted) and the time between these pauses always has a single
-consistent state, visible to the entire computation.
+In Esterel, to restrict the state changes, the program is
+broken up in a series of @deftech{instants} (also called
+@deftech{reactions}). Within each instant, the entire
+program always sees a coherent, single state. That is,
+within an instant there are no state changes; instead each
+instant computes a new state and the entire Esterel program
+sees only that new state. Furthermore, each instant is
+captured via a construct in the programming language,
+@racket[pause]. That is, each thread must, after some finite
+amount of time, invoke @racket[pause] (or terminate or be
+aborted) and the time between these pauses always has a
+single consistent state, visible to the entire computation.
 
 Of course, Esterel's enforcement of determinacy during each
 @tech{instant} applies only to Esterel programs and Esterel
@@ -75,11 +79,10 @@ that it is safe to transit the intersection.
 
 To control the lights we will use three signals. A
 @deftech{signal} in Esterel has two states: either it is
-present or it is absent. Signals can also carry values when
-they are present, but to control our traffic light, we'll
-just use presence to indicate that the light should be on
-and absence to indicate that it should be off. Here's how we
-declare the signals:
+present or it is absent. Signals can also carry values, but
+to control our traffic light, we'll just use presence to
+indicate that the light should be on and absence to indicate
+that it should be off. Here's how we declare the signals:
 
 @ex[
  (eval:no-prompt
@@ -165,7 +168,7 @@ like this:
 @racketblock[
  (par (abort (sustain red)
              #:when (present? next-stage))
-      (begin (await (present? second) #:n (* 4 60))
+      (begin (await (present? second) #:n 90)
              (emit next-stage)))
    ]
 
@@ -178,7 +181,7 @@ following the @racket[#:when] returns @racket[#t], at which
 point it aborts it. That abort is the only way to terminate
 the first branch of the @racket[par]. Meanwhile, the second
 branch of the @racket[par] runs the @racket[await], which
-waits until there have been @racket[(* 4 60)] instants when
+waits until there have been @racket[90] instants when
 @racket[second] is present. After that, the @racket[await]
 call returns and, in that same instant, the emit of
 @racket[next-stage] happens, ending the entire @racket[par]
@@ -204,7 +207,7 @@ Now, we can write a reaction that repeatedly runs the traffic light:
  (eval:no-prompt
   (define three-stages
     (esterel
-     (traffic-light-stage green (* 4 60))
+     (traffic-light-stage green 90)
      (traffic-light-stage orange 4)
      (traffic-light-stage red 2))))
 ]
@@ -214,8 +217,12 @@ to supply the @racket[second] signal, we can see the light changing
 @ex[
  (react! three-stages #:emit (list second))
  (react! three-stages #:emit (list second))
- (for ([i (in-range (* 4 60))])
+ (for ([i (in-range 87)])
    (react! three-stages #:emit (list second)))
+ (react! three-stages #:emit (list second))
+ (react! three-stages #:emit (list second))
+ (react! three-stages #:emit (list second))
+ (react! three-stages #:emit (list second))
  (react! three-stages #:emit (list second))
  (react! three-stages #:emit (list second))
  (react! three-stages #:emit (list second))
