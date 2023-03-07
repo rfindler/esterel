@@ -7,6 +7,8 @@ import:
     expose #{await/proc}
     expose #{await-n/proc}
     expose #{await-immediate/proc}
+    expose #{every/proc}
+    expose #{every-n/proc}
     expose #{every-immediate/proc}
 
 export:
@@ -32,20 +34,26 @@ expr.macro
                     ...)'
 
 expr.macro
-| 'await $when':
+| 'await $when ... ~n $n ...':
     ~stronger_than |||
-    '#{await/proc}(fun (): $when)'
-// have to figure out this is going to parse!
-/*
-| 'await $when ~n $n':
-    '#{await-n/proc}(fun (): $when, $n)'
-| 'await ~immediate $when':
-    '#{await-immediate/proc}(fun (): $when)'
-*/
+    '#{await-n/proc}(fun (): $when ..., $n ...)'
+| 'await ~immediate $when ...':
+    '#{await-immediate/proc}(fun (): $when ...)'
+| 'await $when ...':
+    '#{await/proc}(fun (): $when ...)'
 
-expr.macro 'every ~immediate $s ...:
-              $body
-              ...':
-  '#{every-immediate/proc}(fun (): $s ..., fun ():
-                                             $body
-                                             ...)'
+expr.macro
+| 'every ~immediate $s ...:
+     $body
+     ...':
+    '#{every-immediate/proc}(fun (): $s ..., fun ():
+                                               $body
+                                               ...)'
+| 'every $s ... ~n $n ...:
+     $body
+     ...':
+    '#{every-n/proc}(fun (): $s ...,$n ...,fun (): $body ...)'
+| 'every $s ...:
+     $body
+     ...':
+    '#{every/proc}(fn (): $s ...,fn (): $body ...)'
