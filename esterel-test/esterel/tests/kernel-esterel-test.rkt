@@ -542,7 +542,14 @@
   (check-equal? (react! r) (hash O #t)))
 
 
-
+;; test that with-signal doesn't break up
+;; its but keeps everything in a single scope
+(check-equal? (with-signal (S)
+                (define (g) (f))
+                (begin
+                  (define (f) 1)
+                  (g)))
+              1)
 
 ;                                                
 ;                                                

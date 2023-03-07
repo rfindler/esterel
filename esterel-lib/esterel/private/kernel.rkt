@@ -36,7 +36,7 @@
  esterel/proc
  par/proc
  with-trap/proc
- kill-signals!)
+ run-and-kill-signals!)
 
 
 #|
@@ -118,7 +118,7 @@ value for can explorations and subsequent must evaluation.
 (define-syntax (with-signal stx)
   (syntax-parse stx
     [(_ (signal:signal-name ...)
-        body:expr ... last-body:expr)
+        body:expr ...+)
      #:fail-when (check-duplicate-identifier
                   (syntax->list #'(signal.name ...)))
      "duplicate variable name"
@@ -128,8 +128,7 @@ value for can explorations and subsequent must evaluation.
                                 signal.combine-proc
                                 (cons 'signal.name srcloc)
                                 )] ...)
-           body ...
-           (kill-signals! (set signal.name ...) (λ () last-body))))]))
+           (run-and-kill-signals! (set signal.name ...) (λ () body ...))))]))
 
 (define-for-syntax (assert-top-level stx)
   (unless (member (syntax-local-context) '(module module-begin top-level))
@@ -176,15 +175,15 @@ value for can explorations and subsequent must evaluation.
             [else #f])
           combine))
 
-(define (kill-signals! s last-body)
+(define (run-and-kill-signals! s bodies)
   (define signal-table (current-signal-table))
   (cond
     [signal-table
-     (define vals (call-with-values last-body list))
+     (define vals (call-with-values bodies list))
      (channel-put (signal-table-signal-dead-chan signal-table) s)
      (apply values vals)]
     [else
-     (last-body)]))
+     (bodies)]))
 
 (define no-value-provided (gensym 'no-value-provided))
 (define (emit a-signal [value no-value-provided])

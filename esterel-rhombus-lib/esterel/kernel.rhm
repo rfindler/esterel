@@ -7,7 +7,7 @@ import:
     expose #{esterel/proc}
     expose #{par/proc}
     expose #{with-trap/proc}
-    expose #{kill-signals!}
+    expose #{run-and-kill-signals!}
   lib("syntax/location.rkt"):
     expose #{quote-srcloc}
 
@@ -59,16 +59,13 @@ expr.macro 'with_trap $t:
                             ...)'
 
 expr.macro 'with_signals {$id, ...}:
-              $first_bodies
-              ...
-              $last_body':
+              $bodies
+              ...':
   def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
   'begin:
      def $id: #{mk-signal.args}(#'$id, #false, $srclocs)
      ...
-     $first_bodies
-     ...
-     #{kill-signals!}([$id,...],fun (): $last_body)'
+     #{run-and-kill-signals!}([$id,...],fun (): $bodies ...)'
 
 expr.macro 'par
             | $body
