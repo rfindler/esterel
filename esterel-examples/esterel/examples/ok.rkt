@@ -37,8 +37,6 @@ emit O1;
 ]
 end module
 
-end module
-
 |#
 
 

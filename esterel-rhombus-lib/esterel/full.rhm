@@ -7,11 +7,13 @@ import:
     expose #{await/proc}
     expose #{await-n/proc}
     expose #{await-immediate/proc}
+    expose #{every-immediate/proc}
 
 export:
   all_from(esterel/kernel)
   loop
   await
+  every
   
 expr.macro
 | 'loop:
@@ -40,3 +42,10 @@ expr.macro
 | 'await ~immediate $when':
     '#{await-immediate/proc}(fun (): $when)'
 */
+
+expr.macro 'every ~immediate $s ...:
+              $body
+              ...':
+  '#{every-immediate/proc}(fun (): $s ..., fun ():
+                                             $body
+                                             ...)'

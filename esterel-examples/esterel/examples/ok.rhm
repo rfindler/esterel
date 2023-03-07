@@ -1,0 +1,57 @@
+#lang rhombus
+import:
+  esterel/full open
+
+fun Aux(I, O):
+  every ~immediate ¿(I):
+    pause
+    emit(O)
+
+def_signal: S1 S2
+
+def r:
+  esterel:
+    emit(S1)
+    par
+    | Aux(S1, S2)
+    | Aux(S2, S1)
+
+/*
+
+This program is from Gérard Berry; it's translation is above
+
+module Aux :
+input I;
+output O;
+every immediate I do
+   pause;
+   emit O
+end every
+end module 
+
+module OK :
+emit O1;
+[
+   run Aux [O1 / I , O2 / O]
+||
+   run Aux [O2 / I , O1 / O]
+]
+end module
+
+*/
+
+
+// this tests to make sure that we get
+// the right results in `N` iterations
+submodule main:
+  def N = 100
+  for:
+    each i: 0..N
+    def sigs = react(r)
+    def expected_sigs = {S1 : (i mod 2) == 0, S2 : (i mod 2) == 1}
+    unless sigs == expected_sigs
+    | error("ok.rkt: program is not okay\n"
+              ++ "  i: " +& i ++ "\n"
+              ++ "  signals: " +& sigs ++ "\n"
+              ++ "  expected: " +& expected_sigs)
+  println("ok was ok for " +& N ++ "iterations")
