@@ -1000,6 +1000,9 @@
 ;                                                         
 
 
+(check-true
+ (immutable? (with-signal (S) (signal-name S))))
+
 (with-signal (S)
   (define (signals->names ht)
     (for/hash ([(k v) (in-hash ht)])

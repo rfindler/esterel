@@ -6,6 +6,7 @@
          racket/set
          racket/contract
          racket/list
+         racket/symbol
          (for-syntax racket/base syntax/parse))
 
 
@@ -157,7 +158,7 @@ value for can explorations and subsequent must evaluation.
                            )) ...)]))
 
 (define (mk-signal.args name combine src)
-  (signal (symbol->string name)
+  (signal (symbol->immutable-string name)
           ;; the identity of a signal, when we're in an instant,
           ;; is eq-like in that we increment a counter for each
           ;; one, but we arrange to make sure that subsequent

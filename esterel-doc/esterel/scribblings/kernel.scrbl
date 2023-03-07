@@ -155,7 +155,7 @@ provides additional functionality.
  ]
 }
 
-@defproc[(signal-name [s signal?]) string?]{
+@defproc[(signal-name [s signal?]) (and/c string? immutable?)]{
  Returns the name of a signal.
 
  @examples[
