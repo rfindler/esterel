@@ -15,7 +15,7 @@ export:
   def_signal
   esterel
   ¿
-  ||
+  |||
   par
   emit
   react
@@ -23,6 +23,7 @@ export:
   exit_trap
   with_signals
   pause
+  signal_name
 
 defn.macro 'def_signal: $id ...':
   def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
@@ -38,10 +39,10 @@ expr.macro 'esterel:
                      ...)'
 
 operator ¿ x:
-  ~stronger_than ||
+  ~stronger_than |||
   #{present?}(x)
 
-expr.macro '$left || $right':
+expr.macro '$left ||| $right':
   '#{par/proc}([fun (): $left, fun(): $right])'
 
 fun emit(s):
@@ -82,3 +83,6 @@ expr.macro 'pause':
 
 fun exit_trap(t):
   kernel.#{exit-trap}(t)
+
+fun signal_name(s):
+  kernel.#{signal-name}(s)

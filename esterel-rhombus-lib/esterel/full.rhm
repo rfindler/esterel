@@ -31,7 +31,7 @@ expr.macro
 
 expr.macro
 | 'await $when':
-    ~stronger_than ||
+    ~stronger_than |||
     '#{await/proc}(fun (): $when)'
 // have to figure out this is going to parse!
 /*

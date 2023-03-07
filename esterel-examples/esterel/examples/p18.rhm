@@ -1,0 +1,69 @@
+#lang rhombus
+import:
+  esterel/full open
+
+/*
+
+This is a wild program that has an explanation in Berry's
+_The Constructive Semantics of Pure Draft Version 3_;
+see p18.rkt for a quote about the program.
+
+*/
+
+def_signal: s1_and_s2 s1_and_not_s2 not_s1_and_s2 not_s1_and_not_s2
+
+def r:
+  esterel:
+    loop:
+      with_trap t1:
+        with_signals {s1}:
+          par
+          | pause
+            emit(s1)
+            exit_trap(t1)
+          | loop:
+              with_trap t2:
+                with_signals {s2}:
+                  par
+                  | pause
+                    emit(s2)
+                    exit_trap(t2)
+                  | loop:
+                      cond
+                      | ¿(s1):
+                          cond
+                          | ¿(s2):
+                              emit(s1_and_s2)
+                          | ~else:
+                              emit(s1_and_not_s2)
+                      | ~else:
+                          cond
+                          | ¿(s2):
+                              emit(not_s1_and_s2)
+                          | ~else:
+                              emit(not_s1_and_not_s2)
+                      pause
+
+fun keep_only_underscores(ht:Map):
+  for values(ht = Map()):
+    each (k,v): ht
+    keep_when (signal_name(k) != "s1" && signal_name(k) != "s2")
+    println(signal_name(k))
+    ht ++ {k : v}
+
+react(r)
+keep_only_underscores(react(r))
+
+/*
+(define (keep-only-underscores ht)
+  (for/hash ([(k v) (in-hash ht)]
+             #:when (regexp-match #rx"_" (signal-name k)))
+    (values k v)))
+(for ([i (in-range 200)])
+  (unless (equal? (keep-only-underscores (react! r))
+                  (hash not_s1_and_not_s2 #t
+                        s1_and_s2 #t
+                        s1_and_not_s2 #t))
+    (error 'p18 "wrong result: ~s"
+           (keep-only-underscores (react! r)))))
+*/

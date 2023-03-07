@@ -12,7 +12,7 @@ def_signal: A B R O
 def abro:
   esterel:
     loop:
-      await ¿A || await ¿B
+      await ¿A ||| await ¿B
       emit(O)
       ~each ¿R
 
