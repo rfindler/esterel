@@ -12,49 +12,16 @@ def_signal: A B R O
 def abro:
   esterel:
     loop:
-      await ¿A ||| await ¿B
+      (await ¿A) ||| await ¿B
       emit(O)
       ~each ¿R
 
-react(abro)
-react(abro,~emit: [A,B])
-react(abro,~emit: [A])
-react(abro,~emit: [R])
-react(abro,~emit: [A])
-react(abro,~emit: [B])
-react(abro,~emit: [A,B,R])
+fun o_emitted(sigs): sigs.has_key(O) && sigs[O] == #true
 
-
-/*
-with_signal {A, B ~combine +, C}:
-  body
-
-with_trap t:
-  body
-
-par
-| await ¿(A)
-  await ¿(B)
-| await ¿(C)
-
-with_signal:
-  def A = new_sig()
-  sig B
-  sig C
-  ....
-*/
-
-/*
-(module+ test
-  (define (react/o? #:emit [signals '()])
-    (hash-ref (react! abro #:emit signals) O #f))
-  (require rackunit)
-
-  (check-equal? (react/o?)                     #f)
-  (check-equal? (react/o? #:emit (list A B))   #t)
-  (check-equal? (react/o? #:emit (list A))     #f)
-  (check-equal? (react/o? #:emit (list R))     #f)
-  (check-equal? (react/o? #:emit (list A))     #f)
-  (check-equal? (react/o? #:emit (list B))     #t)
-  (check-equal? (react/o? #:emit (list A B R)) #f))
-*/
+check o_emitted(react(abro))                ~is #false
+check o_emitted(react(abro,~emit: [A,B]))   ~is #true
+check o_emitted(react(abro,~emit: [A]))     ~is #false
+check o_emitted(react(abro,~emit: [R]))     ~is #false
+check o_emitted(react(abro,~emit: [A]))     ~is #false
+check o_emitted(react(abro,~emit: [B]))     ~is #true
+check o_emitted(react(abro,~emit: [A,B,R])) ~is #false
