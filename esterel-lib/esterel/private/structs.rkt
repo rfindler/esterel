@@ -33,14 +33,14 @@
        [(signal? other)
         (define self-id (signal-identity self))
         (define other-id (signal-identity other))
-          (cond
-            [(and self-id other-id)
-             ;; the identity of the signal is not a generic thing
-             ;; inside a signal but instead something where the
-             ;; predefined equal? is the correct comparison
-             (equal? self-id other-id)]
-            [else
-             (eq? self other)])]
+        (cond
+          [(and self-id other-id)
+           ;; the identity of the signal is not a generic thing
+           ;; inside a signal but instead something where the
+           ;; predefined equal? is the correct comparison
+           (equal? self-id other-id)]
+          [else
+           (eq? self other)])]
        [else #f]))
    (define (hash-mode-proc self rec mode)
      (define self-id (signal-identity self))
