@@ -43,7 +43,7 @@ operator ¿ x:
   #{present?}(x)
 
 expr.macro '$left ||| $right':
-  '#{par/proc}([fun (): $left, fun(): $right])'
+   '#{par/proc}([fun (): $left, fun(): $right])'
 
 fun emit(s):
   kernel.emit(s)
