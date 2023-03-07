@@ -44,26 +44,20 @@ def r:
                               emit(not_s1_and_not_s2)
                       pause
 
-fun keep_only_underscores(ht:Map):
+fun drop_s1_s2(ht:Map):
   for values(ht = Map()):
     each (k,v): ht
-    keep_when (signal_name(k) != "s1" && signal_name(k) != "s2")
-    println(signal_name(k))
+    keep_when signal_name(k) != "s1" && signal_name(k) != "s2"
     ht ++ {k : v}
 
-react(r)
-keep_only_underscores(react(r))
+begin:
+  react(r)
+  #void
 
-/*
-(define (keep-only-underscores ht)
-  (for/hash ([(k v) (in-hash ht)]
-             #:when (regexp-match #rx"_" (signal-name k)))
-    (values k v)))
-(for ([i (in-range 200)])
-  (unless (equal? (keep-only-underscores (react! r))
-                  (hash not_s1_and_not_s2 #t
-                        s1_and_s2 #t
-                        s1_and_not_s2 #t))
-    (error 'p18 "wrong result: ~s"
-           (keep-only-underscores (react! r)))))
-*/
+for:
+  each i:0..200
+  def sigs = react(r)
+  unless drop_s1_s2(sigs) == {not_s1_and_not_s2 : #true,
+                              s1_and_s2 : #true,
+                              s1_and_not_s2 : #true}
+  | error("p18: wrong result" +& sigs)
