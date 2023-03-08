@@ -69,7 +69,7 @@ expr.macro 'with_signals {$id, ...}:
               ...':
   def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
   'begin:
-     def $id: #{mk-signal.args}(#'$id, #false, $srclocs)
+     def $id: #{mk-signal.args}(#'$id,#{no-init}, #false, $srclocs)
      ...
      #{run-and-kill-signals!}([$id,...],fun (): $bodies ...)'
 
