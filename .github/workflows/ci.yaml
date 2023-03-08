@@ -1,0 +1,31 @@
+on: [push, pull_request]
+name: CI
+jobs:
+  build-on-latest-release:
+    name: "Build on Racket Release without Rhombus Support"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@master
+      - uses: Bogdanp/setup-racket@v1.9.1
+        with:
+          version: 'stable'
+      - name: Install Esterel
+        run: raco pkg install --auto $GITHUB_WORKSPACE/esterel-lib/ $GITHUB_WORKSPACE/esterel-doc/ $GITHUB_WORKSPACE/esterel-test/
+      - name: Test Esterel
+        run: xvfb-run -a raco test -p esterel-lib esterel-test esterel-doc
+  build-on-latest-snapshot:
+    name: "Build on Racket Snapshot with Rhombus Support"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@master
+      - uses: Bogdanp/setup-racket@v1.9.1
+        with:
+          version: 'current'
+      - name: Install Esterel
+        run: raco pkg install --auto $GITHUB_WORKSPACE/esterel/ $GITHUB_WORKSPACE/esterel-doc/ $GITHUB_WORKSPACE/esterel-examples/ $GITHUB_WORKSPACE/esterel-lib/ $GITHUB_WORKSPACE/esterel-rhombus-lib/ $GITHUB_WORKSPACE/esterel-test/
+      - name: Test Esterel
+        run: xvfb-run -a raco test -p esterel-lib esterel-rhombus-lib esterel-test esterel-doc esterel-examples 

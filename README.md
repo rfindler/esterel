@@ -1,5 +1,7 @@
 # Esterel in Racket
 
+![ci status](https://github.com/rfindler/esterel/actions/workflows/ci.yml/badge.svg?branch=main)
+
 This is a version of Esterel that tries to cooperate as much of the
 Racket programming language as possible. For example, there is no
 `seq` just use `begin`. Most of Racket is fine to use but in order
