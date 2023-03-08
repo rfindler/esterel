@@ -758,6 +758,54 @@
   (check-equal? (react! r #:emit (list (cons S 1))) (hash S 1))
   (check-equal? (react! r #:emit (list (cons S 2))) (hash S 2 O #t)))
 
+(with-signal (S #:combine + #:init 0)
+  (define r
+    (esterel
+     #:pre 1
+     (let loop ()
+       (pause)
+       (emit S (+ 1 (signal-value S #:pre 1)))
+       (loop))))
+  (react! r)
+  (check-equal? (react! r) (hash S 1))
+  (check-equal? (react! r) (hash S 2))
+  (check-equal? (react! r) (hash S 3)))
+
+(with-signal (S #:combine + #:init 0)
+  (define r
+    (esterel
+     #:pre 1
+     (let loop ()
+       (emit S (+ 1 (signal-value S #:pre 1)))
+       (pause)
+       (loop))))
+  (check-equal? (react! r) (hash S 1))
+  (check-equal? (react! r) (hash S 2))
+  (check-equal? (react! r) (hash S 3)))
+
+(with-signal (S #:combine + #:init 0 T #:combine +)
+  (define r
+    (esterel
+     #:pre 1
+     (let loop ()
+       (emit T (signal-value S))
+       (pause)
+       (emit S (+ 1 (signal-value S #:pre 1)))
+       (loop))))
+  (check-equal? (react! r) (hash T 0 S 0))
+  (check-equal? (react! r) (hash T 1 S 1))
+  (check-equal? (react! r) (hash T 2 S 2)))
+
+(with-signal (S #:combine set-add #:init (set))
+  (define r
+    (esterel
+     (let loop ([n 0])
+       (for ([i (in-range n)]) (emit S i))
+       (pause)
+       (loop (+ n 1)))))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash S (set 0)))
+  (check-equal? (react! r) (hash S (set 0 1))))
 
 ;                                                             
 ;                                                             

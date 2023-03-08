@@ -12,8 +12,9 @@ provides additional functionality.
 
 @(require scribble/example
           (for-label racket/base
+                     racket/set
                      esterel/full))
-@(define esterel-eval (make-base-eval '(require esterel/full)))
+@(define esterel-eval (make-base-eval '(require esterel/full racket/set)))
 
 @section{Running Esterel Code}
 
@@ -96,13 +97,20 @@ provides additional functionality.
                      (code:line signal-id maybe-combine)]
                     [maybe-combine
                      (code:line)
-                     (code:line #:combine combine-expr)])]{
+                     (code:line #:combine combine-expr)
+                     (code:line #:combine combine-expr #:init init-expr)])]{
  Creates new signals and binds them to the the @racket[signal-id]s.
 
  Each signal suffixed with @racket[#:combine] is a value-carrying
  signal, and those without are not. Multiple emissions of the signal are
  combined using the result of @racket[combine-expr], a binary
  function that is assumed to be associative and commutative.
+ If @racket[#:init] is provided, it is considered to be the value
+ of the signal before any emits happen. If it is not provided,
+ using @racket[signal-value] to get the value of the signal before
+ it is emitted is an error. Whenever @racket[combine-expr] is called,
+ the first argument is always the signal's old value and the second
+ argument is always the most recent value passed to @racket[emit].
 
  The result of the @racket[with-signal] expression is the
  result of the last expression. If @racket[with-signal] is
@@ -214,11 +222,12 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  @racket[esterel], an error is raised.
 
  @examples[
+ #:label "Examples using integer values"
  #:eval esterel-eval
  (define-signal
    S1 #:combine + S2 #:combine +
    O1 #:combine + O2 #:combine + O3 #:combine +)
- (define r
+ (define r1
    (esterel
     #:pre 1
     (emit S1 2)
@@ -229,8 +238,27 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
     (emit O1 (signal-value S1))
     (emit O2 (signal-value S2 #:pre 1))
     (emit O3 (signal-value S2))))
- (eval:check (react! r) (hash S1 5 S2 0))
- (eval:check (react! r) (hash O1 5 O2 0 O3 6 S1 #f S2 6))
+ (eval:check (react! r1) (hash S1 5 S2 0))
+ (eval:check (react! r1) (hash O1 5 O2 0 O3 6 S1 #f S2 6))
+ ]
+
+ @examples[
+ #:label @list{Examples using @tech[#:doc '(lib "scribblings/reference/reference.scrbl")]{sets} and @racket[#:init]}
+ #:eval esterel-eval
+ (define-signal
+   S3 #:combine set-add #:init (set)
+   S4 #:combine + #:init 0)
+ (define r2
+   (esterel
+    #:pre 1
+    (loop
+     (emit S4 (+ 1 (signal-value S4 #:pre 1)))
+     (for ([i (in-range (signal-value S4))])
+       (emit S3 i))
+     (pause))))
+ (eval:check (react! r2) (hash S3 (set 0) S4 1))
+ (eval:check (react! r2) (hash S3 (set 0 1) S4 2))
+ (eval:check (react! r2) (hash S3 (set 0 1 2) S4 3))
  ]
 
 }
