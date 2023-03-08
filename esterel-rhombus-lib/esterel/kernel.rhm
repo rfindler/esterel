@@ -50,7 +50,12 @@ fun emit(s):
   kernel.emit(s)
 
 fun react(r, ~emit: signals = []):
-  kernel.#{react!}(r, ~emit: signals)
+  // the for loop here converts an equal
+  // hash into an equal-always hash in
+  // order to cooperate better with Rhombus
+  for Map:
+    each (k,v): kernel.#{react!}(r, ~emit: signals)
+    values(k,v)
 
 expr.macro 'with_trap $t:
               $body
