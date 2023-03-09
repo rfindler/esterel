@@ -24,7 +24,7 @@
 ;; a can exploration. In that case, we should create the same
 ;; signal during a later must run. See `mk-signal.args` for
 ;; how that is done
-(struct signal (name identity init combine)
+(struct signal (name identity combine)
   #:methods gen:custom-write
   [(define write-proc (mk-write-proc (λ (x) (signal-name x)) "signal"))]
   #:methods gen:equal-mode+hash
