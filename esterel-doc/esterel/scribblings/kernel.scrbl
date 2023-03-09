@@ -50,10 +50,12 @@ provides additional functionality.
  start of the @tech{instant}; valued signals must be paired with
  values.
 
- The result has the values of signals that were emitted and,
- if a signal's lack of emission affected the computation, it
- is also included in the resulting hash.
-
+ The result has the values of signals that were emitted.
+ Additionally if a signal is not a valued signal and the
+ computation depends on it not being present (e.g., if it is
+ passed to @racket[present?]), it is included in resulting
+ hash, mapped to @racket[#f].
+ 
  If the code is not constructive, an exception (that is
  recognized by @racket[exn:fail:not-constructive?]) is
  raised.
@@ -96,24 +98,29 @@ provides additional functionality.
                      (code:line signal-id maybe-combine)]
                     [maybe-combine
                      (code:line)
-                     (code:line #:combine combine-expr)])]{
+                     (code:line #:combine combine-expr)
+                     (code:line #:init init-expr #:combine combine-expr)])]{
  Creates new signals and binds them to the the @racket[signal-id]s.
 
  Each signal suffixed with @racket[#:combine] is a value-carrying
  signal, and those without are not. Multiple emissions of the signal are
  combined using the result of @racket[combine-expr], a binary
  function that is assumed to be associative and commutative.
+ If @racket[init-expr] is provided, then the value of the signal
+ if it is never emitted is the value of @racket[init-expr]. Once
+ the signal is emitted, however, the value of @racket[init-expr]
+ is discarded.
+
+ If @racket[with-signal] is invoked from within
+ @racket[esterel], then the signals may not be emitted
+ once the last @racket[body-expr] is evaluated (it will result in
+ an error from @racket[emit] if they are).
 
  The result of the @racket[with-signal] expression is the
  result of the last expression. If @racket[with-signal] is
  used in the dynamic extent of @racket[esterel], the last
  @racket[body-expr] is not in tail position with respect to
  the @racket[with-signal], but otherwise it is.
-
- Also, if @racket[with-signal] is invoked from within
- @racket[esterel], then the signals may not be emitted
- once the last @racket[body-expr] is evaluated (it will result in
- an error from @racket[emit] if they are).
 
  @examples[
  #:eval esterel-eval
@@ -129,6 +136,16 @@ provides additional functionality.
      (emit s1)
      (emit s2 22)
      (emit s2 33))))
+
+ (react!
+  (esterel
+   (with-signal (s1 #:combine +
+                 s2 #:init 11 #:combine +
+                 s3 #:combine +
+                 s4 #:init 22 #:combine *)
+     (emit s1 (signal-value s2))
+     (emit s4 33)
+     (emit s3 (signal-value s4)))))
  ]
  
 }
@@ -208,10 +225,12 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  unless it hasn't been emitted, in which case it returns the value in the previous
  instant.
 
- If @racket[n] is larger than zero, then returns the value
+ If @racket[n] is larger than zero, then @racket[signal-value] returns the value
  of @racket[s] is the @racket[n]th previous instant. If @racket[n] is
  larger than the value of the @racket[_pre-count-expr] passed to
- @racket[esterel], an error is raised.
+ @racket[esterel], an error is raised. If the value has never been
+ emitted and the signals declaration did not have an @racket[#:init]
+ clause, an error is raised.
 
  @examples[
  #:eval esterel-eval
@@ -230,7 +249,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
     (emit O2 (signal-value S2 #:pre 1))
     (emit O3 (signal-value S2))))
  (eval:check (react! r) (hash S1 5 S2 0))
- (eval:check (react! r) (hash O1 5 O2 0 O3 6 S1 #f S2 6))
+ (eval:check (react! r) (hash O1 5 O2 0 O3 6 S2 6))
  ]
 
 }

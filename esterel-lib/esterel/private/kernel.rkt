@@ -36,7 +36,8 @@
  esterel/proc
  par/proc
  with-trap/proc
- run-and-kill-signals!)
+ run-and-kill-signals!
+ no-init)
 
 
 #|
@@ -104,17 +105,30 @@ value for can explorations and subsequent must evaluation.
 
 (begin-for-syntax
   (define-splicing-syntax-class signal-name
-    #:attributes (name combine-proc)
+    #:attributes (name init combine-proc)
     (pattern
       (~seq name:id #:combine combine)
+      #:declare combine
+      (expr/c #'(-> any/c any/c any/c)
+              #:name "the #:combine argument")
+      #:attr combine-proc #'combine.c
+      #:attr init #'no-init)
+    (pattern
+      (~seq name:id #:init init:expr #:combine combine)
       #:declare combine
       (expr/c #'(-> any/c any/c any/c)
               #:name "the #:combine argument")
       #:attr combine-proc #'combine.c)
     (pattern
       name:id
+      #:attr init #'no-init
       #:attr combine-proc #'#f)))
 
+(define-values (no-init no-init?)
+  (let ()
+    (struct no-init ())
+    (values (no-init) no-init?)))
+ 
 (define-syntax (with-signal stx)
   (syntax-parse stx
     [(_ (signal:signal-name ...)
@@ -125,6 +139,7 @@ value for can explorations and subsequent must evaluation.
      #`(let ([srcloc #,(syntax/loc stx (quote-srcloc))])
          (let ([signal.name
                 (mk-signal.args 'signal.name
+                                signal.init
                                 signal.combine-proc
                                 (cons 'signal.name srcloc)
                                 )] ...)
@@ -152,11 +167,12 @@ value for can explorations and subsequent must evaluation.
          (define srcloc (quote-srcloc #,stx))
          (define signal.name
            (mk-signal.args 'signal.name
+                           signal.init
                            signal.combine-proc
                            (cons 'signal.name srcloc)
                            )) ...)]))
 
-(define (mk-signal.args name combine src)
+(define (mk-signal.args name init combine src)
   (signal (symbol->immutable-string name)
           ;; the identity of a signal, when we're in an instant,
           ;; is eq-like in that we increment a counter for each
@@ -173,6 +189,7 @@ value for can explorations and subsequent must evaluation.
                (channel-put new-signal-chan resp)
                (cons (channel-get resp) src))]
             [else #f])
+          init
           combine))
 
 (define (run-and-kill-signals! s bodies)
@@ -240,8 +257,11 @@ value for can explorations and subsequent must evaluation.
            resp-chan)
          esterel-prompt-tag))]
       [(signal-never-before-emitted)
-       (error 'signal-value
-              "signal has never been emitted\n  signal: ~e" a-signal)]
+       (define init (signal-init a-signal))
+       (if (no-init? init)
+           (error 'signal-value
+                  "signal has never been emitted\n  signal: ~e" a-signal)
+           init)]
       [else maybe-val])))
 
 (struct signal-never-before-emitted ())
@@ -843,7 +863,7 @@ value for can explorations and subsequent must evaluation.
   ;; returns what the response to present?/signal-value should be for `a-signal`
   ;;   if the signal hasn't been emitted yet and we ask for its value in
   ;;   the first instant, then signal-never-before-emitted will trigger an
-  ;;   error at the call site of signal-value.
+  ;;   error at the call site of signal-value or will return the init value
   (define (get-signals-value a-signal is-present?)
     (cond
       [is-present? (hash-ref signal-status a-signal)]
@@ -1238,11 +1258,8 @@ value for can explorations and subsequent must evaluation.
           (channel-put instant-complete-chan
                        (hash-union
                         (for/hash ([(s v) (in-hash signal-status)]
-                                   #:when (or (not (signal-combine s))
-                                              (not v)))
-                          ;; avoid only signals that'll be in signal-value
-                          ;; (so those with no combining function or those
-                          ;;  that aren't emitted)
+                                   #:unless (signal-combine s))
+                          ;; avoid all valued signals from this part
                           (values s v))
                         signal-value))
           (set! instant-complete-chan #f)
@@ -1396,12 +1413,14 @@ value for can explorations and subsequent must evaluation.
                          [loop-signals-pre (if is-present? signals-pre signal-values-pre)])
                 (cond
                   [(empty? loop-signals-pre)
-                   (channel-put resp-chan #f)]
+                   (channel-put resp-chan (if is-present?
+                                              #f
+                                              (signal-never-before-emitted)))]
                   [(zero? loop-pre)
                    (channel-put resp-chan
                                 (if is-present?
                                     (set-member? (car loop-signals-pre) a-signal)
-                                    (hash-ref (car loop-signals-pre) a-signal)))]
+                                    (hash-ref (car loop-signals-pre) a-signal signal-never-before-emitted)))]
                   [else (loop (- loop-pre 1) (cdr loop-signals-pre))]))])
            (loop)))
         (handle-evt
