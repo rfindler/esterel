@@ -46,8 +46,9 @@ operator ¿ x:
 expr.macro '$left ||| $right':
    '#{par/proc}([fun (): $left, fun(): $right])'
 
-fun emit(s):
-  kernel.emit(s)
+fun
+| emit(s): kernel.emit(s)
+| emit(s,v): kernel.emit(s,v)
 
 fun react(r, ~emit: signals = []):
   // the for loop here converts an equal
