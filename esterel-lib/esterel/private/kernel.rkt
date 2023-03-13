@@ -208,10 +208,18 @@ value for can explorations and subsequent must evaluation.
   (define no-value-provided? (equal? value no-value-provided))
   (if no-value-provided?
       (when (signal-combine a-signal)
-        (error 'emit "signal emitted with no value but has a combination function\n  signal: ~e\n  value: ~e"
+        (error 'emit
+               (string-append
+                "signal emitted with no value but has a combination function\n"
+                "  signal: ~e\n"
+                "  value: ~e")
                a-signal value))
       (unless (signal-combine a-signal)
-        (error 'emit "signal emitted with a value but has no combination function\n  signal: ~e\n  value: ~e"
+        (error 'emit
+               (string-append
+                "signal emitted with a value but has no combination function\n"
+                "  signal: ~e\n"
+                "  value: ~e")
                a-signal value)))
   (define resp-chan (make-channel))
   (channel-put (signal-table-emit-chan signal-table) (vector a-signal no-value-provided? value resp-chan))
@@ -665,7 +673,8 @@ value for can explorations and subsequent must evaluation.
   ;; get-unemitted-signals : can? -> (set/c signal?)
   ;; returns the set of signals that cannot be emitted
   (define (get-unemitted-signals a-can)
-    (match-define (can emits two-choice-signals one-choice-signals signal-states starting-point) a-can)
+    (match-define (can emits two-choice-signals one-choice-signals signal-states starting-point)
+      a-can)
     (set-union (for/set ([signal (in-list two-choice-signals)]
                          #:unless (set-member? emits signal))
                  signal)
@@ -773,9 +782,13 @@ value for can explorations and subsequent must evaluation.
     (-> (set/c thread?) void?)
     (for ([t (in-set ts)])
       (when (set-member? running-threads t)
-        (internal-error "adding a running thread (via add-running-threads) but it was already running ~s" t))
+        (internal-error
+         "adding a running thread (via add-running-threads) but it was already running ~s"
+         t))
       (when (hash-has-key? parent->par-state t)
-        (internal-error "adding a running thread (via add-running-threads) but it was a par parent ~s" t)))
+        (internal-error
+         "adding a running thread (via add-running-threads) but it was a par parent ~s"
+         t)))
     (set! running-threads (set-union running-threads ts)))
   (define (remove-running-thread t)
     (unless (set-member? running-threads t)
@@ -799,7 +812,12 @@ value for can explorations and subsequent must evaluation.
   ;;   exited to, or #f if none of them have exited to a trap
   (struct par-state (result/checkpoint-chan signal-waiting paused active trap) #:transparent)
   (define/contract parent->par-state
-    (hash/c thread? (struct/c par-state channel? (set/c thread?) (set/c thread?) (set/c thread?) (or/c #f trap? exn?))
+    (hash/c thread? (struct/c par-state
+                              channel?
+                              (set/c thread?)
+                              (set/c thread?)
+                              (set/c thread?)
+                              (or/c #f trap? exn?))
             #:flat? #t #:immutable #t)
     (hash))
 
@@ -929,7 +947,7 @@ value for can explorations and subsequent must evaluation.
     (set! signal-status _signal-status)
     (set! signal-value _signal-value)
     (set! dead-signals _dead-signals)
-    (set! raised-exns _raised-exns) ;; TODO: this doesn't seem right! there cannot be anything there, right?
+    (set! raised-exns _raised-exns) ;; there cannot be anything there ... right?
     (set! signal-waiters _signal-waiters)
     (set! paused-threads _paused-threads)
     (set! par-parents _par-parents)
@@ -944,7 +962,9 @@ value for can explorations and subsequent must evaluation.
   ;; signals : (hash/c signal? boolean? #:flat? #t #:immutable #t)
   (struct starting-point (rb-tree new-signal-counter signal-status signal-value dead-signals))
   (define (rollback! a-starting-point)
-    (match-define (starting-point rb-tree rb-new-signal-counter rb-signal-status rb-signal-value rb-dead-signals)
+    (match-define (starting-point rb-tree rb-new-signal-counter
+                                  rb-signal-status rb-signal-value
+                                  rb-dead-signals)
       a-starting-point)
     (set! new-signal-counter rb-new-signal-counter)
     (set! signal-status rb-signal-status)
@@ -965,7 +985,9 @@ value for can explorations and subsequent must evaluation.
   ;; cont : continuation[listof thread]
   ;; signal-waiting : (set/c rb-tree?)
   ;; paused : (set/c rb-tree?)
-  ;; active : (set/c rb-tree?) -- these are children of the current par that have children; they aren't running
+  ;; active : (set/c rb-tree?)
+  ;;     -- `active` are children of the current par
+  ;;        that have children; they aren't running
   ;; trap : (or/c trap? exn? #f)
   ;; before-par-trap-counter : natural?
   (struct rb-par rb-tree (cont signal-waiting paused active trap before-par-trap-counter) #:transparent)
@@ -1006,7 +1028,8 @@ value for can explorations and subsequent must evaluation.
         [(find-signal thread)
          =>
          (λ (signal+blocked-thread)
-           (match-define (cons signal (blocked-thread is-present? thread resp-chan)) signal+blocked-thread)
+           (match-define (cons signal (blocked-thread is-present? thread resp-chan))
+             signal+blocked-thread)
            (channel-put resp-chan a-checkpoint-request)
            (rb-blocked signal is-present? (channel-get k-chan)))]
         [else (internal-error "lost a thread ~s" thread)])))
@@ -1044,10 +1067,14 @@ value for can explorations and subsequent must evaluation.
 
                 (define parent-thread (current-thread))
                 (define checkpoint/result-chan (make-channel))
-                (define this-par-result-chans+signal-waiting-children (get-result-chans+par-children rb-signal-waiting))
-                (define this-par-result-chans+paused-children (get-result-chans+par-children rb-paused))
-                (define this-par-result-chans+active-children (get-result-chans+par-children rb-active))
-                (define signal-waiting (drop-result-chans this-par-result-chans+signal-waiting-children))
+                (define this-par-result-chans+signal-waiting-children
+                  (get-result-chans+par-children rb-signal-waiting))
+                (define this-par-result-chans+paused-children
+                  (get-result-chans+par-children rb-paused))
+                (define this-par-result-chans+active-children
+                  (get-result-chans+par-children rb-active))
+                (define signal-waiting
+                  (drop-result-chans this-par-result-chans+signal-waiting-children))
                 (define paused (drop-result-chans this-par-result-chans+paused-children))
                 (define active (drop-result-chans this-par-result-chans+active-children))
                 (for ([child-thread (in-set (set-union signal-waiting paused active))])
@@ -1145,7 +1172,8 @@ value for can explorations and subsequent must evaluation.
            (maybe-finalize-a-par parent-parent-thread))])))
 
   ;; unpause-to-trap : thread? (or/c trap? exn?) -> void
-  ;; unpause all of the paused children threads of `parent-thread`, sending them to `trap-to-exit-to` instead
+  ;; unpause all of the paused children threads of `parent-thread`,
+  ;; sending them to `trap-to-exit-to` instead
   (define (unpause-to-trap parent-thread trap-to-exit-to)
     (let loop ([parent-thread parent-thread]
                [first-one? #t])
@@ -1153,8 +1181,9 @@ value for can explorations and subsequent must evaluation.
         (hash-ref parent->par-state parent-thread))
       (unless first-one?
         (when the-trap-of-this-par
-          (internal-error "found a par as we went down to unpause things that has a trap, par-parent: ~s"
-                          parent-thread)))
+          (internal-error
+           "found a par as we went down to unpause things that has a trap, par-parent: ~s"
+           parent-thread)))
       (for ([paused-thread (in-set paused)])
         (define resp-chan (hash-ref paused-threads paused-thread #f))
         (cond
@@ -1324,7 +1353,12 @@ value for can explorations and subsequent must evaluation.
            (set! paused-threads (hash))
            (set! parent->par-state
                  (for/hash ([(parent-thread a-par-state) (in-hash parent->par-state)])
-                   (match-define (par-state checkpoint/result-chan signal-waiting paused active a-trap) a-par-state)
+                   (match-define (par-state checkpoint/result-chan
+                                            signal-waiting
+                                            paused
+                                            active
+                                            a-trap)
+                     a-par-state)
                    ;; paused threads become active threads and there are no more paused threads when
                    ;; picking up after an instant has terminated
                    (values parent-thread (par-state checkpoint/result-chan signal-waiting (set) paused #f))))
@@ -1420,7 +1454,9 @@ value for can explorations and subsequent must evaluation.
                    (channel-put resp-chan
                                 (if is-present?
                                     (set-member? (car loop-signals-pre) a-signal)
-                                    (hash-ref (car loop-signals-pre) a-signal signal-never-before-emitted)))]
+                                    (hash-ref (car loop-signals-pre)
+                                              a-signal
+                                              signal-never-before-emitted)))]
                   [else (loop (- loop-pre 1) (cdr loop-signals-pre))]))])
            (loop)))
         (handle-evt
@@ -1519,7 +1555,9 @@ value for can explorations and subsequent must evaluation.
            (log-par-state)
            (add-running-threads children-threads)
            (remove-running-thread parent-thread)
-           (set! parent->par-state (hash-set parent->par-state parent-thread (par-state checkpoint/result-chan (set) (set) children-threads #f)))
+           (set! parent->par-state
+                 (hash-set parent->par-state parent-thread
+                           (par-state checkpoint/result-chan (set) (set) children-threads #f)))
            (for ([child-thread (in-set children-threads)])
              (set! par-parents (hash-set par-parents child-thread parent-thread)))
            (loop)))
