@@ -471,10 +471,6 @@
 (check-exn
  #rx"expected: pair[?].* given: #f"
  (λ ()
-   ;; raising an exception also counts as an incorrect
-   ;; choice for the signal value so this program is
-   ;; non constructive, by that logic but we raise one
-   ;; of the exceptions as that seems more helpful
    (with-signal (s1 s2)
      (react!
       (esterel
@@ -485,6 +481,20 @@
         (if (present? s2)
             (void)
             (car #f))))))))
+
+;; exceptions raised during can exploration
+;; "don't count" in the sense that we just
+;; stop tracking signal emission in that par
+;; only if the exception is raised in must mode
+;; do we propagate it out of the esterel context
+(with-signal (S)
+  (check-equal?
+   (react!
+    (esterel
+     (if (present? S)
+         (car #f)
+         (void))))
+   (hash S #f)))
 
 ;; #:pre
 
@@ -746,6 +756,15 @@
   (check-equal? (react! r #:emit (list (cons S 0)))
                 (hash S 0)))
 
+(with-signal (S #:combine + O1 O2)
+  (define r
+    (esterel
+     (if (present? S)
+         (emit O1)
+         (emit O2))))
+  (check-equal? (react! r #:emit (list (cons S 2)))
+                (hash S 2 O1 #t)))
+
 (with-signal (S #:combine + O)
   (define r
     (esterel
@@ -806,6 +825,23 @@
   (check-equal? (react! r) (hash))
   (check-equal? (react! r) (hash S (set 0)))
   (check-equal? (react! r) (hash S (set 0 1))))
+
+
+(with-signal (S #:init 0 #:combine + T U)
+  (check-equal?
+   (react!
+    (esterel
+     (par (if (present? S)
+              (emit U)
+              (void))
+          (if (present? T)
+              (void)
+              (emit S 1))
+          (if (present? U)
+              (void)
+              (void)))))
+   (hash T #f S 1 U #t)))
+
 
 ;                                                             
 ;                                                             
