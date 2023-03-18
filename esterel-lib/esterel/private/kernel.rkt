@@ -686,13 +686,13 @@ value for can explorations and subsequent must evaluation.
   ;; STATE: updates `signal-status` and `signal-ready` based on the choices in `a-can`
   (define (set-can-signals! a-can)
     (match-define (can emits ordered-signals newly-ready signal-states starting-point) a-can)
-    (set! signal-ready (set-union newly-ready signal-ready))
     (set! signal-status
           (for/fold ([signal-status signal-status])
                     ([a-signal (in-list ordered-signals)]
                      [i (in-naturals)])
             (define on? (bitwise-bit-set? signal-states i))
-            (hash-set signal-status a-signal on?))))
+            (hash-set signal-status a-signal on?)))
+    (set! signal-ready (set-union newly-ready signal-ready)))
 
   ;; get-unemitted-signals : can? -> (set/c signal?)
   ;; returns the set of signals that cannot be emitted
@@ -1342,11 +1342,11 @@ value for can explorations and subsequent must evaluation.
             (= 0 (hash-count value-waiters))
             (set-empty? running-threads)
             instant-complete-chan)
-       (log-esterel-debug "~a: instant has completed~a"
+       (log-esterel-debug "~a: ~a"
                           (eq-hash-code (current-thread))
                           (if (can? mode)
-                              (format "; finished a can exploration: ~a; emits ~s" (can-signal-states mode) (can-emits mode))
-                              ""))
+                              (format "finished a can exploration: ~a; emits ~s" (can-signal-states mode) (can-emits mode))
+                              "instant has completed"))
        (log-par-state)
        (cond
          [(can? mode)
