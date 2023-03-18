@@ -24,9 +24,18 @@
 ;; a can exploration. In that case, we should create the same
 ;; signal during a later must run. See `mk-signal.args` for
 ;; how that is done
+;; If the identity is not #t, it is expected to be a pair
+;; whose car component is might be useful as debugging
+;; information so it printed as part of the signal
 (struct signal (name identity init combine)
   #:methods gen:custom-write
-  [(define write-proc (mk-write-proc (λ (x) (signal-name x)) "signal"))]
+  [(define write-proc
+     (mk-write-proc
+      (λ (x)
+        (if (signal-identity x)
+            (format "~a (~s)" (signal-name x) (car (signal-identity x)))
+            (signal-name x)))
+      "signal"))]
   #:methods gen:equal-mode+hash
   [(define (equal-mode-proc self other rec mode)
      (cond
