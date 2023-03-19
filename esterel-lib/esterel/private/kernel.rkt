@@ -436,17 +436,6 @@ value for can explorations and subsequent must evaluation.
     (cond
       [(exn? val) (raise val)]
       [(trap? val) (exit-trap val)]
-      [(channel? val)
-       ;; we might not need to grab this continuation;
-       ;; we shouldn't need the continuation of a pause
-       ;; to run in `can` mode, but we're currently
-       ;; grabbing and storing it.
-       (loop
-        (call/cc
-         (λ (k)
-           (channel-put val k)
-           resp-chan)
-         esterel-prompt-tag))]
       [else
        (define iter
          (continuation-mark-set->iterator
@@ -1075,17 +1064,13 @@ value for can explorations and subsequent must evaluation.
 
   ;; cont : continuation[listof thread]
   ;; signal-waiting : (set/c rb-tree?)
-  ;; paused : (set/c rb-tree?)
   ;; active : (set/c rb-tree?)
   ;;     -- `active` are children of the current par
   ;;        that have children; they aren't running
   ;; trap : (or/c trap? exn? #f)
   ;; before-par-trap-counter : natural?
-  (struct rb-par rb-tree (cont presence-waiting value-waiting paused active trap before-par-trap-counter)
+  (struct rb-par rb-tree (cont presence-waiting value-waiting active trap before-par-trap-counter)
     #:transparent)
-
-  ;; cont : continuation[channel]
-  (struct rb-paused rb-tree (cont) #:transparent)
 
   ;; signal : signal?
   ;; presence? : boolean?  -- indicates if they are blocked on `present?` or `signal-value`
@@ -1109,16 +1094,13 @@ value for can explorations and subsequent must evaluation.
             (loop child))
           (for/set ([child (in-set value-waiting)])
             (loop child))
-          (for/set ([child (in-set paused)])
-            (loop child))
           (for/set ([child (in-set active)])
             (loop child))
           a-trap
           before-par-trap-counter)]
         [(hash-has-key? paused-threads thread)
-         (define paused-chan (hash-ref paused-threads thread))
-         (channel-put paused-chan k-chan)
-         (rb-paused (channel-get k-chan))]
+         (error 'build-rb-tree-from-current-state
+                "paused threads should be ignored when building the rb tree")]
         [(find-presence-waiter thread)
          =>
          (λ (signal+blocked-thread)
@@ -1142,7 +1124,7 @@ value for can explorations and subsequent must evaluation.
                [par-child-result-chan #f]
                [parent-before-par-trap-counter #f])
       (match rb-tree
-        [(rb-par par-cont rb-presence-waiting rb-value-waiting rb-paused rb-active a-trap before-par-trap-counter)
+        [(rb-par par-cont rb-presence-waiting rb-value-waiting rb-active a-trap before-par-trap-counter)
          ;; we have to do this strange dance with `sema` in order to make
          ;; the recursive call to `loop`, as we need the par parent
          ;; thread to make the call. So we avoid race
@@ -1172,17 +1154,14 @@ value for can explorations and subsequent must evaluation.
                   (get-result-chans+par-children rb-presence-waiting))
                 (define this-par-result-chans+value-waiting-children
                   (get-result-chans+par-children rb-value-waiting))
-                (define this-par-result-chans+paused-children
-                  (get-result-chans+par-children rb-paused))
                 (define this-par-result-chans+active-children
                   (get-result-chans+par-children rb-active))
                 (define presence-waiting
                   (drop-result-chans this-par-result-chans+presence-waiting-children))
                 (define value-waiting
                   (drop-result-chans this-par-result-chans+value-waiting-children))
-                (define paused (drop-result-chans this-par-result-chans+paused-children))
                 (define active (drop-result-chans this-par-result-chans+active-children))
-                (for ([child-thread (in-set (set-union presence-waiting value-waiting paused active))])
+                (for ([child-thread (in-set (set-union presence-waiting value-waiting active))])
                   (set! par-parents (hash-set par-parents child-thread parent-thread)))
                 (set! parent->par-state
                       (hash-set parent->par-state
@@ -1190,27 +1169,19 @@ value for can explorations and subsequent must evaluation.
                                 (par-state checkpoint/result-chan
                                            presence-waiting
                                            value-waiting
-                                           paused
+                                           ;; we never rebuild paused threads because
+                                           ;; can exploration never crosses a pause so
+                                           ;; we don't even collect their continuations
+                                           (set)
                                            active
                                            a-trap)))
                 (semaphore-post sema)
                 (par-cont (set-union this-par-result-chans+presence-waiting-children
                                      this-par-result-chans+value-waiting-children
-                                     this-par-result-chans+paused-children
                                      this-par-result-chans+active-children)
                           checkpoint/result-chan)))))
          (semaphore-wait sema)
          par-parent-thread]
-        [(rb-paused cont)
-         (define resp-chan (make-channel))
-         (define paused-thread
-           (parameterize ([current-signal-table the-signal-table])
-             (make-esterel-thread
-              #:before-par-trap-counter parent-before-par-trap-counter
-              #:par-child-result-chan par-child-result-chan
-              (λ () (cont resp-chan)))))
-         (set! paused-threads (hash-set paused-threads paused-thread resp-chan))
-         paused-thread]
         [(rb-blocked a-signal presence? cont)
          (define resp-chan (make-channel))
          (define blocked-thread
