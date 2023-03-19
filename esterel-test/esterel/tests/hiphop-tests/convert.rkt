@@ -3,6 +3,7 @@
 (provide run-hiphop-test)
 
 (define (run-hiphop-test test)
+  (define failed? #f)
   (match test
     [`(test-case
        ,fn
@@ -52,6 +53,7 @@
            (unless (equal? expected-outputs actual-outputs)
              (eprintf "instant ~a (counting from 0):\n  file ~a\n  expected ~s\n       got ~s\n"
                       i fn expected-outputs actual-outputs)
+             (set! failed? #t)
              (escape (void))))))
      (with-signals-table signals (hash) (append si so sio)
        ()
@@ -84,7 +86,8 @@
            lap_command alarm_mode_command enter_set_alarm_mode_command
            set_alarm_command next_alarm_time_position_command toggle_alarm_command
            stop_alarm_beep_command exit_set_alarm_mode_command)
-       (go signals))]))
+       (go signals))
+     failed?]))
 
 #|
 
