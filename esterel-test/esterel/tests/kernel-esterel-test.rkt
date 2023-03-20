@@ -1499,6 +1499,44 @@
                 (emit S)
                 (void))])))))))
 
+(let ()
+  (define r
+    (esterel
+     (with-signal (s)
+       (suspend
+        (begin (pause)
+               (emit s))
+        (present? s)))))
+
+  (react! r)
+  (check-exn
+   non-constructive-exn?
+   (λ () (react! r))))
+
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (s #:init 0 #:combine +)
+       (emit s 1)
+       (let ([x (signal-value s)])
+         (emit s x)))))))
+
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (s1 s2)
+       (par
+        (if (present? s1)
+            (emit s2)
+            (void))
+        (if (present? s2)
+            (void)
+            (emit s1))))))))
+
 (with-signal (S1 S2 O)
   (define r
     (esterel
