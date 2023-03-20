@@ -12,8 +12,9 @@ provides additional functionality.
 
 @(require scribble/example
           (for-label racket/base
+                     racket/set
                      esterel/full))
-@(define esterel-eval (make-base-eval '(require esterel/full)))
+@(define esterel-eval (make-base-eval '(require racket/set esterel/full)))
 
 @section{Running Esterel Code}
 
@@ -308,7 +309,9 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
 
  When resuming from a @racket[pause] in @racket[body-expr],
  suspends @racket[body-expr] when @racket[when-expr] returns
- a true value.
+ a true value. The suspensions also affect any
+ @racket[with-signal] forms in (the dynamic extent of)
+ @racket[when-expr].
 
  In the second instant in this example, @racket[S1] is not
  emitted because that thread is suspended. In the third
@@ -316,6 +319,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
 
  @examples[
  #:eval esterel-eval
+ #:label #f
  (define-signal S1 S2)
  (define r
    (esterel
@@ -334,6 +338,38 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  (eval:check (react! r) (hash S1 #t S2 #f))
  (eval:check (react! r) (hash S1 #t S2 #f))
  ]
+
+ Signals whose declaration are suspended do not see the
+ instants that happen during the suspension. Specifically,
+ the pre values are not affected by instants that are unseen
+ because of the suspension, as this example demonstrates.
+ @examples[
+ #:eval esterel-eval
+ #:label #f
+ (define-signal
+   O #:init (set) #:combine set-union
+   S2)
+ (define r
+   (esterel
+    #:pre 1
+    (suspend
+     (with-signal (S1)
+       (let loop ()
+         (emit S1)
+         (pause)
+         (emit O (present? S1 #:pre 1))
+         (loop)))
+     (present? S2))))
+
+ (react! r)
+ (react! r #:emit (list S2))
+ (react! r)
+ ]
+
+ In the second instant, @racket[S1] is not emitted but, because its
+ declaration is suspended, the present test on the previous
+ instant's version of @racket[S1] is true and thus the result
+ of @racket[react!] has @racket[O] mapped to @racket[#t].
 }
 
 @defform[(with-trap trap-id body-expr ...)]{

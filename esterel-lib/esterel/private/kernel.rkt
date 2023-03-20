@@ -10,6 +10,9 @@
          racket/bool
          (for-syntax racket/base syntax/parse))
 
+;; TODO: it seems like signal death can create race conditions
+;;       is there anything we can do about that?
+
 (provide
  (rename-out [-esterel esterel])
  with-signal
@@ -196,9 +199,10 @@ value for can explorations and subsequent must evaluation.
   (define signal-table (current-signal-table))
   (cond
     [signal-table
-     (define vals (call-with-values bodies list))
-     (channel-put (signal-table-signal-dead-chan signal-table) s)
-     (apply values vals)]
+     (with-continuation-mark suspend-mark s
+       (let ([vals (call-with-values bodies list)])
+         (channel-put (signal-table-signal-dead-chan signal-table) s)
+         (apply values vals)))]
     [else
      (bodies)]))
 
@@ -224,6 +228,10 @@ value for can explorations and subsequent must evaluation.
   (define resp-chan (make-channel))
   (channel-put (signal-table-emit-chan signal-table) (vector a-signal no-value-provided? value resp-chan))
   (match (channel-get resp-chan)
+    ['suspended
+     (if (equal? value no-value-provided)
+         (error 'emit "signal is suspended\n  signal: ~e" a-signal)
+         (error 'emit "signal is suspended\n  signal: ~e\n  value: ~e" a-signal value))]
     ['dead
      (if (equal? value no-value-provided)
          (error 'emit (string-append "signal dead;\n"
@@ -236,7 +244,7 @@ value for can explorations and subsequent must evaluation.
                                      "  value: ~e")
                 a-signal
                 value))]
-    [_ (void)]))
+    [(? void?) (void)]))
   
 (define (present? a-signal #:pre [pre 0])
   (signal-value/present? #t a-signal pre))
@@ -264,6 +272,9 @@ value for can explorations and subsequent must evaluation.
            (channel-put (checkpoint-request-resp-chan maybe-val) k)
            resp-chan)
          esterel-prompt-tag))]
+      ['suspended
+       (error (if is-present? 'present? 'signal-value)
+              "signal is suspended\n  signal: ~e" a-signal)]
       [(signal-never-before-emitted)
        (define init (signal-init a-signal))
        (if (no-init? init)
@@ -432,16 +443,43 @@ value for can explorations and subsequent must evaluation.
          (continuation-mark-set->iterator
           (current-continuation-marks)
           (list suspend-mark)))
-       (define suspend?
-         (let loop ([iter iter])
+       (define-values (suspend? suspended-signals)
+         (let loop ([iter iter]
+                    [suspend? #f]
+                    [suspended-signals (set)]
+                    [pending-signals (set)])
            (define-values (next-val next-iter) (iter))
-           (cond
-             [next-val
-              (or ((vector-ref next-val 0))
-                  (loop next-iter))]
-             [else #f])))
+           (match next-val
+             [(vector (? procedure? suspend-proc))
+              (cond
+                [(suspend-proc)
+                 (set! suspended-signals
+                       (set-union pending-signals suspended-signals))
+                 (loop next-iter
+                       #t
+                       (set-union pending-signals suspended-signals)
+                       (set))]
+                [else
+                 (loop next-iter
+                       suspend?
+                       suspended-signals
+                       pending-signals)])]
+             [(vector (? set? signals))
+              (loop next-iter
+                    suspend?
+                    suspended-signals
+                    (set-union signals pending-signals))]
+             [#f (values suspend? suspended-signals)])))
        (cond
          [suspend?
+          (unless (set-empty? suspended-signals)
+            (define resp-chan (make-channel))
+            (channel-put (signal-table-suspended-signals-chan signal-table)
+                         (cons suspended-signals resp-chan))
+            (define resp (channel-get resp-chan))
+            (when resp
+              (error 'suspend "suspended signal was used\n  signal: ~e"
+                     resp)))
           (pause)]
          [else val])])))
 
@@ -509,6 +547,7 @@ value for can explorations and subsequent must evaluation.
                       par-start-chan par-partly-done-chan
                       pause-chan instant-chan
                       react-thread-done-chan
+                      suspended-signals-chan
                       pre-count))
   
 (struct esterel (signal-table) #:mutable)
@@ -522,7 +561,7 @@ value for can explorations and subsequent must evaluation.
   (define the-signal-table
     (signal-table (make-channel) (make-channel) (make-channel) (make-channel)
                   (make-channel) (make-channel) (make-channel) (make-channel)
-                  (make-channel) pre-count))
+                  (make-channel) (make-channel) pre-count))
   (thread (λ () (run-esterel-thread pre-count thunk the-signal-table)))
   (esterel the-signal-table))
 
@@ -604,6 +643,7 @@ value for can explorations and subsequent must evaluation.
                               par-start-chan par-partly-done-chan
                               pause-chan instant-chan
                               react-thread-done-chan
+                              suspended-signals-chan
                               pre-count)
     the-signal-table)
 
@@ -720,7 +760,7 @@ value for can explorations and subsequent must evaluation.
   ;; if it is #f, the signal is not going to be emitted this instant
   ;; this applies to both value-carrying signals and regular ones
   (define/contract signal-status
-    (hash/c signal? boolean? #:flat? #t #:immutable #t)
+    (hash/c signal? (or/c boolean? 'suspended) #:flat? #t #:immutable #t)
     (hash))
 
   ;; signals in `signal-ready` will not be emitted again this instant
@@ -1363,7 +1403,10 @@ value for can explorations and subsequent must evaluation.
           (channel-put instant-complete-chan
                        (hash-union
                         (for/hash ([(s v) (in-hash signal-status)]
-                                   #:unless (signal-combine s))
+                                   #:unless (signal-combine s)
+
+                                   ;; drop suspended signals from the result
+                                   #:when (boolean? v))
                           ;; avoid all valued signals from this part
                           (values s v))
                         signal-value))
@@ -1378,9 +1421,16 @@ value for can explorations and subsequent must evaluation.
                 [else (cons (car l) (loop (cdr l) (- i 1)))])))
           (set! signals-pre
                 (keep-count
-                 (for/set ([(signal val) (in-hash signal-status)]
-                           #:when val)
-                   signal)
+                 (for/set ([(a-signal val) (in-hash signal-status)]
+                           #:when
+                           (match val
+                             [#t #t]
+                             [#f #f]
+                             ['suspended
+                              (and (pair? signals-pre)
+                                   (set-member? (car signals-pre)
+                                                a-signal))]))
+                   a-signal)
                  signals-pre
                  pre-count))
           (set! signal-values-pre (keep-count
@@ -1509,12 +1559,13 @@ value for can explorations and subsequent must evaluation.
            (log-par-state)
            (cond
              [(= pre 0)
-              (define blocked?
-                (if is-present?
-                    (not (hash-has-key? signal-status a-signal))
-                    (not (set-member? signal-ready a-signal))))
               (cond
-                [blocked?
+                [(equal? 'suspended (hash-ref signal-status a-signal #f))
+                 (channel-put resp-chan 'suspended)]
+                [(if is-present?
+                     (not (hash-has-key? signal-status a-signal))
+                     (not (set-member? signal-ready a-signal)))
+                 ;; here we need to block
                  (remove-running-thread the-thread)
                  (if is-present?
                      (add-presence-waiter! a-signal the-thread resp-chan)
@@ -1590,9 +1641,6 @@ value for can explorations and subsequent must evaluation.
               (channel-put resp-chan 'dead)
               (loop)]
              [else
-              ;; the signal's not dead, so send back a message that doesn't trigger
-              ;; an error and continue, updating the instant state for the emit
-              (channel-put resp-chan (void))
               (when (can? mode)
                 ;; we're in can mode, so record that this signal can be emitted
                 (set! mode (add-emitted-signal mode a-signal)))
@@ -1612,6 +1660,10 @@ value for can explorations and subsequent must evaluation.
                                     a-value))))
               (match (hash-ref signal-status a-signal 'unknown)
                 ['unknown
+                 ;; the signal's not dead, so send back a message that doesn't trigger
+                 ;; an error and continue, updating the instant state for the emit
+                 (channel-put resp-chan (void))
+
                  (set! signal-status (hash-set signal-status a-signal #t))
                  (define still-blocked-threads '())
                  (for ([a-blocked-thread (in-list (hash-ref presence-waiters a-signal '()))])
@@ -1634,10 +1686,23 @@ value for can explorations and subsequent must evaluation.
                    (add-running-thread thread))
                  (set! presence-waiters (hash-remove presence-waiters a-signal))
                  (loop)]
+                ['suspended
+                 ;; the signal's suspended, so send back a message that triggers an error
+                 (channel-put resp-chan 'suspended)
+                 (loop)]
+
                 [#t
-                 ;; the signal has been emitted before; nothing to do
+                 ;; the signal's not dead, so send back a message that doesn't trigger
+                 ;; an error and continue, updating the instant state for the emit
+                 (channel-put resp-chan (void))
+
+                 ;; the signal has been emitted before; nothing else to do
                  (loop)]
                 [#f
+                 ;; the signal's not dead, so send back a message that doesn't trigger
+                 ;; an error and continue, updating the instant state for the emit
+                 (channel-put resp-chan (void))
+
                  (unless (can? mode)
                    ;; if the signal isn't present but it got emitted (and we aren't in can mode)
                    ;; then something has gone wrong; let's crash.
@@ -1709,6 +1774,18 @@ value for can explorations and subsequent must evaluation.
            ;; someone tried to start an instant while one is running
            ;; let them know there's an error
            (channel-put _instant-complete-chan #f)
+           (loop)))
+        (handle-evt
+         suspended-signals-chan
+         (λ (signals+resp-chan)
+           (match-define (cons signals resp-chan) signals+resp-chan)
+           (define resp #f)
+           (for ([a-signal (in-set signals)])
+             (when (and (hash-has-key? signal-status a-signal)
+                        (boolean? (hash-ref signal-status a-signal)))
+               (set! resp a-signal))
+             (set! signal-status (hash-set signal-status a-signal 'suspended)))
+           (channel-put resp-chan resp)
            (loop)))
         (handle-evt
          react-thread-done-chan
