@@ -50,7 +50,7 @@ fun drop_s1_s2(ht :: Map):
     keep_when signal_name(k) != "s1" && signal_name(k) != "s2"
     ht ++ {k : v}
 
-begin:
+block:
   react(r)
   #void
 
