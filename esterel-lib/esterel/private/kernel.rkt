@@ -10,15 +10,6 @@
          racket/bool
          (for-syntax racket/base syntax/parse))
 
-;; TODO: the trap handling currently has exceptions in it
-;;       (which bleeds into the implementation of `pause`);
-;;       It doesn't seem necessary anymore.
-
-;; TODO: we probably do not need to grab the continuation of
-;;       a pause ever; the continuations grabbed to support
-;;       the can exploration never cross a pause; can this
-;;       be removed?
-
 (provide
  (rename-out [-esterel esterel])
  with-signal
