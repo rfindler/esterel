@@ -1916,7 +1916,7 @@
            (emit s1)
            (emit s1)))))))
 
-;; popl 2019, figure 10 example 1
+;; popl 2019, figure 10 example 2
 (check-exn
  non-constructive-exn?
  (λ ()
