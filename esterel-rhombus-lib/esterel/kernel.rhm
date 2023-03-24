@@ -72,7 +72,7 @@ expr.macro 'with_signals {$id, ...}:
   'block:
      def $id: #{mk-signal.args}(#'$id, #{no-init}, #false, $srclocs)
      ...
-     #{run-and-kill-signals!}([$id,...],fun (): $bodies ...)'
+     #{run-and-kill-signals!}([$id,...],fun (): $bodies; ...)'
 
 expr.macro 'par
             | $body
