@@ -5,18 +5,21 @@ import:
 
 // This is a translation of the code in 1.6 of
 // _Compiling Esterel_; the test cases are as
-// given in figure 1.2
+// given in figure 1.2 (plus a few more)
 
 def_signal: A B R O
 
 def abro:
   esterel:
     loop:
-      (await ¿A) ||| await ¿B
+      par
+      | await ¿A
+      | await ¿B
       emit(O)
       ~each ¿R
 
-fun o_emitted(sigs): sigs.has_key(O) && sigs[O] == #true
+fun o_emitted(sigs):
+  sigs.has_key(O) && sigs[O] == #true
 
 check o_emitted(react(abro))                ~is #false
 check o_emitted(react(abro,~emit: [A,B]))   ~is #true
@@ -25,3 +28,9 @@ check o_emitted(react(abro,~emit: [R]))     ~is #false
 check o_emitted(react(abro,~emit: [A]))     ~is #false
 check o_emitted(react(abro,~emit: [B]))     ~is #true
 check o_emitted(react(abro,~emit: [A,B,R])) ~is #false
+check o_emitted(react(abro,~emit: [A,B]))   ~is #true
+check o_emitted(react(abro,~emit: [B]))     ~is #false
+check o_emitted(react(abro,~emit: [R]))     ~is #false
+check o_emitted(react(abro,~emit: [B]))     ~is #false
+check o_emitted(react(abro,~emit: [B]))     ~is #false
+check o_emitted(react(abro,~emit: [A]))     ~is #true
