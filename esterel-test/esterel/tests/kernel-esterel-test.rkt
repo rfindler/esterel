@@ -900,6 +900,23 @@
   (check-equal? (react! r) (hash O #t can-explore #f))
   (check-equal? (react! r) (hash)))
 
+;; P2
+(let ()
+  (define r
+    (with-signal (O)
+      (esterel
+       (with-signal (S)
+         (emit S)
+         (when (present? O)
+           (when (present? S)
+             (pause))
+           (emit O))))))
+  (define (signals->names ht)
+    (for/hash ([(k v) (in-hash ht)])
+      (values (signal-name k) v)))
+  (check-equal? (signals->names (react! r))
+                (hash "O" #f "S" #t)))
+          
 
 ;                                      
 ;                                      
