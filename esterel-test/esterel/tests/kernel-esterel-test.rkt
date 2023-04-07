@@ -1090,7 +1090,23 @@
    (λ ()
      (run #f))))
 
-
+;; P9
+;; page 40 makes it clear this is
+;; a non-constructive program
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (with-signal (O1 O2)
+     (react!
+      (esterel
+       (par (if (present? O1)
+                (emit O1)
+                (void))
+            (if (present? O1)
+                (if (present? O2)
+                    (void)
+                    (emit O2))
+                (void))))))))
 
 ;                                      
 ;                                      
