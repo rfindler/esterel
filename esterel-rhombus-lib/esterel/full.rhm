@@ -56,4 +56,4 @@ expr.macro
 | 'every $s ...:
      $body
      ...':
-    '#{every/proc}(fn (): $s ...,fn (): $body ...)'
+    '#{every/proc}(fun (): $s ...,fn (): $body ...)'
