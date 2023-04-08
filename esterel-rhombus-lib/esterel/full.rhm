@@ -46,14 +46,22 @@ expr.macro
 | 'every ~immediate $s ...:
      $body
      ...':
-    '#{every-immediate/proc}(fun (): $s ..., fun ():
-                                               $body
-                                               ...)'
+    '#{every-immediate/proc}(fun (): $s ..., 
+                             fun ():
+                               $body
+                               ...)'
 | 'every $s ... ~n $n ...:
      $body
      ...':
-    '#{every-n/proc}(fun (): $s ...,$n ...,fun (): $body ...)'
+    '#{every-n/proc}(fun (): $s ...,
+                     $n ...,
+                     fun (): 
+                       $body 
+                       ...)'
 | 'every $s ...:
      $body
      ...':
-    '#{every/proc}(fun (): $s ...,fun (): $body ...)'
+    '#{every/proc}(fun (): $s ...,
+                   fun (): 
+                     $body 
+                     ...)'
