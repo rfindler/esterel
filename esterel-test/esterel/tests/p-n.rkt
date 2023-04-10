@@ -190,4 +190,26 @@
                 (void))))))))
 
 ;; P10
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (with-signal (O)
+     (react!
+      (esterel
+       (if (present? O) (void) (void))
+       (emit O))))))
 
+;; P11
+#; ;; this test case fails!
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (with-signal (O)
+     (react!
+      (esterel
+       (with-signal (S)
+         (when (present? O)
+           (emit S)
+           (when (present? S)
+             (pause))
+           (emit O))))))))
