@@ -200,7 +200,6 @@
        (emit O))))))
 
 ;; P11
-#; ;; this test case fails!
 (check-exn
  non-constructive-exn?
  (λ ()

@@ -1663,28 +1663,28 @@ value for can explorations and subsequent must evaluation.
                  ;; the signal's not dead, so send back a message that doesn't trigger
                  ;; an error and continue, updating the instant state for the emit
                  (channel-put resp-chan (void))
-
-                 (set! signal-status (hash-set signal-status a-signal #t))
-                 (define still-blocked-threads '())
-                 (for ([a-blocked-thread (in-list (hash-ref presence-waiters a-signal '()))])
-                   (match-define (blocked-thread thread resp-chan) a-blocked-thread)
-                   (channel-put resp-chan #t) ;; it was emitted
-                   (define parent-thread (hash-ref par-parents thread #f))
-                   (when parent-thread
-                     (define old-par-state (hash-ref parent->par-state parent-thread))
-                     (define new-par-state
-                       (struct-copy
-                        par-state old-par-state
-                        [presence-waiting (if value-provided?
-                                              (par-state-presence-waiting old-par-state)
-                                              (set-remove (par-state-presence-waiting old-par-state) thread))]
-                        [value-waiting (if value-provided?
-                                           (set-remove (par-state-value-waiting old-par-state) thread)
-                                           (par-state-value-waiting old-par-state))]
-                        [active (set-add (par-state-active old-par-state) thread)]))
-                     (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
-                   (add-running-thread thread))
-                 (set! presence-waiters (hash-remove presence-waiters a-signal))
+                 (unless (can? mode)
+                   (set! signal-status (hash-set signal-status a-signal #t))
+                   (define still-blocked-threads '())
+                   (for ([a-blocked-thread (in-list (hash-ref presence-waiters a-signal '()))])
+                     (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+                     (channel-put resp-chan #t) ;; it was emitted
+                     (define parent-thread (hash-ref par-parents thread #f))
+                     (when parent-thread
+                       (define old-par-state (hash-ref parent->par-state parent-thread))
+                       (define new-par-state
+                         (struct-copy
+                          par-state old-par-state
+                          [presence-waiting (if value-provided?
+                                                (par-state-presence-waiting old-par-state)
+                                                (set-remove (par-state-presence-waiting old-par-state) thread))]
+                          [value-waiting (if value-provided?
+                                             (set-remove (par-state-value-waiting old-par-state) thread)
+                                             (par-state-value-waiting old-par-state))]
+                          [active (set-add (par-state-active old-par-state) thread)]))
+                       (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
+                     (add-running-thread thread))
+                   (set! presence-waiters (hash-remove presence-waiters a-signal)))
                  (loop)]
                 ['suspended
                  ;; the signal's suspended, so send back a message that triggers an error
