@@ -1,5 +1,6 @@
 #lang racket
 (require redex/reduction-semantics)
+
 (define-language L
   (p q ::=
      (! s) (? s p q) (s ⊃ p)
@@ -19,152 +20,112 @@
   (K ::= · (k K))
   (R ::= (Pr S K)))
 
-(define-metafunction L
-  mc-s : fn p E -> S
-  [(mc-s fn p E) S (where (Pr S K) (mc fn p E))])
-
-(define-metafunction L
-  mc-k : fn p E -> K
-  [(mc-k fn p E) K (where (Pr S K) (mc fn p E))])
-
-(define-metafunction L
-  mc : fn p E -> R
-  [(mc fn k E) (Pr · (k ·))]
-  
-  [(mc fn (! s) E) (Pr (s ·) (0 ·))]
-  
-  [(mc fn (? s p q) E R)
-   (mc fn p E R)
-   (where tt (lookup s E))]
-  
-  [(mc fn (? s p q) E R)
-   (mc fn q E R)
-   (where ff (lookup s E))]
-
-  [(mc Must (? s p q) E)
-   (Pr · ·)]
-
-  [(mc Can (? s p q) E)
-   (Pr (∪ (mc-s Must p E)
-          (mc-s Must q E))
-       (∪ (mc-k Must p E)
-          (mc-k Must q E)))]
-
-  [(mc fn (s ⊃ p))
-   (mc fn p)]
-
-  [(mc fn (seq p q) E)
-   (mc fn p E)
-   (where #false (∈ 0 (mc-k fn p E)))]
-
-  [(mc fn (seq p q) E)
-   (Pr (∪ (mc-s fn p E) (mc-s fn_2 q E))
-       (∪ (set- (mc-k fn p E) 0)
-          (mc-k fn_2 q E)))
-   (where fn_2 (pickfn-seq fn p E))]
-
-  [(mc fn (p *) E) (mc fn p E)]
-
-  [(mc fn (par p q) E)
-   (Pr (∪ (mc-s fn p E) (mc-s fn q E))
-       (Max (mc-k fn p E) (mc-k fn q E)))]
-
-  [(mc fn (trap p) E)
-   (Pr (mc-s fn p E)
-       (↓ (mc-k fn p E)))]
-
-  [(mc Must (p \\ s) E)
-   (remove-s (mc Must p (extend s ff E)) s)
-   (where #true (∈ s (mc-s Must p (extend s ⊥ E))))]
-
-  [(mc Must (p \\ s) E)
-   (remove-s (mc Must p (extend s ff E)) s)
-   (where #false (∈ s (mc-s Can+ p (extend s ⊥ E))))]
-
-  [(mc Must (p \\ s) E)
-   (remove-s (mc Must p (extend s ⊥ E)) s)]
-
-  [(mc Can+ (p \\ s) E)
-   (remove-s (mc Can+ p (extend s tt E)) s)
-   (where #true (∈ s (mc-s Must p (extend s ⊥ E))))]
-
-  [(mc Can (p \\ s) E)
-   (remove-s (mc Can p (extend s ff E)) s)
-   (where #false (∈ s (mc-s Can p (extend s ⊥ E))))]
-
-  [(mc Can (p \\ s) E)
-   (remove-s (mc Can p (extend s ⊥ E)) s)]
-
-  )
-
 (define-judgment-form L
-  mc : fn p E -> R
-  [(mc fn k E) (Pr · (k ·))]
-  
-  [(mc fn (! s) E) (Pr (s ·) (0 ·))]
-  
-  [(mc fn (? s p q) E R)
-   (mc fn p E R)
-   (where tt (lookup s E))]
-  
-  [(mc fn (? s p q) E R)
-   (mc fn q E R)
-   (where ff (lookup s E))]
+  #:mode (mc I I I O)
+  [---- "k"
+   (mc fn k E (Pr · (k ·)))]
 
-  [(mc Must (? s p q) E)
-   (Pr · ·)]
+  [---- "!"
+   (mc fn (! s) E (Pr (s ·) (0 ·)))]
 
-  [(mc Can (? s p q) E)
-   (Pr (∪ (mc-s Can p E)
-          (mc-s Can q E))
-       (∪ (mc-k Can p E)
-          (mc-k Can q E)))]
+  [(mc fn p E R)
+   (where tt (lookup s E))
+   ---- "? tt"
+   (mc fn (? s p q) E R)]
 
-  [(mc fn (s ⊃ p))
-   (mc fn p)]
+  [(mc fn q E R)
+   (where ff (lookup s E))
+   ---- "? ff"
+   (mc fn (? s p q) E R)]
 
-  [(mc fn (seq p q) E)
-   (mc fn p E)
-   (where #false (∈ 0 (mc-k fn p E)))]
+  [(where ⊥ (lookup s E))
+   ---- "Must ? ⊥"
+   (mc Must (? s p q) E (Pr · ·))]
 
-  [(mc fn (seq p q) E)
-   (Pr (∪ (mc-s fn p E) (mc-s fn_2 q E))
-       (∪ (set- (mc-k fn p E) 0)
-          (mc-k fn_2 q E)))
-   (where fn_2 (pickfn-seq fn p E))]
+  [(mc Can p E (Pr S_p K_p))
+   (mc Can q E (Pr S_q K_q))
+   (where ⊥ (lookup s E))
+   ---- "Can ? ⊥"
+   (mc Can (? s p q) E (Pr (∪ S_p S_q) (∪ K_p K_q)))]
 
-  [(mc fn (p *) E) (mc fn p E)]
+  [(mc fn p E R)
+   ---- "⊃"
+   (mc fn (s ⊃ p) E R)]
 
-  [(mc fn (par p q) E)
-   (Pr (∪ (mc-s fn p E) (mc-s fn q E))
-       (Max (mc-k fn p E) (mc-k fn q E)))]
+  [(mc fn p E (Pr S K))
+   (where #false (∈ 0 K))
+   ---- "; 0 ∉ p"
+   (mc fn (seq p q) E (Pr S K))]
 
-  [(mc fn (trap p) E)
-   (Pr (mc-s fn p E)
-       (↓ (mc-k fn p E)))]
+  [(mc fn p E (Pr S_p K_p))
+   (mc Must p E (Pr S_mustp K_mustp))
+   (where fn_q (pickfn-seq fn (∈ 0 K_mustp)))
+   (mc fn_q q E (Pr S_q K_q))
+   ---- "; 0 ∈ p"
+   (mc fn (seq p q) E
+       (Pr (∪ S_p S_q)
+           (∪ (set- K_p 0) K_q)))]
 
-  [(mc Must (p \\ s) E)
-   (remove-s (mc Must p (extend s ff E)) s)
-   (where #true (∈ s (mc-s Must p (extend s ⊥ E))))]
+  [(mc fn p E R)
+   ---- "*"
+   (mc fn (p *) E R)]
 
-  [(mc Must (p \\ s) E)
-   (remove-s (mc Must p (extend s ff E)) s)
-   (where #false (∈ s (mc-s Can+ p (extend s ⊥ E))))]
+  [(mc fn p E (Pr S_p K_p))
+   (mc fn q E (Pr S_q K_q))
+   ---- "par"
+   (mc fn (par p q) E
+       (Pr (∪ S_p S_q)
+           (Max K_p K_q)))]
 
-  [(mc Must (p \\ s) E)
-   (remove-s (mc Must p (extend s ⊥ E)) s)]
+  [(mc fn p E (Pr S K))
+   ---- "trap"
+   (mc fn (trap p) E (Pr S (↓ K)))]
 
-  [(mc Can+ (p \\ s) E)
-   (remove-s (mc Can+ p (extend s tt E)) s)
-   (where #true (∈ s (mc-s Must p (extend s ⊥ E))))]
+  [(mc Must p (extend s ⊥ E) (Pr S_⊥ K_⊥))
+   (where #true (∈ s S_⊥))
+   (mc Must p (extend s tt E) (Pr S K))
+   ---- "Must\\tt"
+   (mc Must (p \\ s) E (Pr (set- S s) K))]
 
-  [(mc Can (p \\ s) E)
-   (remove-s (mc Can p (extend s ff E)) s)
-   (where #false (∈ s (mc-s Can p (extend s ⊥ E))))]
+  [(mc Can+ p (extend s ⊥ E) (Pr S_⊥ K_⊥))
+   (where #false (∈ s S_⊥))
+   (mc Must p (extend s ff E) (Pr S K))
+   ---- "Must\\ff"
+   (mc Must (p \\ s) E (Pr (set- S s) K))]
 
-  [(mc Can (p \\ s) E)
-   (remove-s (mc Can p (extend s ⊥ E)) s)]
+  [(mc Must p (extend s ⊥ E) (Pr S_m⊥ K_m⊥))
+   (mc Can+ p (extend s ⊥ E) (Pr S_c⊥ K_c⊥))
+   (where #false (∈ s S_m⊥))
+   (where #true (∈ s S_c⊥))
+   (mc Must p (extend s ⊥ E) (Pr S K))
+   ---- "Must\\⊥"
+   (mc Must (p \\ s) E (Pr (set- S s) K))]
 
+  [(mc Must p (extend s ⊥ E) (Pr S_⊥ K_⊥))
+   (where #true (∈ s S_⊥))
+   (mc Can+ p (extend s tt E) (Pr S K))
+   ---- "Can\\tt"
+   (mc Can+ (p \\ s) E (Pr (set- S s) K))]
+
+  [(mc Can p (extend s ⊥ E) (Pr S_⊥ K_⊥))
+   (where #false (∈ s S_⊥))
+   (mc Can p (extend s ff E) (Pr S K))
+   ---- "Can\\ff"
+   (mc Can (p \\ s) E (Pr (set- S s) K))]
+
+  [(mc Must p (extend s ⊥ E) (Pr S_m⊥ K_m⊥))
+   (mc Can+ p (extend s ⊥ E) (Pr S_c⊥ K_c⊥))
+   (where #false (∈ s S_m⊥))
+   (where #true (∈ s S_c⊥))
+   (mc Can+ p (extend s ⊥ E) (Pr S K))
+   ---- "Can+\\⊥"
+   (mc Can+ (p \\ s) E (Pr (set- S s) K))]
+
+  [(mc Can⊥ p (extend s ⊥ E) (Pr S_c⊥ K_c⊥))
+   (where #true (∈ s S_c⊥))
+   (mc Can+ p (extend s ⊥ E) (Pr S K))
+   ---- "Can⊥\\⊥"
+   (mc Can⊥ (p \\ s) E (Pr (set- S s) K))]
   )
 
 
@@ -191,34 +152,44 @@
   (test-equal (term (Max · (1 ·))) (term ·))
   (test-equal (term (Max (1 ·) ·)) (term ·))
   (test-equal (term (Max (1 ·) (2 ·))) (term (2 ·)))
-  (test-equal (term (Max (1 (2 (3 ·))) (2 (3 (4 ·))))) (term (4 (3 (2 ·)))))
-  (test-equal (term (Max (0 (2 (4 (6 ·)))) (1 (3 (5 ·))))) (term (5 (3 (1 (2 (4 (6 ·)))))))))
+  (test-equal (term (Max (1 (2 (3 ·))) (2 (3 (4 ·)))))
+              (term (4 (3 (2 ·)))))
+  (test-equal (term (Max (0 (2 (4 (6 ·)))) (1 (3 (5 ·)))))
+              (term (5 (3 (1 (2 (4 (6 ·)))))))))
 
 (define-metafunction L
   ↓ : K -> K
   [(↓ ·) ·]
-  [(↓ (k K)) ((↓k k) (↓ K))])
+  [(↓ (k K)) (∪ (↓k k) (↓ K))])
 
 (define-metafunction L
-  ↓k : k -> k
-  [(↓k 0) 0]
-  [(↓k 2) 0]
-  [(↓k 1) 1]
-  [(↓k k) ,(- (term k) 1)])
+  ↓k : k -> K
+  [(↓k 0) (0 ·)]
+  [(↓k 2) (0 ·)]
+  [(↓k 1) (1 ·)]
+  [(↓k k) (,(- (term k) 1) ·)])
 
 (module+ test
+  (test-equal (term (↓ (11 (12 (15 ·)))))
+              (term (10 (11 (14 ·)))))
+  (test-equal (term (↓ (0 (2 ·))))
+              (term (0 ·)))
+  (test-equal (term (↓ (0 (1 ·))))
+              (term (0 (1 ·))))
+  (test-equal (term (↓ (1 (2 ·))))
+              (term (1 (0 ·))))
+  (test-equal (term (↓ (0 (1 (2 ·)))))
+              (term (0 (1 ·))))
   (test-equal (term (↓ (0 (1 (2 (3 (4 ·)))))))
-              (term (0 (1 (0 (2 (3 ·))))))))
+              (term (0 (1 (2 (3 ·)))))))
 
 (define-metafunction L
-  pickfn-seq : fn p E -> fn
-  [(pickfn-seq Must p E) Must]
-  [(pickfn-seq Can+ p E)
-   Can+
-   (where #true (∈ 0 (mc-k Must p E)))]
-  [(pickfn-seq fn p E) Can⊥])
+  pickfn-seq : fn boolean -> fn
+  [(pickfn-seq Must boolean) Must]
+  [(pickfn-seq Can+ #true) Can+]
+  [(pickfn-seq fn boolean) Can⊥])
 
-(define-metafunction L  
+(define-metafunction L
   ∪ : set set -> set
   [(∪ · set) set]
   [(∪ (any set_1) set_2) (any (∪ set_1 (set- set_2 any)))])
@@ -277,33 +248,83 @@
 
 
 (module+ test
-  (test-equal (term (mc Must ((? s (! s) (! s)) \\ s) ·)) (term (Pr · ·)))
-  (test-equal (term (mc Can+ ((? s (! s) (! s)) \\ s) ·)) (term (Pr · (0 ·))))
-  (test-equal (term (mc Can⊥ ((? s (! s) (! s)) \\ s) ·)) (term (Pr · (0 ·))))
-  (test-equal (term (mc Must (? s (! s) (! s)) ·)) (term (Pr · ·)))
-  (test-equal (term (mc Can+ (? s (! s) (! s)) ·)) (term (Pr (s ·) (0 ·))))
-  (test-equal (term (mc Can⊥ (? s (! s) (! s)) ·)) (term (Pr (s ·) (0 ·))))
-  (test-equal (term (mc Must (par (! s) (! t)) ·)) (term (Pr (s (t ·)) (0 ·))))
-  (test-equal (term (mc Can+ (par (! s) (! t)) ·)) (term (Pr (s (t ·)) (0 ·))))
-  (test-equal (term (mc Can⊥ (par (! s) (! t)) ·)) (term (Pr (s (t ·)) (0 ·))))
+  (test-judgment-holds (mc Must 0 · (Pr · (0 ·))))
+  (test-judgment-holds (mc Must (0 \\ s) · (Pr · (0 ·))))
+  (test-judgment-holds (mc Must ((! s) \\ s) · (Pr · (0 ·))))
+  (test-judgment-holds (mc Must ((? s (! s) (! s)) \\ s) · (Pr · ·)))
+  (test-judgment-holds (mc Can+ ((? s (! s) (! s)) \\ s) · (Pr · (0 ·))))
+  (test-judgment-holds (mc Can⊥ ((? s (! s) (! s)) \\ s) · (Pr · (0 ·))))
+  (test-judgment-holds (mc Must (? s (! s) (! s)) (s = ⊥ ·) (Pr · ·)))
+  (test-judgment-holds (mc Can+ (? s (! s) (! s)) (s = ⊥ ·) (Pr (s ·) (0 ·))))
+  (test-judgment-holds (mc Can⊥ (? s (! s) (! s)) (s = ⊥ ·) (Pr (s ·) (0 ·))))
+  (test-judgment-holds (mc Must (par (! s) (! t)) (s = ⊥ ·) (Pr (s (t ·)) (0 ·))))
+  (test-judgment-holds (mc Can+ (par (! s) (! t)) (s = ⊥ ·) (Pr (s (t ·)) (0 ·))))
+  (test-judgment-holds (mc Can⊥ (par (! s) (! t)) (s = ⊥ ·) (Pr (s (t ·)) (0 ·))))
 
-  (test-equal (term (mc Must (seq 1 2) ·)) (term (Pr · (1 ·))))
-  (test-equal (term (mc Can+ (seq 1 2) ·)) (term (Pr · (1 ·))))
-  (test-equal (term (mc Can⊥ (seq 1 2) ·)) (term (Pr · (1 ·))))
-  (test-equal (term (mc Must (seq 0 1) ·)) (term (Pr · (1 ·))))
-  (test-equal (term (mc Can+ (seq 0 1) ·)) (term (Pr · (1 ·))))
-  (test-equal (term (mc Can⊥ (seq 0 1) ·)) (term (Pr · (1 ·))))
+  (test-judgment-holds (mc Must (seq 1 2) · (Pr · (1 ·))))
+  (test-judgment-holds (mc Can+ (seq 1 2) · (Pr · (1 ·))))
+  (test-judgment-holds (mc Can⊥ (seq 1 2) · (Pr · (1 ·))))
+  (test-judgment-holds (mc Must (seq 0 1) · (Pr · (1 ·))))
+  (test-judgment-holds (mc Can+ (seq 0 1) · (Pr · (1 ·))))
+  (test-judgment-holds (mc Can⊥ (seq 0 1) · (Pr · (1 ·))))
+
+  (test-judgment-holds (mc Can+ (? I 0 1) (I = tt (O = ⊥ ·)) (Pr · (0 ·))))
   )
 
-(current-traced-metafunctions '(mc))
-(define P8
-  (term
-   (seq (trap
-         (par
-          (seq (? I 0 1)
-               (! O))
-          (? O 0 2)))
-        (! O))))
-(term (mc Can+ ,P8 ·))
-(term (mc Can⊥ ,P8 ·))
+(module+ main
+  (require redex/gui)
 
+  (define P8
+    (term
+     (seq (trap
+           (par
+            (seq (? I 0 1)
+                 (! O))
+            (? O 0 2)))
+          (! O))))
+
+  (define (pp exp)
+    (match exp
+      [`(mc ,fn ,p ,E (Pr ,S ,K))
+       (~a fn "⟦" (pw p #:width 30 #:indent 6) "," "\n"
+           "     " (E->str E) "⟧\n"
+           "= ⟨" (set->string S) "," (set->string K) "⟩")]))
+
+  (define (pw p #:width width #:indent indent)
+    (define op (open-output-string))
+    (parameterize ([pretty-print-columns width]
+                   [pretty-print-print-line
+                    (λ (line-number op len dest)
+                      (cond
+                        [(or (equal? line-number 0)
+                             (not line-number))
+                         0]
+                        [else
+                         (newline op)
+                         (for ([i (in-range indent)])
+                           (display " " op))
+                         indent]))])
+      (pretty-write p op))
+    (get-output-string op))
+
+  (define (E->str e)
+    (~a
+     "{"
+     (let loop ([e e])
+       (match e
+         ['· ""]
+         [`(,p = ,v ·) (~a (~s p) "=" (~s v))]
+         [`(,p = ,v ,more) (~a (~s p) "=" (~s v) "," (loop more))]))
+     "}"))
+
+  (define (set->string s)
+    (define eles
+      (let loop ([s s])
+        (match s
+          ['· '()]
+          [`(,s ,S) (cons s (loop S))])))
+    (~s (sort eles string<? #:key ~s)))
+
+  (show-derivations
+   (build-derivations (mc Can+ ,P8 (I = tt (O = ⊥ ·)) R))
+   #:pp pp))
