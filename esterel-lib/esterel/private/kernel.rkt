@@ -1664,6 +1664,8 @@ value for can explorations and subsequent must evaluation.
                  ;; an error and continue, updating the instant state for the emit
                  (channel-put resp-chan (void))
                  (unless (can? mode)
+                   ;; when in can mode we should ignore emission so we
+                   ;; don't cut off branches that have potential emitters
                    (set! signal-status (hash-set signal-status a-signal #t))
                    (define still-blocked-threads '())
                    (for ([a-blocked-thread (in-list (hash-ref presence-waiters a-signal '()))])
