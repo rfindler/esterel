@@ -52,17 +52,26 @@
    ---- "⊃"
    (mc fn (s ⊃ p) E R)]
 
-  [(mc fn p E (Pr S K))
-   (where #false (∈ 0 K))
-   ---- "; 0 ∉ p"
-   (mc fn (seq p q) E (Pr S K))]
-
   [(mc fn p E (Pr S_p K_p))
+   (where #false (∈ 0 K_p))
+   ---- "; 0 ∉ p"
+   (mc fn (seq p q) E (Pr S_p K_p))]
+
+  [(mc Must p E (Pr S_p K_p))
+   (where #true (∈ 0 K_p))
+   (mc Must q E (Pr S_q K_q))
+   ---- "Must ; 0 ∈ p"
+   (mc Must (seq p q) E
+       (Pr (∪ S_p S_q)
+           (∪ (set- K_p 0) K_q)))]
+
+  [(mc Can p E (Pr S_p K_p))
+   (where #true (∈ 0 K_p))
    (mc Must p E (Pr S_mustp K_mustp))
-   (where fn_q (pickfn-seq fn (∈ 0 K_mustp)))
+   (where fn_q (pickfn-seq Can (∈ 0 K_mustp)))
    (mc fn_q q E (Pr S_q K_q))
-   ---- "; 0 ∈ p"
-   (mc fn (seq p q) E
+   ---- "Can ; 0 ∈ p"
+   (mc Can (seq p q) E
        (Pr (∪ S_p S_q)
            (∪ (set- K_p 0) K_q)))]
 
@@ -184,10 +193,9 @@
               (term (0 (1 (2 (3 ·)))))))
 
 (define-metafunction L
-  pickfn-seq : fn boolean -> fn
-  [(pickfn-seq Must boolean) Must]
+  pickfn-seq : Can boolean -> Can
   [(pickfn-seq Can+ #true) Can+]
-  [(pickfn-seq fn boolean) Can⊥])
+  [(pickfn-seq Can boolean) Can⊥])
 
 (define-metafunction L
   ∪ : set set -> set
@@ -274,7 +282,7 @@
 (module+ main
   (require redex/gui)
 
-  (define P8
+  (define P8b
     (term
      (seq (trap
            (par
@@ -283,16 +291,24 @@
             (? O 0 2)))
           (! O))))
 
-  (define (pp exp)
-    (match exp
-      [`(mc ,fn ,p ,E (Pr ,S ,K))
-       (~a fn "⟦" (pw p #:width 30 #:indent 6) "," "\n"
-           "     " (E->str E) "⟧\n"
-           "= ⟨" (set->string S) "," (set->string K) "⟩")]))
+  (define (pp exp output-port width txt)
+    (define str
+      (match exp
+        [`(mc ,fn ,p ,E (Pr ,S ,K))
+         (~a fn "[" (pw p #:width width #:indent 6) "," "\n"
+             "     " (E->str E) "]\n"
+             "= ⟨" (set->string S) "," (set->string K) "⟩")]))
+    (display str output-port))
 
   (define (pw p #:width width #:indent indent)
     (define op (open-output-string))
     (parameterize ([pretty-print-columns width]
+                   [pretty-print-size-hook
+                    (λ (val _1 _2)
+                      (and (equal? val '\\) 1))]
+                   [pretty-print-print-hook
+                    (λ (val mode out-port)
+                      (display "\\" out-port))]
                    [pretty-print-print-line
                     (λ (line-number op len dest)
                       (cond
@@ -323,8 +339,26 @@
         (match s
           ['· '()]
           [`(,s ,S) (cons s (loop S))])))
-    (~s (sort eles string<? #:key ~s)))
+    (~a "{"
+        (apply
+         string-append
+         (add-between (map ~s (sort eles string<? #:key ~s))
+                      ","))
+        "}"))
+
+;  #;  #;
+  (derivation/ps
+   (car (build-derivations (mc Must (,P8b \\ O) (I = tt ·) R)))
+   "must.ps"
+   #:pp pp)
+  (derivation/ps
+   (car (build-derivations (mc Can+ (,P8b \\ O) (I = tt ·) R)))
+   "can.ps"
+   #:pp pp)
 
   (show-derivations
-   (build-derivations (mc Can+ ,P8 (I = tt (O = ⊥ ·)) R))
+   (build-derivations (mc Can+ (,P8b \\ O) (I = tt ·) R))
+   #:pp pp)
+  (show-derivations
+   (build-derivations (mc Must (,P8b \\ O) (I = tt ·) R))
    #:pp pp))
