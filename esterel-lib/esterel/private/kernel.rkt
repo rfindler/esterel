@@ -26,6 +26,7 @@
  signal-value
  signal?
  signal-name
+ signal-index
  signal-combine
  emit
  pause

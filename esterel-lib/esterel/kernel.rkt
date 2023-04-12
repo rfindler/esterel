@@ -57,6 +57,7 @@
                       any/c))]
   [signal? (-> any/c boolean?)]
   [signal-name (-> signal? (or/c #f string?))]
+  [signal-index (-> signal? (or/c #f natural?))]
   [signal-combine (-> signal? (or/c #f (-> any/c any/c any)))]
   [emit (values (->* (signal?)
                      (any/c)

@@ -182,6 +182,42 @@ provides additional functionality.
  (eval:check (signal-name S) "S")]
 }
 
+@defproc[(signal-index [s signal?]) (or/c #f natural?)]{
+ Returns the index of a signal. This index counts the number
+ of times the @racket[with-signal] that introduced @racket[s]
+ has been executed to produce this particular signal. If the
+ signal was created outside the dynamic extent of @racket[esterel],
+ @racket[signal-index] returns @racket[#f].
+
+ @examples[
+ #:eval esterel-eval
+ (define-signal O)
+ (eval:check (signal-index O) #f)
+ (define r
+   (esterel
+    (loop
+     (with-signal (S)
+       (if (present? S)
+           (emit O)
+           (void))
+       (pause)
+       (emit S)))))
+ (eval:check
+  (for/set ([(k v) (in-hash (react! r))])
+    (list (signal-name k) (signal-index k) v))
+  (set (list "S" 0 #f)))
+ (eval:check
+  (for/set ([(k v) (in-hash (react! r))])
+    (list (signal-name k) (signal-index k) v))
+  (set (list "S" 0 #t)
+       (list "S" 1 #f)))
+ (eval:check
+  (for/set ([(k v) (in-hash (react! r))])
+    (list (signal-name k) (signal-index k) v))
+  (set (list "S" 1 #t)
+       (list "S" 2 #f)))]
+}
+
 @defproc[(signal-combine [s signal?]) (or/c #f (-> any/c any/c any/c))]{
  Returns the combining operation for @racket[s], or @racket[#f] if
  @racket[s] is not a value-carrying signal.

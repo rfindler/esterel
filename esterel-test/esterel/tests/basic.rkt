@@ -1,6 +1,20 @@
 #lang racket
 (require esterel/kernel rackunit "private/util.rkt")
 
+(check-equal? (with-signal (S) (signal-name S)) "S")
+(check-equal? (with-signal (S) (signal-index S)) #f)
+(check-equal?
+ (signal-index (car (hash-keys (react! (esterel (with-signal (S) (emit S)))))))
+ 0)
+(check-equal?
+ (for/set ([(k v) (in-hash
+                   (react! (esterel
+                            (define (f)
+                              (with-signal (S) (emit S)))
+                            (f) (f) (f))))])
+   (signal-index k))
+ (set 0 1 2))
+
 (check-equal?
  (react!
   (esterel

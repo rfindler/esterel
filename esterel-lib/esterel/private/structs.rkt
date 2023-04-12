@@ -57,10 +57,14 @@
        ;; bitwise-xor should be replaced by a call to hash-code-mix after 8.9 is out
        [self-id (bitwise-xor (equal-hash-code self-id))]
        [else (eq-hash-code self)]))])
+(define (signal-index s)
+  (define id (signal-identity s))
+  (and id (car id)))
 
 (struct trap (name counter escape)
   #:methods gen:custom-write
   [(define write-proc (mk-write-proc (λ (x) (trap-name x)) "trap"))])
 
 (provide (struct-out signal)
+         signal-index
          (struct-out trap))
