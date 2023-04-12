@@ -3,7 +3,7 @@
          "private/util.rkt")
                                    
 ;; these are programs from Berry's
-;; _The Constructive Semanitcs of Pure Esterel_
+;; _The Constructive Semantics of Pure Esterel_
 
 ;; P1
 (with-signal (I O)
@@ -212,3 +212,124 @@
            (when (present? S)
              (pause))
            (emit O))))))))
+
+;; P12
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (with-signal (O)
+     (react!
+      (esterel
+       (if (present? O)
+           (emit O)
+           (emit O)))))))
+
+;; P13
+(with-signal (I O1 O2)
+  (check-equal?
+   (react!
+    (esterel
+     (if (present? I)
+         (when (present? O2)
+           (emit O1))
+         (when (present? O1)
+           (emit O2)))))
+   (hash I #f O1 #f)))
+
+;; P14
+(with-signal (I O1 O2)
+  (define r
+    (esterel
+     (when (present? O1)
+       (emit O2))
+     (pause)
+     (when (present? O2)
+       (emit O1))))
+  (check-equal? (react! r) (hash O1 #f))
+  (check-equal? (react! r) (hash O2 #f)))
+
+;; P15
+(with-signal (I J O1 O2 O3)
+  (define (mk-r to-emit)
+    (react!
+     (esterel
+      (par (when (present? I)
+             (emit O1))
+           (when (present? J)
+             (if (present? O1)
+                 (emit O2)
+                 (emit O3)))))
+     #:emit to-emit))
+  (check-equal? (mk-r (list I J))
+                (hash I #t J #t O1 #t O2 #t))
+  (check-equal? (mk-r (list I))
+                (hash I #t J #f O1 #t)))
+
+
+;; P16
+(with-signal (S)
+  (define r
+    (esterel
+     (let loop ()
+       (emit S)
+       (par (void)
+            (pause))
+       (loop))))
+  (check-equal? (react! r) (hash S #t))
+  (check-equal? (react! r) (hash S #t))
+  (check-equal? (react! r) (hash S #t))
+  (check-equal? (react! r) (hash S #t)))
+
+;; P17
+(with-signal (O)
+  (define r
+    (esterel
+     (let loop ()
+       (with-signal (S)
+         (if (present? S)
+             (emit O)
+             (void))
+         (pause)
+         (emit S))
+       (loop))))
+  (define (signals->names+indicies ht)
+    (for/hash ([(k v) (in-hash ht)])
+      (values (list (signal-name k)
+                    (signal-index k))
+              v)))
+  (check-equal? (signals->names+indicies (react! r))
+                (hash (list "S" 0) #f))
+  (check-equal? (signals->names+indicies (react! r))
+                (hash (list "S" 0) #t
+                      (list "S" 1) #f))
+  (check-equal? (signals->names+indicies (react! r))
+                (hash (list "S" 1) #t
+                      (list "S" 2) #f)))
+
+;; P18 is in esterel/examples/p18
+
+;; P19
+(with-signal (I O)
+  (define r
+    (esterel
+     (with-signal (S)
+       (if (present? I)
+           (emit O)
+           (pause))
+       (par (emit S)
+            (begin (pause) (emit S))))))
+  (define (signals->names ht)
+    (for/hash ([(k v) (in-hash ht)])
+      (values (signal-name k)
+              v)))
+  (check-equal? (signals->names (react! r))
+                (hash "I" #f))
+  (check-equal? (signals->names (react! r))
+                (hash "S" #t))
+  (check-equal? (signals->names (react! r))
+                (hash "S" #t))
+  (check-equal? (signals->names (react! r))
+                (hash)))
+
+
+ 
