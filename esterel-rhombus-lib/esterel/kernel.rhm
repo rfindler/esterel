@@ -32,12 +32,8 @@ defn.macro 'def_signal: $id ...':
    ...'
 
 expr.macro 'esterel:
-              $body
-              ...':
-  '#{esterel/proc}(0,
-                   fun ():
-                     $body
-                     ...)'
+              $body':
+  '#{esterel/proc}(0, fun (): $body)'
 
 operator ¿ x:
   ~stronger_than |||
@@ -59,28 +55,22 @@ fun react(r, ~emit: signals = []):
     values(k,v)
 
 expr.macro 'with_trap $t:
-              $body
-              ...':
+              $body':
   '#{with-trap/proc}(#'$t,fun ($t):
-                            $body
-                            ...)'
+                            $body)'
 
 expr.macro 'with_signals {$id, ...}:
-              $bodies
-              ...':
+              $body':
   def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
   'block:
      def $id: #{mk-signal.args}(#'$id, #{no-init}, #false, $srclocs)
      ...
-     #{run-and-kill-signals!}([$id,...],fun (): $bodies; ...)'
+     #{run-and-kill-signals!}([$id,...],fun (): $body)'
 
 expr.macro 'par
             | $body
-              ...
             | ...':
-  '#{par/proc}([fun ():
-                  $body
-                  ..., ...])'
+  '#{par/proc}([fun (): $body, ...])'
 
 expr.macro 'pause':
   'kernel.pause()'

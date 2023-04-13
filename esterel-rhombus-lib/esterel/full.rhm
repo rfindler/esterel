@@ -27,11 +27,8 @@ expr.macro
                          ...,
                        fun (): $restart)'
 | 'loop:
-     $body
-     ...':
-    '#{loop/proc}(fun ():
-                    $body
-                    ...)'
+     $body':
+    '#{loop/proc}(fun (): $body)'
 
 expr.macro
 | 'await $when ... ~n $n ...':
@@ -44,24 +41,15 @@ expr.macro
 
 expr.macro
 | 'every ~immediate $s ...:
-     $body
-     ...':
+     $body':
     '#{every-immediate/proc}(fun (): $s ..., 
-                             fun ():
-                               $body
-                               ...)'
+                             fun (): $body)'
 | 'every $s ... ~n $n ...:
-     $body
-     ...':
+     $body':
     '#{every-n/proc}(fun (): $s ...,
                      $n ...,
-                     fun (): 
-                       $body 
-                       ...)'
+                     fun (): $body)'
 | 'every $s ...:
-     $body
-     ...':
+     $body':
     '#{every/proc}(fun (): $s ...,
-                   fun (): 
-                     $body 
-                     ...)'
+                   fun (): $body)'
