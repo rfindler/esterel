@@ -332,4 +332,15 @@
                 (hash)))
 
 
- 
+;; Possible Variants Example, section 7.2
+(with-signal (O)
+  (check-exn
+   non-constructive-exn?
+   (λ ()
+     (react!
+      (esterel
+       (if (present? O)
+           (with-signal (S)
+             (par (emit S)
+                  (if (present? S) (void) (emit O))))
+           (void)))))))
