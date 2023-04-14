@@ -130,9 +130,8 @@
    ---- "Can+\\⊥"
    (mc Can+ (p \\ s) E (Pr (set- S s) K))]
 
-  [(mc Can⊥ p (extend s ⊥ E) (Pr S_c⊥ K_c⊥))
-   (where #true (∈ s S_c⊥))
-   (mc Can+ p (extend s ⊥ E) (Pr S K))
+  [(mc Can⊥ p (extend s ⊥ E) (Pr S K))
+   (where #true (∈ s S))
    ---- "Can⊥\\⊥"
    (mc Can⊥ (p \\ s) E (Pr (set- S s) K))]
   )
@@ -346,7 +345,7 @@
                       ","))
         "}"))
 
-;  #;  #;
+  #;  #;
   (derivation/ps
    (car (build-derivations (mc Must (,P8b \\ O) (I = tt ·) R)))
    "must.ps"
@@ -356,9 +355,17 @@
    "can.ps"
    #:pp pp)
 
+  #; #;
   (show-derivations
    (build-derivations (mc Can+ (,P8b \\ O) (I = tt ·) R))
    #:pp pp)
   (show-derivations
    (build-derivations (mc Must (,P8b \\ O) (I = tt ·) R))
+   #:pp pp)
+
+  ;; this is an example where Can+ and Can⊥ differ
+  (show-derivations
+   (append
+    (build-derivations (mc Can+ ((par (! S) (? S 0 (! O))) \\ S) (O = ⊥ ·) R))
+    (build-derivations (mc Can⊥ ((par (! S) (? S 0 (! O))) \\ S) (O = ⊥ ·) R)))
    #:pp pp))
