@@ -1,8 +1,10 @@
 #lang racket
 (require redex/reduction-semantics
          "lang.rkt" "helpers.rkt")
+(provide mc)
 
 (define-judgment-form L
+  #:contract (mc fn p E R)
   #:mode (mc I I I O)
   [---- "k"
    (mc fn k E (Pr · (k ·)))]

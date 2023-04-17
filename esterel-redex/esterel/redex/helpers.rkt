@@ -2,11 +2,36 @@
 (require redex/reduction-semantics "lang.rkt")
 (provide Max ↓
          lookup extend
-         ∈ ∪ set-)
-
+         ∈ ∪ set-
+         ⊥E close)
 
 (define-metafunction L
-  Max : K K -> K
+  close : p -> S
+  [(close (! s)) (s ·)]
+  [(close (? s p q)) (∪ (s ·) (∪ (close p) (close q)))]
+  [(close (s ⊃ p)) (∪ (s ·) (close p))]
+  [(close (seq p q)) (∪ (close p) (close q))]
+  [(close (p *)) (close p)]
+  [(close (par p q)) (∪ (close p) (close q))]
+  [(close (trap p)) (close p)]
+  [(close nothing) ·]
+  [(close pause) ·]
+  [(close (exit N)) ·]
+  [(close (p \\ s)) (set- (close p) s)])
+
+(module+ test
+  (test-equal (term (close (? s (! t) (trap (w ⊃ ((! z) *))))))
+              (term (s (t (w (z ·))))))
+  (test-equal (term (close ((! t) \\ t)))
+              (term ·)))
+
+(define-metafunction L
+  ⊥E : S -> E
+  [(⊥E ·) ·]
+  [(⊥E (s S)) (s = ⊥ (⊥E S))])
+
+(define-metafunction L
+  Max : K* K* -> K*
   [(Max · K) ·]
   [(Max K ·) ·]
   [(Max (k K_1) K_2)
@@ -14,20 +39,25 @@
       (Max K_1 K_2))])
 
 (define-metafunction L
-  Max-kK : k K -> K
-  [(Max-kK k ·) ·]
-  [(Max-kK k_1 (k_2 K)) (∪ (Max-kK k_1 K) ((Max-kk k_1 k_2) ·))])
+  Max-kK : k* K* -> K*
+  [(Max-kK k* ·) ·]
+  [(Max-kK k*_1 (k*_2 K*)) (∪ (Max-kK k*_1 K*) ((Max-kk k*_1 k*_2) ·))])
 
 (define-metafunction L
-  Max-kk : k k -> k
+  Max-kk : k* k* -> k*
   [(Max-kk (exit N_1) (exit N_2)) (exit ,(max (term N_1) (term N_2)))]
-  [(Max-kk (exit N) k) (exit N)]
-  [(Max-kk k (exit N)) (exit N)]
-  [(Max-kk nothing pause) pause]
-  [(Max-kk pause nothing) pause]
-  [(Max-kk nothing nothing) nothing])
+  [(Max-kk (exit N) k*) (exit N)]
+  [(Max-kk k* (exit N)) (exit N)]
+  [(Max-kk k* pause) pause]
+  [(Max-kk pause k*) pause]
+
+  ;; just declare that `par` discards the results of
+  ;; the branches and always returns `nothing`
+  [(Max-kk nothing k*) nothing]
+  [(Max-kk k* nothing) nothing])
 
 (module+ test
+  (test-equal (term (Max-kk pause pause)) (term pause))
   (test-equal (term (Max · ·)) (term ·))
   (test-equal (term (Max · (pause ·))) (term ·))
   (test-equal (term (Max (pause ·) ·)) (term ·))
