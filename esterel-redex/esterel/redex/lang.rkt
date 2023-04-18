@@ -15,12 +15,9 @@
   (e ::=
      (! s) (? s) (s ⊃ e)
      (seq e e) (e *) (par e e)
-     (trap e)
-     nothing
-     pause
-     (exit N)
+     nothing pause
+     (trap e) (exit N)
      (e \\ s)
-
      (if e e e)
      B
      N
@@ -30,17 +27,18 @@
   (k ::= nothing pause (exit N))
   (s ::= variable-not-otherwise-mentioned)
 
+  (k* ::= k B N)
+  (B⊥ ::= B ⊥)
+  (B ::= tt ff)
+  
   (fn ::= Must Can)
   (Can ::= Can+ Can⊥)
   (E ::= · (s = B⊥ E))
-  (B⊥ ::= tt ff ⊥)
-  (B ::= tt ff)
   (set ::= · (any set))
   (S ::= · (s S))
   (K ::= · (k K))
   (R ::= (Pr S K))
 
   (op ::= + - < =)
-  (k* ::= k B N)
   (K* ::= · (k* K*))
   (R* ::= (Pr S K*)))

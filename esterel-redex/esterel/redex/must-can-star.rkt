@@ -33,16 +33,16 @@
    (mc* fn (s ⊃ e) E R*)]
 
   [(mc* fn e_1 E (Pr S_p K*_1)) (∉ nothing K*_1)
-   ---- "; nothing ∉ p"
+   ---- "; 0 ∉ p"
    (mc* fn (seq e_1 e_2) E (Pr S_p K*_1))]
 
   [(mc* Must e_1 E (Pr S_1 K*_1)) (∈ nothing K*_1) (mc* Must e_2 E (Pr S_2 K*_2))
-   ---- "Must ; nothing ∈ p"
+   ---- "Must ; 0 ∈ p"
    (mc* Must (seq e_1 e_2) E (Pr (∪ S_1 S_2) (∪ (set- K*_1 nothing) K*_2)))]
 
-  [(mc* Can e_1 E (Pr S_1 K*_1)) (∈ nothing K*_1) (mc* Must e_2 E (Pr S_mustp K*_must1)) (where fn_2 (pickfn-seq Can nothing K*_must1))
-   (mc* fn_2 e_2 E (Pr S_2 K*_2))
-   ---- "Can ; nothing ∈ p"
+  [(mc* Can e_1 E (Pr S_1 K*_1)) (∈ nothing K*_1) (mc* Must e_2 E (Pr S_mustp K*_must1))
+   (where fn_2 (pickfn-seq Can K*_must1)) (mc* fn_2 e_2 E (Pr S_2 K*_2))
+   ---- "Can ; 0 ∈ p"
    (mc* Can (seq e_1 e_2) E (Pr (∪ S_1 S_2) (∪ (set- K*_1 nothing) K*_2)))]
 
   [(mc* fn e E R*)
@@ -65,7 +65,9 @@
    ---- "Must\\ff"
    (mc* Must (e \\ s) E (Pr (set- S s) K*))]
 
-  [(mc* Must e (extend E s ⊥) (Pr S_m⊥ K*_m⊥)) (mc* Can+ e (extend E s ⊥) (Pr S_c⊥ K*_c⊥)) (∉ s S_m⊥) (∈ s S_c⊥) (mc* Must e (extend E s ⊥) (Pr S K*))
+  [(mc* Must e (extend E s ⊥) (Pr S_m⊥ K*_m⊥))
+   (mc* Can+ e (extend E s ⊥) (Pr S_c⊥ K*_c⊥))
+   (∉ s S_m⊥) (∈ s S_c⊥) (mc* Must e (extend E s ⊥) (Pr S K*))
    ---- "Must\\⊥"
    (mc* Must (e \\ s) E (Pr (set- S s) K*))]
 
@@ -77,7 +79,9 @@
    ---- "Can\\ff"
    (mc* Can (e \\ s) E (Pr (set- S s) K*))]
 
-  [(mc* Must e (extend E s ⊥) (Pr S_m⊥ K*_m⊥)) (mc* Can+ e (extend E s ⊥) (Pr S_c⊥ K*_c⊥)) (∉ s S_m⊥) (∈ s S_c⊥) (mc* Can+ e (extend E s ⊥) (Pr S K*))
+  [(mc* Must e (extend E s ⊥) (Pr S_m⊥ K*_m⊥))
+   (mc* Can+ e (extend E s ⊥) (Pr S_c⊥ K*_c⊥))
+   (∉ s S_m⊥) (∈ s S_c⊥) (mc* Can+ e (extend E s ⊥) (Pr S K*))
    ---- "Can+\\⊥"
    (mc* Can+ (e \\ s) E (Pr (set- S s) K*))]
 
@@ -97,7 +101,8 @@
    ---- "if neither"
    (mc* fn (if e_1 e_2 e_3) E (Pr S_1 (set)))]
 
-  [(mc* fn e_1 E (Pr S_1 K*_1)) (∈ tt K*_1) (∈ ff K*_1) (mc* fn e_2 E (Pr S_2 K*_2)) (mc* fn e_3 E (Pr S_3 K*_3))
+  [(mc* fn e_1 E (Pr S_1 K*_1)) (∈ tt K*_1) (∈ ff K*_1)
+   (mc* fn e_2 E (Pr S_2 K*_2)) (mc* fn e_3 E (Pr S_3 K*_3))
    ---- "if both"
    (mc* fn (if e_1 e_2 e_3) E (Pr (∪ S_1 (∪ S_2 S_3)) (∪ K*_2 K*_3)))]
 
@@ -117,10 +122,10 @@
 
 (define-metafunction L
   pickfn-seq : Can any set -> Can
-  [(pickfn-seq Can+ any set)
+  [(pickfn-seq Can+ set)
    Can+
-   (judgment-holds (∈ any set))]
-  [(pickfn-seq Can any set) Can⊥])
+   (judgment-holds (∈ nothing set))]
+  [(pickfn-seq Can set) Can⊥])
 
 
 (define-metafunction L

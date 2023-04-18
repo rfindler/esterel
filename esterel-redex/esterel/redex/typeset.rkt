@@ -1,5 +1,7 @@
 #lang racket
-(require "must-can-star.rkt" redex pict)
+(require "must-can-star.rkt" "lang.rkt"
+         redex pict)
+(provide format-rules grammar)
 
 (define (mc-rewrite lws)
   (list ""
@@ -55,6 +57,19 @@
         ""))
 
 (define (rule->pict rule)
+  (with-the-rewriters
+      (λ ()
+        (parameterize ([judgment-form-cases (list rule)])
+          (render-judgment-form mc*)))))
+
+(define (grammar)
+  (define nts
+    (remove* '(p q Can fn set K K* S E s N R)
+             (language-nts L)))
+  (with-the-rewriters
+      (λ () (render-language L #:nts nts))))
+  
+(define (with-the-rewriters thunk)
   (with-compound-rewriters (['mc* mc-rewrite]
                             ['∈ binop-rewrite]
                             ['∉ binop-rewrite]
@@ -64,27 +79,55 @@
                             ['Pr Pr-rewrite]
                             ['op-each-pair op-rewrite]
                             ['extend extend-rewrite])
-    (parameterize ([judgment-form-cases (list rule)])
-      (render-judgment-form mc*))))
+    (thunk)))
+
+(define (format-rules width height mandatory-breaks
+                      #:rules [rules (judgment-form->rule-names mc*)]
+                      #:horizontal-gap [horizontal-gap 40]
+                      #:vertical-gap [vertical-gap 20])
+  (define line (blank))
+  (define pict (blank))
+  (let loop ([rules rules])
+    (cond
+      [(null? rules)
+       (values #f (vc-append vertical-gap pict line))]
+      [else
+       (define fst-pict (rule->pict (car rules)))
+       (cond
+         [(and (<= (+ (pict-width line) horizontal-gap (pict-width fst-pict))
+                   width)
+               (not (member (car rules) mandatory-breaks)))
+          (set! line (hbl-append horizontal-gap line fst-pict))
+          (loop (cdr rules))]
+         [else
+          (set! pict (vc-append vertical-gap pict line))
+          (set! line fst-pict)
+          (cond
+            [(<= (pict-height pict) height)
+             (loop (cdr rules))]
+            [else
+             (values rules pict)])])])))
 
 (module+ main
   (define counts '(4 3 1 1 1 3 1 1 1 1 1 1 1 2 2))
-  (apply
-   vc-append
-   20
-   (let loop ([counts counts]
-              [names (judgment-form->rule-names mc*)])
-     (cond
-       [(null? counts)
-        (cond
-          [(null? names) '()]
-          [else
-           (loop (cons 1 counts) names)])]
-       [else
-        (define line (car counts))
-        (cons (apply hc-append 20
-                     (for/list ([name (in-list names)]
-                                [i (in-range (car counts))])
-                       (rule->pict name)))
-              (loop (cdr counts)
-                    (drop names (car counts))))]))))
+  (define p
+    (apply
+     vc-append
+     20
+     (let loop ([counts counts]
+                [names (judgment-form->rule-names mc*)])
+       (cond
+         [(null? counts)
+          (cond
+            [(null? names) '()]
+            [else
+             (loop (cons 1 counts) names)])]
+         [else
+          (define line (car counts))
+          (cons (apply hc-append 20
+                       (for/list ([name (in-list names)]
+                                  [i (in-range (car counts))])
+                         (rule->pict name)))
+                (loop (cdr counts)
+                      (drop names (car counts))))]))))
+  (pict-width p))
