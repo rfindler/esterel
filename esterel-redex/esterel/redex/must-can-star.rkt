@@ -100,7 +100,20 @@
   [(mc* fn e_1 E (Pr S_1 K*_1)) (∈ tt K*_1) (∈ ff K*_1) (mc* fn e_2 E (Pr S_2 K*_2)) (mc* fn e_3 E (Pr S_3 K*_3))
    ---- "if both"
    (mc* fn (if e_1 e_2 e_3) E (Pr (∪ S_1 (∪ S_2 S_3)) (∪ K*_2 K*_3)))]
+
+  [(mc* fn e_1 E (Pr S_1 K*_1)) (mc* fn e_2 E (Pr S_2 K*_2))
+   ---- "op"
+   (mc* fn (op e_1 e_2) E (Pr (∪ S_1 S_2) (op-each-pair op K*_1 K*_2)))]
   )
+
+(module+ test
+  (test-judgment-holds
+   (mc* Must (+ 1 2) (set) (Pr · (3 ·))))
+  (test-judgment-holds
+   (mc* Can+
+        (+ (if (? S) 2 4) (if (? S) 10 30))
+        (extend S ⊥ ·)
+        (Pr · (12 (32 (14 (34 ·))))))))
 
 (define-metafunction L
   pickfn-seq : Can any set -> Can

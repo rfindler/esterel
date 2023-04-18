@@ -3,7 +3,8 @@
 (provide Max ↓
          lookup extend
          ∈ ∉ ∪ set- set
-         ⊥E close)
+         ⊥E close
+         op-each-pair)
 
 (define-metafunction L
   close : p -> S
@@ -31,9 +32,41 @@
   [(⊥E (s S)) (s = ⊥ (⊥E S))])
 
 (define-metafunction L
+  op-each-pair : op K* K* -> K*
+  [(op-each-pair op · K*) ·]
+  [(op-each-pair op (k* K*_1) K*_2)
+   (∪ (op-each op k* K*_2) (op-each-pair op K*_1 K*_2))])
+
+(define-metafunction L
+  op-each : op k* K* -> K*
+  [(op-each op k* ·) ·]
+  [(op-each op k*_1 (k*_2 K*))
+   (∪ (set (δ op k*_1 k*_2)) (op-each op k*_1 K*))])
+
+(define-metafunction L
+  δ : op k* k* -> k*
+  [(δ + N_1 N_2) ,(+ (term N_1) (term N_2))]
+  [(δ - N_1 N_2) ,(- (term N_1) (term N_2))]
+  [(δ < N_1 N_2) ,(if (< (term N_1) (term N_2)) (term tt) (term ff))]
+  [(δ = N_1 N_1) tt]
+  [(δ = N_1 N_2) ff])
+
+(module+ test
+  (test-equal (term (δ + 1 2)) (term 3))
+  (test-equal (term (δ - 2 1)) (term 1))
+  (test-equal (term (δ < 2 1)) (term ff))
+  (test-equal (term (δ < 1 2)) (term tt))
+  (test-equal (term (δ = 1 2)) (term ff))
+  (test-equal (term (δ = 1 1)) (term tt))
+
+  (test-equal (term (op-each-pair + (set 1) (set 2)))
+              (term (set 3)))
+  (test-equal (term (op-each-pair - (set 5 4 3) (set 2 1)))
+              (term (set 3 4 2 1))))
+
+(define-metafunction L
   Max : K* K* -> K*
   [(Max · K) ·]
-  [(Max K ·) ·]
   [(Max (k K_1) K_2)
    (∪ (Max-kK k K_2)
       (Max K_1 K_2))])
@@ -62,10 +95,15 @@
   (test-equal (term (Max · (pause ·))) (term ·))
   (test-equal (term (Max (pause ·) ·)) (term ·))
   (test-equal (term (Max (pause ·) ((exit 0) ·))) (term ((exit 0) ·)))
+  (test-equal (term (Max ((exit 0) ·) (pause ·))) (term ((exit 0) ·)))
   (test-equal (term (Max (pause ((exit 0) ((exit 1) ·))) ((exit 0) ((exit 1) ((exit 2) ·)))))
               (term ((exit 2) ((exit 1) ((exit 0) ·)))))
+  (test-equal (term (Max ((exit 0) ((exit 1) ((exit 2) ·))) (pause ((exit 0) ((exit 1) ·)))))
+              (term ((exit 1) ((exit 0) ((exit 2) ·)))))
   (test-equal (term (Max (nothing ((exit 0) ((exit 2) ((exit 4) ·)))) (pause ((exit 1) ((exit 3) ·)))))
-              (term ((exit 3) ((exit 1) (pause ((exit 0) ((exit 2) ((exit 4) ·)))))))))
+              (term ((exit 3) ((exit 1) (pause ((exit 0) ((exit 2) ((exit 4) ·))))))))
+  (test-equal (term (Max (pause ((exit 1) ((exit 3) ·))) (nothing ((exit 0) ((exit 2) ((exit 4) ·))))))
+              (term ((exit 4) ((exit 2) ((exit 0) (pause ((exit 1) ((exit 3) ·)))))))))
 
 (define-metafunction L
   ↓ : K -> K
