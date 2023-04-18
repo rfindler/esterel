@@ -74,47 +74,47 @@
    ---- "trap"
    (mc fn (trap p) E (Pr S (↓ K)))]
 
-  [(mc Must p (extend s ⊥ E) (Pr S_⊥ K_⊥))
+  [(mc Must p (extend E s ⊥) (Pr S_⊥ K_⊥))
    (∈ s S_⊥)
-   (mc Must p (extend s tt E) (Pr S K))
+   (mc Must p (extend E s tt) (Pr S K))
    ---- "Must\\tt"
    (mc Must (p \\ s) E (Pr (set- S s) K))]
 
-  [(mc Can+ p (extend s ⊥ E) (Pr S_⊥ K_⊥))
+  [(mc Can+ p (extend E s ⊥) (Pr S_⊥ K_⊥))
    (∉ s S_⊥)
-   (mc Must p (extend s ff E) (Pr S K))
+   (mc Must p (extend E s ff) (Pr S K))
    ---- "Must\\ff"
    (mc Must (p \\ s) E (Pr (set- S s) K))]
 
-  [(mc Must p (extend s ⊥ E) (Pr S_m⊥ K_m⊥))
-   (mc Can+ p (extend s ⊥ E) (Pr S_c⊥ K_c⊥))
+  [(mc Must p (extend E s ⊥) (Pr S_m⊥ K_m⊥))
+   (mc Can+ p (extend E s ⊥) (Pr S_c⊥ K_c⊥))
    (∉ s S_m⊥)
    (∈ s S_c⊥)
-   (mc Must p (extend s ⊥ E) (Pr S K))
+   (mc Must p (extend E s ⊥) (Pr S K))
    ---- "Must\\⊥"
    (mc Must (p \\ s) E (Pr (set- S s) K))]
 
-  [(mc Must p (extend s ⊥ E) (Pr S_⊥ K_⊥))
+  [(mc Must p (extend E s ⊥) (Pr S_⊥ K_⊥))
    (∈ s S_⊥)
-   (mc Can+ p (extend s tt E) (Pr S K))
+   (mc Can+ p (extend E s tt) (Pr S K))
    ---- "Can\\tt"
    (mc Can+ (p \\ s) E (Pr (set- S s) K))]
 
-  [(mc Can p (extend s ⊥ E) (Pr S_⊥ K_⊥))
+  [(mc Can p (extend E s ⊥) (Pr S_⊥ K_⊥))
    (∉ s S_⊥)
-   (mc Can p (extend s ff E) (Pr S K))
+   (mc Can p (extend E s ff) (Pr S K))
    ---- "Can\\ff"
    (mc Can (p \\ s) E (Pr (set- S s) K))]
 
-  [(mc Must p (extend s ⊥ E) (Pr S_m⊥ K_m⊥))
-   (mc Can+ p (extend s ⊥ E) (Pr S_c⊥ K_c⊥))
+  [(mc Must p (extend E s ⊥) (Pr S_m⊥ K_m⊥))
+   (mc Can+ p (extend E s ⊥) (Pr S_c⊥ K_c⊥))
    (∉ s S_m⊥)
    (∈ s S_c⊥)
-   (mc Can+ p (extend s ⊥ E) (Pr S K))
+   (mc Can+ p (extend E s ⊥) (Pr S K))
    ---- "Can+\\⊥"
    (mc Can+ (p \\ s) E (Pr (set- S s) K))]
 
-  [(mc Can⊥ p (extend s ⊥ E) (Pr S K))
+  [(mc Can⊥ p (extend E s ⊥) (Pr S K))
    (∈ s S)
    ---- "Can⊥\\⊥"
    (mc Can⊥ (p \\ s) E (Pr (set- S s) K))]

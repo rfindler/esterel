@@ -57,31 +57,31 @@
    ---- "trap"
    (mc* fn (trap e) E (Pr S (↓ K*)))]
 
-  [(mc* Must e (extend s ⊥ E) (Pr S_⊥ K*_⊥)) (∈ s S_⊥) (mc* Must e (extend s tt E) (Pr S K*))
+  [(mc* Must e (extend E s ⊥) (Pr S_⊥ K*_⊥)) (∈ s S_⊥) (mc* Must e (extend E s tt) (Pr S K*))
    ---- "Must\\tt"
    (mc* Must (e \\ s) E (Pr (set- S s) K*))]
 
-  [(mc* Can+ e (extend s ⊥ E) (Pr S_⊥ K*_⊥)) (∉ s S_⊥) (mc* Must e (extend s ff E) (Pr S K*))
+  [(mc* Can+ e (extend E s ⊥) (Pr S_⊥ K*_⊥)) (∉ s S_⊥) (mc* Must e (extend E s ff) (Pr S K*))
    ---- "Must\\ff"
    (mc* Must (e \\ s) E (Pr (set- S s) K*))]
 
-  [(mc* Must e (extend s ⊥ E) (Pr S_m⊥ K*_m⊥)) (mc* Can+ e (extend s ⊥ E) (Pr S_c⊥ K*_c⊥)) (∉ s S_m⊥) (∈ s S_c⊥) (mc* Must e (extend s ⊥ E) (Pr S K*))
+  [(mc* Must e (extend E s ⊥) (Pr S_m⊥ K*_m⊥)) (mc* Can+ e (extend E s ⊥) (Pr S_c⊥ K*_c⊥)) (∉ s S_m⊥) (∈ s S_c⊥) (mc* Must e (extend E s ⊥) (Pr S K*))
    ---- "Must\\⊥"
    (mc* Must (e \\ s) E (Pr (set- S s) K*))]
 
-  [(mc* Must e (extend s ⊥ E) (Pr S_⊥ K*_⊥)) (∈ s S_⊥) (mc* Can+ e (extend s tt E) (Pr S K*))
+  [(mc* Must e (extend E s ⊥) (Pr S_⊥ K*_⊥)) (∈ s S_⊥) (mc* Can+ e (extend E s tt) (Pr S K*))
    ---- "Can\\tt"
    (mc* Can+ (e \\ s) E (Pr (set- S s) K*))]
 
-  [(mc* Can e (extend s ⊥ E) (Pr S_⊥ K*_⊥)) (∉ s S_⊥) (mc* Can e (extend s ff E) (Pr S K*))
+  [(mc* Can e (extend E s ⊥) (Pr S_⊥ K*_⊥)) (∉ s S_⊥) (mc* Can e (extend E s ff) (Pr S K*))
    ---- "Can\\ff"
    (mc* Can (e \\ s) E (Pr (set- S s) K*))]
 
-  [(mc* Must e (extend s ⊥ E) (Pr S_m⊥ K*_m⊥)) (mc* Can+ e (extend s ⊥ E) (Pr S_c⊥ K*_c⊥)) (∉ s S_m⊥) (∈ s S_c⊥) (mc* Can+ e (extend s ⊥ E) (Pr S K*))
+  [(mc* Must e (extend E s ⊥) (Pr S_m⊥ K*_m⊥)) (mc* Can+ e (extend E s ⊥) (Pr S_c⊥ K*_c⊥)) (∉ s S_m⊥) (∈ s S_c⊥) (mc* Can+ e (extend E s ⊥) (Pr S K*))
    ---- "Can+\\⊥"
    (mc* Can+ (e \\ s) E (Pr (set- S s) K*))]
 
-  [(mc* Can⊥ e (extend s ⊥ E) (Pr S K*)) (∈ s S)
+  [(mc* Can⊥ e (extend E s ⊥) (Pr S K*)) (∈ s S)
    ---- "Can⊥\\⊥"
    (mc* Can⊥ (e \\ s) E (Pr (set- S s) K*))]
 
@@ -112,7 +112,7 @@
   (test-judgment-holds
    (mc* Can+
         (+ (if (? S) 2 4) (if (? S) 10 30))
-        (extend S ⊥ ·)
+        (extend · S ⊥)
         (Pr · (12 (32 (14 (34 ·))))))))
 
 (define-metafunction L

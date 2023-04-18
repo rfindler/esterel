@@ -206,8 +206,8 @@
    (lookup s_1 E)])
 
 (define-metafunction L
-  extend : s B⊥ E -> E
-  [(extend s B⊥ E) (s = B⊥ E)])
+  extend : E s B⊥ -> E
+  [(extend E s B⊥) (s = B⊥ E)])
 
 (module+ test
   (test-equal (term (lookup s1 (extend s1 tt (extend s2 ff (extend s3 ⊥ ·)))))

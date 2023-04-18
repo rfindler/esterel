@@ -45,6 +45,15 @@
         (list-ref lws 4)
         "}"))
 
+(define (extend-rewrite lws)
+  (list ""
+        (list-ref lws 2)
+        " + "
+        (list-ref lws 3)
+        " = "
+        (list-ref lws 4)
+        ""))
+
 (define (rule->pict rule)
   (with-compound-rewriters (['mc* mc-rewrite]
                             ['∈ binop-rewrite]
@@ -53,7 +62,8 @@
                             ['set set-rewrite]
                             ['set- set--rewrite]
                             ['Pr Pr-rewrite]
-                            ['op-each-pair op-rewrite])
+                            ['op-each-pair op-rewrite]
+                            ['extend extend-rewrite])
     (parameterize ([judgment-form-cases (list rule)])
       (render-judgment-form mc*))))
 
