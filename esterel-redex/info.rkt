@@ -2,7 +2,9 @@
 
 (define collection 'multi)
 
-(define deps '("base" "redex-lib" "redex-gui-lib" "pict-lib"))
+(define deps
+  '("base" "redex-lib" "redex-gui-lib"
+           "pict-lib" "scribble-lib"))
 
 (define pkg-desc "Redex model of Esterel implementation in Racket")
 
