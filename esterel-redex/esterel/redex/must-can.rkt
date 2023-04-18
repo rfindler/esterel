@@ -7,10 +7,10 @@
   #:contract (mc fn p E R)
   #:mode (mc I I I O)
   [---- "k"
-   (mc fn k E (Pr · (k ·)))]
+   (mc fn k E (Pr (set) (set k)))]
 
   [---- "!"
-   (mc fn (! s) E (Pr (s ·) (nothing ·)))]
+   (mc fn (! s) E (Pr (set s) (set nothing)))]
 
   [(mc fn p E R)
    (where tt (lookup s E))
@@ -24,7 +24,7 @@
 
   [(where ⊥ (lookup s E))
    ---- "Must ? ⊥"
-   (mc Must (? s p q) E (Pr · ·))]
+   (mc Must (? s p q) E (Pr (set) (set)))]
 
   [(mc Can p E (Pr S_p K_p))
    (mc Can q E (Pr S_q K_q))
@@ -37,12 +37,12 @@
    (mc fn (s ⊃ p) E R)]
 
   [(mc fn p E (Pr S_p K_p))
-   (where #false (∈ nothing K_p))
+   (∉ nothing K_p)
    ---- "; nothing ∉ p"
    (mc fn (seq p q) E (Pr S_p K_p))]
 
   [(mc Must p E (Pr S_p K_p))
-   (where #true (∈ nothing K_p))
+   (∈ nothing K_p)
    (mc Must q E (Pr S_q K_q))
    ---- "Must ; nothing ∈ p"
    (mc Must (seq p q) E
@@ -50,9 +50,9 @@
            (∪ (set- K_p nothing) K_q)))]
 
   [(mc Can p E (Pr S_p K_p))
-   (where #true (∈ nothing K_p))
+   (∈ nothing K_p)
    (mc Must p E (Pr S_mustp K_mustp))
-   (where fn_q (pickfn-seq Can (∈ nothing K_mustp)))
+   (where fn_q (pickfn-seq Can nothing K_mustp))
    (mc fn_q q E (Pr S_q K_q))
    ---- "Can ; nothing ∈ p"
    (mc Can (seq p q) E
@@ -75,56 +75,58 @@
    (mc fn (trap p) E (Pr S (↓ K)))]
 
   [(mc Must p (extend s ⊥ E) (Pr S_⊥ K_⊥))
-   (where #true (∈ s S_⊥))
+   (∈ s S_⊥)
    (mc Must p (extend s tt E) (Pr S K))
    ---- "Must\\tt"
    (mc Must (p \\ s) E (Pr (set- S s) K))]
 
   [(mc Can+ p (extend s ⊥ E) (Pr S_⊥ K_⊥))
-   (where #false (∈ s S_⊥))
+   (∉ s S_⊥)
    (mc Must p (extend s ff E) (Pr S K))
    ---- "Must\\ff"
    (mc Must (p \\ s) E (Pr (set- S s) K))]
 
   [(mc Must p (extend s ⊥ E) (Pr S_m⊥ K_m⊥))
    (mc Can+ p (extend s ⊥ E) (Pr S_c⊥ K_c⊥))
-   (where #false (∈ s S_m⊥))
-   (where #true (∈ s S_c⊥))
+   (∉ s S_m⊥)
+   (∈ s S_c⊥)
    (mc Must p (extend s ⊥ E) (Pr S K))
    ---- "Must\\⊥"
    (mc Must (p \\ s) E (Pr (set- S s) K))]
 
   [(mc Must p (extend s ⊥ E) (Pr S_⊥ K_⊥))
-   (where #true (∈ s S_⊥))
+   (∈ s S_⊥)
    (mc Can+ p (extend s tt E) (Pr S K))
    ---- "Can\\tt"
    (mc Can+ (p \\ s) E (Pr (set- S s) K))]
 
   [(mc Can p (extend s ⊥ E) (Pr S_⊥ K_⊥))
-   (where #false (∈ s S_⊥))
+   (∉ s S_⊥)
    (mc Can p (extend s ff E) (Pr S K))
    ---- "Can\\ff"
    (mc Can (p \\ s) E (Pr (set- S s) K))]
 
   [(mc Must p (extend s ⊥ E) (Pr S_m⊥ K_m⊥))
    (mc Can+ p (extend s ⊥ E) (Pr S_c⊥ K_c⊥))
-   (where #false (∈ s S_m⊥))
-   (where #true (∈ s S_c⊥))
+   (∉ s S_m⊥)
+   (∈ s S_c⊥)
    (mc Can+ p (extend s ⊥ E) (Pr S K))
    ---- "Can+\\⊥"
    (mc Can+ (p \\ s) E (Pr (set- S s) K))]
 
   [(mc Can⊥ p (extend s ⊥ E) (Pr S K))
-   (where #true (∈ s S))
+   (∈ s S)
    ---- "Can⊥\\⊥"
    (mc Can⊥ (p \\ s) E (Pr (set- S s) K))]
   )
 
 
 (define-metafunction L
-  pickfn-seq : Can boolean -> Can
-  [(pickfn-seq Can+ #true) Can+]
-  [(pickfn-seq Can boolean) Can⊥])
+  pickfn-seq : Can any set -> Can
+  [(pickfn-seq Can+ any set)
+   Can+
+   (judgment-holds (∈ any set))]
+  [(pickfn-seq Can any set) Can⊥])
 
 
 (module+ test

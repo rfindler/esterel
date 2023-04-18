@@ -2,7 +2,7 @@
 (require redex/reduction-semantics "lang.rkt")
 (provide Max ↓
          lookup extend
-         ∈ ∪ set-
+         ∈ ∉ ∪ set- set
          ⊥E close)
 
 (define-metafunction L
@@ -104,11 +104,44 @@
   [(set- (any set) any) set]
   [(set- (any_1 set) any_2) (any_1 (set- set any_2))])
 
+(define-judgment-form L
+  #:mode (∈ I I)
+  #:contract (∈ any set)
+  [---------------------
+   (∈ any_1 (any_1 set))]
+
+  [(where #true (≠ any_1 any_2))
+   (∈ any_1 set)
+   ---------------------
+   (∈ any_1 (any_2 set))])
+
 (define-metafunction L
-  ∈ : any set -> boolean
-  [(∈ any ·) #false]
-  [(∈ any (any set)) #true]
-  [(∈ any_1 (any_2 set)) (∈ any_1 set)])
+  set : any ... -> set
+  [(set) ·]
+  [(set any_1 any_2 ...) (any_1 (set any_2 ...))])
+  
+
+(define-judgment-form L
+  #:mode (∉ I I)
+  #:contract (∉ any set)
+  [---------------------
+   (∉ any_1 ·)]
+
+  [(where #true (≠ any_1 any_2))
+   (∉ any_1 set)
+   ---------------------
+   (∉ any_1 (any_2 set))])
+
+(define-metafunction L
+  ≠ : any any -> boolean
+  [(≠ any any) #false]
+  [(≠ any_1 any_2) #true])
+
+(module+ test
+  (test-judgment-holds (∈ 1 (2 (1 (3 ·)))))
+  (test-judgment-holds (∉ 4 (2 (1 (3 ·)))))
+  (test-equal (judgment-holds (∈ 1 (2 (3 ·)))) #false)
+  (test-equal (judgment-holds (∉ 3 (2 (3 ·)))) #false))
 
 (module+ test
   (test-equal (term (set- · 1)) (term ·))
