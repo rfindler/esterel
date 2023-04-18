@@ -4,7 +4,7 @@
 (define (mc-rewrite lws)
   (list ""
         (list-ref lws 2)
-        "[" (list-ref lws 3) "," (list-ref lws 4) "] = "
+        "[" (list-ref lws 3) ", " (list-ref lws 4) "] = "
         (list-ref lws 5)
         ""))
 
@@ -32,7 +32,7 @@
 (define (Pr-rewrite lws)
   (list "⟨"
         (list-ref lws 2)
-        ","
+        ", "
         (list-ref lws 3)
         "⟩"))
 
