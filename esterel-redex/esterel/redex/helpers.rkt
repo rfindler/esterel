@@ -207,12 +207,16 @@
 
 (define-metafunction L
   extend : E s B⊥ -> E
-  [(extend E s B⊥) (s = B⊥ E)])
+  [(extend · s B⊥) (s = B⊥ ·)]
+  [(extend (s_1 = B⊥_1 E) s_1 B⊥_2) (s_1 = B⊥_2 E)]
+  [(extend (s_1 = B⊥_1 E) s_2 B⊥_2) (s_1 = B⊥_1 (extend E s_2 B⊥_2))])
 
 (module+ test
-  (test-equal (term (lookup s1 (extend s1 tt (extend s2 ff (extend s3 ⊥ ·)))))
+  (test-equal (term (lookup s1 (extend (extend (extend · s3 ⊥) s2 ff) s1 tt)))
               (term tt))
-  (test-equal (term (lookup s2 (extend s1 tt (extend s2 ff (extend s3 ⊥ ·)))))
+  (test-equal (term (lookup s2 (extend (extend (extend · s3 ⊥) s2 ff) s1 tt)))
               (term ff))
-  (test-equal (term (lookup s3 (extend s1 tt (extend s2 ff (extend s3 ⊥ ·)))))
-              (term ⊥)))
+  (test-equal (term (lookup s3 (extend (extend (extend · s3 ⊥) s2 ff) s1 tt)))
+              (term ⊥))
+  (test-equal (term (extend (extend · s1 ff) s1 tt))
+              (term (s1 = tt ·))))
