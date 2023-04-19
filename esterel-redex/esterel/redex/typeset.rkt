@@ -13,7 +13,7 @@
 (define (binop-rewrite lws)
   (list ""
         (list-ref lws 2)
-        (~a (lw-e (list-ref lws 1)))
+        (~a " " (lw-e (list-ref lws 1)) " ")
         (list-ref lws 3)
         ""))
 
@@ -24,6 +24,10 @@
         (list-ref lws 3)
         ""))
 
+(define (parens-rewrite lws)
+  (list "("
+        (list-ref lws 2)
+        ")"))
 
 (define (set-rewrite lws)
   (append '("{")
@@ -78,7 +82,9 @@
                             ['set- set--rewrite]
                             ['Pr Pr-rewrite]
                             ['op-each-pair op-rewrite]
-                            ['extend extend-rewrite])
+                            ['extend extend-rewrite]
+                            ['extend* extend-rewrite]
+                            ['parens parens-rewrite])
     (thunk)))
 
 (define (format-rules width height mandatory-breaks

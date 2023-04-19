@@ -2,9 +2,11 @@
 (require redex/reduction-semantics "lang.rkt")
 (provide Max ↓
          lookup extend
+         lookup* extend*
          ∈ ∉ ∪ set- set
-         ⊥E close
-         op-each-pair)
+         ⊥E ⊥E* close
+         op-each-pair
+         parens)
 
 (define-metafunction L
   close : p -> S
@@ -30,6 +32,11 @@
   ⊥E : S -> E
   [(⊥E ·) ·]
   [(⊥E (s S)) (s = ⊥ (⊥E S))])
+
+(define-metafunction L
+  ⊥E* : S -> E*
+  [(⊥E* ·) ·]
+  [(⊥E* (s S)) (s = ⊥ new 0 (⊥E* S))])
 
 (define-metafunction L
   op-each-pair : op K* K* -> K*
@@ -220,3 +227,30 @@
               (term ⊥))
   (test-equal (term (extend (extend · s1 ff) s1 tt))
               (term (s1 = tt ·))))
+
+(define-metafunction L
+  lookup* : s E* -> B⊥
+  [(lookup* s (s = B⊥ status N E*))
+   B⊥]
+  [(lookup* s_1 (s_2 = B⊥ status N E*))
+   (lookup* s_1 E*)])
+
+(define-metafunction L
+  extend* : E* s B⊥ -> E*
+  [(extend* · s B⊥) (s = B⊥ new 0 ·)]
+  [(extend* (s_1 = B⊥_1 status_1 N_1 E*) s_1 B⊥_2) (s_1 = B⊥_2 status_1 N_1 E*)]
+  [(extend* (s_1 = B⊥_1 status_1 N_1 E*) s_2 B⊥_2) (s_1 = B⊥_1 status_1 N_1 (extend* E* s_2 B⊥_2))])
+
+(module+ test
+  (test-equal (term (lookup* s1 (extend* (extend* (extend* · s3 ⊥) s2 ff) s1 tt)))
+              (term tt))
+  (test-equal (term (lookup* s2 (extend* (extend* (extend* · s3 ⊥) s2 ff) s1 tt)))
+              (term ff))
+  (test-equal (term (lookup* s3 (extend* (extend* (extend* · s3 ⊥) s2 ff) s1 tt)))
+              (term ⊥))
+  (test-equal (term (extend* (extend* · s1 ff) s1 tt))
+              (term (s1 = tt new 0 ·))))
+
+(define-metafunction L
+  parens : any -> any
+  [(parens any) any])

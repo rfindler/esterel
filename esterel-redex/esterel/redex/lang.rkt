@@ -34,6 +34,11 @@
   (fn ::= Must Can)
   (Can ::= Can+ Can⊥)
   (E ::= · (s = B⊥ E))
+  (E* ::= · (s = B⊥ status N E*))
+  ;; signals are always natural valued with +
+  ;; and init set to 0 so we don't need to worry
+  ;; about the `old` vs `new` distinction
+  (status ::= ready new)
   (set ::= · (any set))
   (S ::= · (s S))
   (K ::= · (k K))
