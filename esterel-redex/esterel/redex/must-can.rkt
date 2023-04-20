@@ -13,22 +13,22 @@
    (mc fn (! s) E (Pr (set s) (set nothing)))]
 
   [(mc fn p E R)
-   (where tt (lookup s E))
+   (lookup E s tt)
    ---- "? tt"
    (mc fn (? s p q) E R)]
 
   [(mc fn q E R)
-   (where ff (lookup s E))
+   (lookup E s ff)
    ---- "? ff"
    (mc fn (? s p q) E R)]
 
-  [(where ⊥ (lookup s E))
+  [(lookup E s ⊥)
    ---- "Must ? ⊥"
    (mc Must (? s p q) E (Pr (set) (set)))]
 
   [(mc Can p E (Pr S_p K_p))
    (mc Can q E (Pr S_q K_q))
-   (where ⊥ (lookup s E))
+   (lookup E s ⊥)
    ---- "Can ? ⊥"
    (mc Can (? s p q) E (Pr (∪ S_p S_q) (∪ K_p K_q)))]
 

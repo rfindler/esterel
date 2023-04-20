@@ -2,7 +2,7 @@
 (require redex/reduction-semantics "lang.rkt")
 (provide Max ↓
          lookup extend
-         lookup* extend*
+         lookup* lookup*-B⊥ extend*
          ∈ ∉ ∪ set- set
          ⊥E ⊥E* close
          op-each-pair
@@ -205,12 +205,15 @@
   (test-equal (term (∈ 3 (3 (2 (1 ·))))) #true)
   (test-equal (term (∈ 4 (3 (2 (1 ·))))) #false))
 
-(define-metafunction L
-  lookup : s E -> B⊥
-  [(lookup s (s = B⊥ E))
-   B⊥]
-  [(lookup s_1 (s_2 = B⊥ E))
-   (lookup s_1 E)])
+(define-judgment-form L
+  #:mode (lookup I I O)
+  #:contract (lookup E s B⊥)
+  [-----
+   (lookup (s = B⊥ E) s B⊥)]
+  [(where #true (≠ s_1 s_2))
+   (lookup E s_1 B⊥_1)
+   -----
+   (lookup (s_2 = B⊥_2 E) s_1 B⊥_1)])
 
 (define-metafunction L
   extend : E s B⊥ -> E
@@ -219,21 +222,29 @@
   [(extend (s_1 = B⊥_1 E) s_2 B⊥_2) (s_1 = B⊥_1 (extend E s_2 B⊥_2))])
 
 (module+ test
-  (test-equal (term (lookup s1 (extend (extend (extend · s3 ⊥) s2 ff) s1 tt)))
-              (term tt))
-  (test-equal (term (lookup s2 (extend (extend (extend · s3 ⊥) s2 ff) s1 tt)))
-              (term ff))
-  (test-equal (term (lookup s3 (extend (extend (extend · s3 ⊥) s2 ff) s1 tt)))
-              (term ⊥))
+  (test-judgment-holds (lookup (extend (extend (extend · s3 ⊥) s2 ff) s1 tt) s1 tt))
+  (test-judgment-holds (lookup (extend (extend (extend · s3 ⊥) s2 ff) s1 tt) s2 ff))
+  (test-judgment-holds (lookup (extend (extend (extend · s3 ⊥) s2 ff) s1 tt) s3 ⊥))
   (test-equal (term (extend (extend · s1 ff) s1 tt))
               (term (s1 = tt ·))))
 
-(define-metafunction L
-  lookup* : s E* -> B⊥
-  [(lookup* s (s = B⊥ status N E*))
-   B⊥]
-  [(lookup* s_1 (s_2 = B⊥ status N E*))
-   (lookup* s_1 E*)])
+(define-judgment-form L
+  #:mode (lookup*-B⊥ I I O)
+  #:contract (lookup*-B⊥ E* s B⊥)
+  [(lookup* E* s (B⊥ status N))
+   ------
+   (lookup*-B⊥ E* s B⊥)])
+
+(define-judgment-form L
+  #:mode (lookup* I I O)
+  #:contract (lookup* E* s (B⊥ status N))
+  [-------------
+   (lookup* (s = B⊥ status N E*) s (B⊥ status N))]
+
+  [(where #true (≠ s_1 s_2))
+   (lookup* E* s_1 (B⊥_1 status_1 N_1))
+   ------
+   (lookup* (s_2 = B⊥_2 status N E*) s_1 (B⊥_1 status_1 N_1))])
 
 (define-metafunction L
   extend* : E* s B⊥ -> E*
@@ -242,12 +253,12 @@
   [(extend* (s_1 = B⊥_1 status_1 N_1 E*) s_2 B⊥_2) (s_1 = B⊥_1 status_1 N_1 (extend* E* s_2 B⊥_2))])
 
 (module+ test
-  (test-equal (term (lookup* s1 (extend* (extend* (extend* · s3 ⊥) s2 ff) s1 tt)))
-              (term tt))
-  (test-equal (term (lookup* s2 (extend* (extend* (extend* · s3 ⊥) s2 ff) s1 tt)))
-              (term ff))
-  (test-equal (term (lookup* s3 (extend* (extend* (extend* · s3 ⊥) s2 ff) s1 tt)))
-              (term ⊥))
+  (test-judgment-holds
+   (lookup* (extend* (extend* (extend* · s3 ⊥) s2 ff) s1 tt) s1 (tt new 0)))
+  (test-judgment-holds
+   (lookup* (extend* (extend* (extend* · s3 ⊥) s2 ff) s1 tt) s2 (ff new 0)))
+  (test-judgment-holds
+   (lookup* (extend* (extend* (extend* · s3 ⊥) s2 ff) s1 tt) s3 (⊥ new 0)))
   (test-equal (term (extend* (extend* · s1 ff) s1 tt))
               (term (s1 = tt new 0 ·))))
 

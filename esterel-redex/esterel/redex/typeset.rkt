@@ -60,6 +60,15 @@
         (list-ref lws 4)
         ""))
 
+(define (lookup-rewrite lws)
+  (list ""
+        (list-ref lws 2)
+        "("
+        (list-ref lws 3)
+        ") = "
+        (list-ref lws 4)
+        ""))
+
 (define (rule->pict rule)
   (with-the-rewriters
       (λ ()
@@ -84,6 +93,9 @@
                             ['op-each-pair op-rewrite]
                             ['extend extend-rewrite]
                             ['extend* extend-rewrite]
+                            ['lookup lookup-rewrite]
+                            ['lookup* lookup-rewrite]
+                            ['lookup*-B⊥ lookup-rewrite]
                             ['parens parens-rewrite])
     (thunk)))
 
