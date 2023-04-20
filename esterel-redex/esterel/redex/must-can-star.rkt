@@ -14,19 +14,19 @@
 
   [(lookup*-B⊥ E* s tt)
    ---- "? tt"
-   (mc* fn (? s) E* (Pr (set) (set tt)))]
+   (mc* fn s E* (Pr (set) (set tt)))]
   
   [(lookup*-B⊥ E* s ff)
    ---- "? ff"
-   (mc* fn (? s) E* (Pr (set) (set ff)))]
+   (mc* fn s E* (Pr (set) (set ff)))]
 
   [(lookup*-B⊥ E* s ⊥)
    ---- "Must ? ⊥"
-   (mc* Must (? s) E* (Pr (set) (set)))]
+   (mc* Must s E* (Pr (set) (set)))]
 
   [(lookup*-B⊥ E* s ⊥)
    ---- "Can ? ⊥"
-   (mc* Can (? s) E* (Pr (set) (set tt ff)))]
+   (mc* Can s E* (Pr (set) (set tt ff)))]
 
   [(mc* fn e E* R*)
    ---- "⊃"
@@ -116,7 +116,7 @@
    (mc* Must (+ 1 2) · (Pr · (3 ·))))
   (test-judgment-holds
    (mc* Can+
-        (+ (if (? S) 2 4) (if (? S) 10 30))
+        (+ (if S 2 4) (if S 10 30))
         (extend* · S ⊥)
         (Pr · (12 (32 (14 (34 ·))))))))
 
@@ -131,7 +131,7 @@
 (define-metafunction L
   p-to-e : p -> e
   [(p-to-e (! s)) (! s)]
-  [(p-to-e (? s p q)) (if (? s) (p-to-e p) (p-to-e q))]
+  [(p-to-e (? s p q)) (if s (p-to-e p) (p-to-e q))]
   [(p-to-e (s ⊃ p)) (s ⊃ (p-to-e p))]
   [(p-to-e (seq p q)) (seq (p-to-e p) (p-to-e q))]
   [(p-to-e (p *)) ((p-to-e p) *)]

@@ -13,7 +13,7 @@
      (p \\ s))
 
   (e ::=
-     (! s) (? s) (s ⊃ e)
+     (! s) s (? s) (s ⊃ e)
      (seq e e) (e *) (par e e)
      nothing pause
      (trap e) (exit N)
