@@ -10,7 +10,7 @@
    (mc* fn k* E* (Pr (set) (set k*)))]
 
   [---- "!"
-   (mc* fn (! s) E* (Pr (set s) (set nothing)))]
+   (mc* fn (! s N) E* (Pr (s = N ·) (set nothing)))]
 
   [(lookup*-B⊥ E* s tt)
    ---- "s tt"
@@ -28,87 +28,91 @@
    ---- "s Can ? ⊥"
    (mc* Can s E* (Pr (set) (set tt ff)))]
 
+  [(lookup*-value E* s ready n)
+   ---- "?"
+   (mc* fn (? s) E* (Pr (set) (set n)))]
+
   [(mc* fn e E* R*)
    ---- "⊃"
    (mc* fn (s ⊃ e) E* R*)]
 
-  [(mc* fn e_1 E* (Pr S_p K*_1)) (∉ nothing K*_1)
+  [(mc* fn e_1 E* (Pr S*_p K*_1)) (∉ nothing K*_1)
    ---- "; 0 ∉ p"
-   (mc* fn (seq e_1 e_2) E* (Pr S_p K*_1))]
+   (mc* fn (seq e_1 e_2) E* (Pr S*_p K*_1))]
 
-  [(mc* Must e_1 E* (Pr S_1 K*_1)) (∈ nothing K*_1) (mc* Must e_2 E* (Pr S_2 K*_2))
+  [(mc* Must e_1 E* (Pr S*_1 K*_1)) (∈ nothing K*_1) (mc* Must e_2 E* (Pr S*_2 K*_2))
    ---- "Must ; 0 ∈ p"
-   (mc* Must (seq e_1 e_2) E* (Pr (∪ S_1 S_2) (∪ (parens (set- K*_1 nothing)) K*_2)))]
+   (mc* Must (seq e_1 e_2) E* (Pr (merge-S* S*_1 S*_2) (∪ (parens (set- K*_1 nothing)) K*_2)))]
 
-  [(mc* Can e_1 E* (Pr S_1 K*_1)) (∈ nothing K*_1) (mc* Must e_2 E* (Pr S_mustp K*_must1))
-   (where fn_2 (pickfn-seq Can K*_must1)) (mc* fn_2 e_2 E* (Pr S_2 K*_2))
+  [(mc* Can e_1 E* (Pr S*_1 K*_1)) (∈ nothing K*_1) (mc* Must e_2 E* (Pr S*_mustp K*_must1))
+   (where fn_2 (pickfn-seq Can K*_must1)) (mc* fn_2 e_2 E* (Pr S*_2 K*_2))
    ---- "Can ; 0 ∈ p"
-   (mc* Can (seq e_1 e_2) E* (Pr (∪ S_1 S_2) (∪ (set- K*_1 nothing) K*_2)))]
+   (mc* Can (seq e_1 e_2) E* (Pr (merge-S* S*_1 S*_2) (∪ (set- K*_1 nothing) K*_2)))]
 
   [(mc* fn e E* R*)
    ---- "*"
    (mc* fn (e *) E* R*)]
 
-  [(mc* fn e_1 E* (Pr S_1 K*_1)) (mc* fn e_2 E* (Pr S_2 K*_2))
+  [(mc* fn e_1 E* (Pr S*_1 K*_1)) (mc* fn e_2 E* (Pr S*_2 K*_2))
    ---- "par"
-   (mc* fn (par e_1 e_2) E* (Pr (∪ S_1 S_2) (Max K*_1 K*_2)))]
+   (mc* fn (par e_1 e_2) E* (Pr (merge-S* S*_1 S*_2) (Max K*_1 K*_2)))]
 
-  [(mc* fn e E* (Pr S K*))
+  [(mc* fn e E* (Pr S* K*))
    ---- "trap"
-   (mc* fn (trap e) E* (Pr S (↓ K*)))]
+   (mc* fn (trap e) E* (Pr S* (↓ K*)))]
 
-  [(mc* Must e (extend* E* s ⊥) (Pr S_⊥ K*_⊥)) (∈ s S_⊥) (mc* Must e (extend* E* s tt) (Pr S K*))
+  [(mc* Must e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∈ s (dom S*_⊥)) (mc* Must e (extend* E* s tt) (Pr S* K*))
    ---- "Must\\tt"
-   (mc* Must (e \\ s) E* (Pr (set- S s) K*))]
+   (mc* Must (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Can+ e (extend* E* s ⊥) (Pr S_⊥ K*_⊥)) (∉ s S_⊥) (mc* Must e (extend* E* s ff) (Pr S K*))
+  [(mc* Can+ e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥)) (mc* Must e (extend* E* s ff) (Pr S* K*))
    ---- "Must\\ff"
-   (mc* Must (e \\ s) E* (Pr (set- S s) K*))]
+   (mc* Must (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Must e (extend* E* s ⊥) (Pr S_m⊥ K*_m⊥))
-   (mc* Can+ e (extend* E* s ⊥) (Pr S_c⊥ K*_c⊥))
-   (∉ s S_m⊥) (∈ s S_c⊥) (mc* Must e (extend* E* s ⊥) (Pr S K*))
+  [(mc* Must e (extend* E* s ⊥) (Pr S*_m⊥ K*_m⊥))
+   (mc* Can+ e (extend* E* s ⊥) (Pr S*_c⊥ K*_c⊥))
+   (∉ s (dom S*_m⊥)) (∈ s (dom S*_c⊥)) (mc* Must e (extend* E* s ⊥) (Pr S* K*))
    ---- "Must\\⊥"
-   (mc* Must (e \\ s) E* (Pr (set- S s) K*))]
+   (mc* Must (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Must e (extend* E* s ⊥) (Pr S_⊥ K*_⊥)) (∈ s S_⊥) (mc* Can+ e (extend* E* s tt) (Pr S K*))
+  [(mc* Must e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∈ s (dom S*_⊥)) (mc* Can+ e (extend* E* s tt) (Pr S* K*))
    ---- "Can\\tt"
-   (mc* Can+ (e \\ s) E* (Pr (set- S s) K*))]
+   (mc* Can+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Can e (extend* E* s ⊥) (Pr S_⊥ K*_⊥)) (∉ s S_⊥) (mc* Can e (extend* E* s ff) (Pr S K*))
+  [(mc* Can e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥)) (mc* Can e (extend* E* s ff) (Pr S* K*))
    ---- "Can\\ff"
-   (mc* Can (e \\ s) E* (Pr (set- S s) K*))]
+   (mc* Can (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Must e (extend* E* s ⊥) (Pr S_m⊥ K*_m⊥))
-   (mc* Can+ e (extend* E* s ⊥) (Pr S_c⊥ K*_c⊥))
-   (∉ s S_m⊥) (∈ s S_c⊥) (mc* Can+ e (extend* E* s ⊥) (Pr S K*))
+  [(mc* Must e (extend* E* s ⊥) (Pr S*_m⊥ K*_m⊥))
+   (mc* Can+ e (extend* E* s ⊥) (Pr S*_c⊥ K*_c⊥))
+   (∉ s (dom S*_m⊥)) (∈ s (dom S*_c⊥)) (mc* Can+ e (extend* E* s ⊥) (Pr S* K*))
    ---- "Can+\\⊥"
-   (mc* Can+ (e \\ s) E* (Pr (set- S s) K*))]
+   (mc* Can+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Can⊥ e (extend* E* s ⊥) (Pr S K*)) (∈ s S)
+  [(mc* Can⊥ e (extend* E* s ⊥) (Pr S* K*)) (∈ s (dom S*))
    ---- "Can⊥\\⊥"
-   (mc* Can⊥ (e \\ s) E* (Pr (set- S s) K*))]
+   (mc* Can⊥ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* fn e_1 E* (Pr S_1 K*_1)) (∈ tt K*_1) (∉ ff K*_1) (mc* fn e_2 E* (Pr S_2 K*_2))
+  [(mc* fn e_1 E* (Pr S*_1 K*_1)) (∈ tt K*_1) (∉ ff K*_1) (mc* fn e_2 E* (Pr S*_2 K*_2))
    ---- "if tt"
-   (mc* fn (if e_1 e_2 e_3) E* (Pr (∪ S_1 S_2) K*_2))]
+   (mc* fn (if e_1 e_2 e_3) E* (Pr (merge-S* S*_1 S*_2) K*_2))]
 
-  [(mc* fn e_1 E* (Pr S_1 K*_1)) (∉ tt K*_1) (∈ ff K*_1) (mc* fn e_3 E* (Pr S_3 K*_3))
+  [(mc* fn e_1 E* (Pr S*_1 K*_1)) (∉ tt K*_1) (∈ ff K*_1) (mc* fn e_3 E* (Pr S*_3 K*_3))
    ---- "if ff"
-   (mc* fn (if e_1 e_2 e_3) E* (Pr (∪ S_1 S_3) K*_3))]
+   (mc* fn (if e_1 e_2 e_3) E* (Pr (merge-S* S*_1 S*_3) K*_3))]
 
-  [(mc* fn e_1 E* (Pr S_1 K*_1)) (∉ tt K*_1) (∉ ff K*_1)
+  [(mc* fn e_1 E* (Pr S*_1 K*_1)) (∉ tt K*_1) (∉ ff K*_1)
    ---- "if neither"
-   (mc* fn (if e_1 e_2 e_3) E* (Pr S_1 (set)))]
+   (mc* fn (if e_1 e_2 e_3) E* (Pr S*_1 (set)))]
 
-  [(mc* fn e_1 E* (Pr S_1 K*_1)) (∈ tt K*_1) (∈ ff K*_1)
-   (mc* fn e_2 E* (Pr S_2 K*_2)) (mc* fn e_3 E* (Pr S_3 K*_3))
+  [(mc* fn e_1 E* (Pr S*_1 K*_1)) (∈ tt K*_1) (∈ ff K*_1)
+   (mc* fn e_2 E* (Pr S*_2 K*_2)) (mc* fn e_3 E* (Pr S*_3 K*_3))
    ---- "if both"
-   (mc* fn (if e_1 e_2 e_3) E* (Pr (∪ S_1 (∪ S_2 S_3)) (∪ K*_2 K*_3)))]
+   (mc* fn (if e_1 e_2 e_3) E* (Pr (merge-S* S*_1 (merge-S* S*_2 S*_3)) (∪ K*_2 K*_3)))]
 
-  [(mc* fn e_1 E* (Pr S_1 K*_1)) (mc* fn e_2 E* (Pr S_2 K*_2))
+  [(mc* fn e_1 E* (Pr S*_1 K*_1)) (mc* fn e_2 E* (Pr S*_2 K*_2))
    ---- "op"
-   (mc* fn (op e_1 e_2) E* (Pr (∪ S_1 S_2) (op-each-pair op K*_1 K*_2)))]
+   (mc* fn (op e_1 e_2) E* (Pr (merge-S* S*_1 S*_2) (op-each-pair op K*_1 K*_2)))]
   )
 
 (module+ test
@@ -130,7 +134,7 @@
 
 (define-metafunction L
   p-to-e : p -> e
-  [(p-to-e (! s)) (! s)]
+  [(p-to-e (! s)) (! s 0)]
   [(p-to-e (? s p q)) (if s (p-to-e p) (p-to-e q))]
   [(p-to-e (s ⊃ p)) (s ⊃ (p-to-e p))]
   [(p-to-e (seq p q)) (seq (p-to-e p) (p-to-e q))]
@@ -142,13 +146,17 @@
   [(p-to-e (exit N)) (exit N)]
   [(p-to-e (p \\ s)) ((p-to-e p) \\ s)])
 
+(define-metafunction L
+  R*->R : R* -> R
+  [(R*->R (Pr S* K*)) (Pr (dom S*) K*)])
+
 (module+ test
   (require "must-can.rkt")
 
   (define (call-mc fn p)
     (judgment-holds (mc ,fn ,p (⊥E (close ,p)) R) R))
   (define (call-mc* fn p)
-    (judgment-holds (mc* ,fn (p-to-e ,p) (⊥E* (close ,p)) R*) R*))
+    (judgment-holds (mc* ,fn (p-to-e ,p) (⊥E* (close ,p)) R*) (R*->R R*)))
   (define (mc-same? fn p)
     (equal? (call-mc fn p)
             (call-mc* fn p)))

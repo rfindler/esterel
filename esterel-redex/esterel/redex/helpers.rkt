@@ -2,10 +2,12 @@
 (require redex/reduction-semantics "lang.rkt")
 (provide Max ↓
          lookup extend
-         lookup* lookup*-B⊥ extend*
+         lookup* lookup*-B⊥ lookup*-value extend*
          ∈ ∉ ∪ set- set
          ⊥E ⊥E* close
+         dom remove-from-dom
          op-each-pair
+         merge-S* update-S*
          parens)
 
 (define-metafunction L
@@ -37,6 +39,50 @@
   ⊥E* : S -> E*
   [(⊥E* ·) ·]
   [(⊥E* (s S)) (s = ⊥ new 0 (⊥E* S))])
+
+(define-metafunction L
+  dom : S* -> S
+  [(dom ·) ·]
+  [(dom (s = N S*)) (s (dom S*))])
+
+(define-metafunction L
+  merge-S* : S* S* -> S*
+  [(merge-S* · S*) S*]
+  [(merge-S* (s = N S*_1) S*_2)
+   (update-S* (merge-S* S*_1 S*_2) s N)])
+
+(define-metafunction L
+  update-S* : S* s N -> S*
+  [(update-S* S* s N)
+   (s = N S*)
+   (judgment-holds (∉ s (dom S*)))]
+  [(update-S* (s = N_1 S*) s N_2)
+   (s = ,(+ (term N_1) (term N_2)) S*)]
+  [(update-S* (s_1 = N_1 S*) s_2 N_2)
+   (s_1 = N_1 (update-S* S* s_2 N_2))])
+
+(module+ test
+  (test-equal (term (update-S* · s 0)) (term (s = 0 ·)))
+  (test-equal (term (update-S* (s = 1 ·) s 2)) (term (s = 3 ·)))
+  (test-equal (term (update-S* (s = 1 (t = 1 (u = 1 ·))) t 2))
+              (term (s = 1 (t = 3 (u = 1 ·)))))
+  (test-equal (term (update-S* (s = 1 (t = 1 ·)) u 2))
+              (term (u = 2 (s = 1 (t = 1 ·)))))
+  (test-equal (term (merge-S* (a = 1 (b = 2 ·))
+                              (c = 3 (d = 4 ·))))
+              (term (a = 1 (b = 2 (c = 3 (d = 4 ·)))))))
+
+(define-metafunction L
+  remove-from-dom : S* s -> S*
+  [(remove-from-dom · s) ·]
+  [(remove-from-dom (s = N S*) s) S*]
+  [(remove-from-dom (s_1 = N_1 S*) s_2)
+   (s_1 = N_1 (remove-from-dom S* s_2))])
+(module+ test
+  (test-equal (term (remove-from-dom (s1 = 3 (s2 = 4 (s3 = 5 ·))) s2))
+              (term (s1 = 3 (s3 = 5 ·))))
+  (test-equal (term (remove-from-dom (s1 = 3 (s2 = 4 (s3 = 5 ·))) s4))
+              (term (s1 = 3 (s2 = 4 (s3 = 5 ·))))))
 
 (define-metafunction L
   op-each-pair : op K* K* -> K*
@@ -142,6 +188,9 @@
   ∪ : set set -> set
   [(∪ · set) set]
   [(∪ (any set_1) set_2) (any (∪ set_1 (set- set_2 any)))])
+(module+ test
+  (test-equal (term (∪ (a (b ·)) (c (d ·))))
+              (term (a (b (c (d ·)))))))
 
 (define-metafunction L
   set- : set any -> set
@@ -234,6 +283,13 @@
   [(lookup* E* s (B⊥ status N))
    ------
    (lookup*-B⊥ E* s B⊥)])
+
+(define-judgment-form L
+  #:mode (lookup*-value I I O O)
+  #:contract (lookup*-value E* s status N)
+  [(lookup* E* s (B⊥ status N))
+   ------
+   (lookup*-value E* s status N)])
 
 (define-judgment-form L
   #:mode (lookup* I I O)

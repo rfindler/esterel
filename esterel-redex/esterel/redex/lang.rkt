@@ -13,7 +13,7 @@
      (p \\ s))
 
   (e ::=
-     (! s) s (? s) (s ⊃ e)
+     (! s e) s (? s) (s ⊃ e)
      (seq e e) (e *) (par e e)
      nothing pause
      (trap e) (exit N)
@@ -45,5 +45,6 @@
   (R ::= (Pr S K))
 
   (op ::= + - < =)
+  (S* ::= · (s = N S*))
   (K* ::= · (k* K*))
-  (R* ::= (Pr S K*)))
+  (R* ::= (Pr S* K*)))
