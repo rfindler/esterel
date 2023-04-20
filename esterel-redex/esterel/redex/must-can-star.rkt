@@ -13,19 +13,19 @@
    (mc* fn (! s) E* (Pr (set s) (set nothing)))]
 
   [(lookup*-B⊥ E* s tt)
-   ---- "? tt"
+   ---- "s tt"
    (mc* fn s E* (Pr (set) (set tt)))]
   
   [(lookup*-B⊥ E* s ff)
-   ---- "? ff"
+   ---- "s ff"
    (mc* fn s E* (Pr (set) (set ff)))]
 
   [(lookup*-B⊥ E* s ⊥)
-   ---- "Must ? ⊥"
+   ---- "s Must ? ⊥"
    (mc* Must s E* (Pr (set) (set)))]
 
   [(lookup*-B⊥ E* s ⊥)
-   ---- "Can ? ⊥"
+   ---- "s Can ? ⊥"
    (mc* Can s E* (Pr (set) (set tt ff)))]
 
   [(mc* fn e E* R*)
