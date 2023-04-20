@@ -43,46 +43,48 @@
 (define-metafunction L
   dom : S* -> S
   [(dom ·) ·]
-  [(dom (s = N S*)) (s (dom S*))])
+  [(dom (s = K* S*)) (s (dom S*))])
 
 (define-metafunction L
   merge-S* : S* S* -> S*
   [(merge-S* · S*) S*]
-  [(merge-S* (s = N S*_1) S*_2)
-   (update-S* (merge-S* S*_1 S*_2) s N)])
+  [(merge-S* (s = K* S*_1) S*_2)
+   (update-S* (merge-S* S*_1 S*_2) s K*)])
 
 (define-metafunction L
-  update-S* : S* s N -> S*
-  [(update-S* S* s N)
-   (s = N S*)
+  update-S* : S* s K* -> S*
+  [(update-S* S* s K*)
+   (s = K* S*)
    (judgment-holds (∉ s (dom S*)))]
-  [(update-S* (s = N_1 S*) s N_2)
-   (s = ,(+ (term N_1) (term N_2)) S*)]
-  [(update-S* (s_1 = N_1 S*) s_2 N_2)
-   (s_1 = N_1 (update-S* S* s_2 N_2))])
+  [(update-S* (s = K*_1 S*) s K*_2)
+   (s = (op-each-pair + K*_1 K*_2) S*)]
+  [(update-S* (s_1 = K*_1 S*) s_2 K*_2)
+   (s_1 = K*_1 (update-S* S* s_2 K*_2))])
 
 (module+ test
-  (test-equal (term (update-S* · s 0)) (term (s = 0 ·)))
-  (test-equal (term (update-S* (s = 1 ·) s 2)) (term (s = 3 ·)))
-  (test-equal (term (update-S* (s = 1 (t = 1 (u = 1 ·))) t 2))
-              (term (s = 1 (t = 3 (u = 1 ·)))))
-  (test-equal (term (update-S* (s = 1 (t = 1 ·)) u 2))
-              (term (u = 2 (s = 1 (t = 1 ·)))))
-  (test-equal (term (merge-S* (a = 1 (b = 2 ·))
-                              (c = 3 (d = 4 ·))))
-              (term (a = 1 (b = 2 (c = 3 (d = 4 ·)))))))
+  (test-equal (term (update-S* · s (0 ·))) (term (s = (0 ·) ·)))
+  (test-equal (term (update-S* (s = (1 ·) ·) s (2 ·))) (term (s = (3 ·) ·)))
+  (test-equal (term (update-S* (s = (1 (2 ·)) ·) s (3 ·))) (term (s = (4 (5 ·)) ·)))
+  (test-equal (term (update-S* (s = (3 ·) ·) s (1 (2 ·)))) (term (s = (4 (5 ·)) ·)))
+  (test-equal (term (update-S* (s = (1 ·) (t = (1 ·) (u = (1 ·) ·))) t (2 ·)))
+              (term (s = (1 ·) (t = (3 ·) (u = (1 ·) ·)))))
+  (test-equal (term (update-S* (s = (1 ·) (t = (1 ·) ·)) u (2 ·)))
+              (term (u = (2 ·) (s = (1 ·) (t = (1 ·) ·)))))
+  (test-equal (term (merge-S* (a = (1 ·) (b = (2 ·) ·))
+                              (c = (3 ·) (d = (4 ·) ·))))
+              (term (a = (1 ·) (b = (2 ·) (c = (3 ·) (d = (4 ·) ·)))))))
 
 (define-metafunction L
   remove-from-dom : S* s -> S*
   [(remove-from-dom · s) ·]
-  [(remove-from-dom (s = N S*) s) S*]
-  [(remove-from-dom (s_1 = N_1 S*) s_2)
-   (s_1 = N_1 (remove-from-dom S* s_2))])
+  [(remove-from-dom (s = K* S*) s) S*]
+  [(remove-from-dom (s_1 = K*_1 S*) s_2)
+   (s_1 = K*_1 (remove-from-dom S* s_2))])
 (module+ test
-  (test-equal (term (remove-from-dom (s1 = 3 (s2 = 4 (s3 = 5 ·))) s2))
-              (term (s1 = 3 (s3 = 5 ·))))
-  (test-equal (term (remove-from-dom (s1 = 3 (s2 = 4 (s3 = 5 ·))) s4))
-              (term (s1 = 3 (s2 = 4 (s3 = 5 ·))))))
+  (test-equal (term (remove-from-dom (s1 = (3 ·) (s2 = (4 ·) (s3 = (5 ·) ·))) s2))
+              (term (s1 = (3 ·) (s3 = (5 ·) ·))))
+  (test-equal (term (remove-from-dom (s1 = (3 ·) (s2 = (4 ·) (s3 = (5 ·) ·))) s4))
+              (term (s1 = (3 ·) (s2 = (4 ·) (s3 = (5 ·) ·))))))
 
 (define-metafunction L
   op-each-pair : op K* K* -> K*

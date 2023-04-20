@@ -9,8 +9,9 @@
   [---- "k"
    (mc* fn k* E* (Pr (set) (set k*)))]
 
-  [---- "!"
-   (mc* fn (! s N) E* (Pr (s = N ·) (set nothing)))]
+  [(mc* fn e E* (Pr S* K*))
+   ---- "!"
+   (mc* fn (! s e) E* (Pr (s = K* ·) (set nothing)))]
 
   [(lookup*-B⊥ E* s tt)
    ---- "s tt"
@@ -21,16 +22,24 @@
    (mc* fn s E* (Pr (set) (set ff)))]
 
   [(lookup*-B⊥ E* s ⊥)
-   ---- "s Must ? ⊥"
+   ---- "s Must ⊥"
    (mc* Must s E* (Pr (set) (set)))]
 
   [(lookup*-B⊥ E* s ⊥)
-   ---- "s Can ? ⊥"
+   ---- "s Can ⊥"
    (mc* Can s E* (Pr (set) (set tt ff)))]
 
-  [(lookup*-value E* s ready n)
-   ---- "?"
+  ;; these two rules aren't yet right---
+  ;; maybe must and can differ; also there
+  ;; is the question of how we ever get a
+  ;; signal to be ready which currently never happens
+  [(lookup*-value E* s ready N)
+   ---- "? ready"
    (mc* fn (? s) E* (Pr (set) (set n)))]
+
+  [(lookup*-value E* s new N)
+   ---- "? new"
+   (mc* fn (? s) E* (Pr (set) (set)))]
 
   [(mc* fn e E* R*)
    ---- "⊃"

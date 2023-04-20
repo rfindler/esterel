@@ -17,8 +17,10 @@ either pause, trap, or produce a value.
 S*, K*, and R* play the role of S, K and R in the original,
 but generalized in a way corresponding to the generalization
 from k to k* and a generalization of S to S* that
-accommodates holding the signals values after the given
-expression. E* is like E but in addition to having a B⊥ for
+accommodates holding a set of values for each signal
+after the given expression.
+
+E* is like E but in addition to having a B⊥ for
 each signal, it also has either ``new'' or ``ready'' each
 signal, as well as a value. We skip ``old'', instead
 imagining that each signal's value does not carry forward
