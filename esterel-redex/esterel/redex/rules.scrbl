@@ -1,5 +1,9 @@
 #lang scribble/base
-@(require "typeset.rkt" scriblib/figure)
+@(require "typeset.rkt"
+          "must-can-star.rkt"
+          scriblib/figure
+          racket/list
+          redex/reduction-semantics)
 
 @title{Must and Can in an Expression-Oriented Language}
 
@@ -46,25 +50,29 @@ Otherwise it returns Can⊥.
 @(define max-figure-height 600)
 @(define max-figure-width 400)
 @(define mandatory-breaks '())
-@(define-values (rest-of-rules1 rules1)
-   (format-rules max-figure-width max-figure-height mandatory-breaks))
-@(define-values (rest-of-rules2 rules2)
+@(define-values (signal-rules other-rules)
+   (partition (λ (x) (regexp-match? #rx"[\\]" (symbol->string x)))
+              (judgment-form->rule-names mc*)))
+@(define-values (rest-of-rules1 rules1-pict)
+   (format-rules max-figure-width max-figure-height mandatory-breaks
+                 #:rules other-rules))
+@(define-values (rest-of-rules2 rules2-pict)
    (format-rules max-figure-width max-figure-height mandatory-breaks
                  #:rules rest-of-rules1))
-@(define-values (rest-of-rules3 rules3)
+@(define-values (rest-of-signal-rules signal-rules-pict)
    (format-rules max-figure-width max-figure-height mandatory-breaks
-                 #:rules rest-of-rules2))
-@(when rest-of-rules3
-   (eprintf "rules.scrbl: more rules remain; need a third figure\n"))
+                 #:rules signal-rules))
+@(when (or rest-of-rules2 rest-of-signal-rules)
+   (eprintf "rules.scrbl: more rules remain; need more figures\n"))
 
 @figure["fig:must-can1" @list{Must and Can Rules, i}]{
- @rules1
+ @rules1-pict
 }
 
 @figure["fig:must-can2" @list{Must and Can Rules, ii}]{
- @rules2
+ @rules2-pict
 }
 
-@figure["fig:must-can3" @list{Must and Can Rules, iii}]{
- @rules3
+@figure["fig:must-can3" @list{Must and Can Rules for Signal Expressions}]{
+ @signal-rules-pict
 }
