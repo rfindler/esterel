@@ -30,7 +30,8 @@
   (k* ::= k B N)
   (B⊥ ::= B ⊥)
   (B ::= tt ff)
-  
+
+  (fn+ ::= Must Can+)
   (fn ::= Must Can)
   (Can ::= Can+ Can⊥)
   (E ::= · (s = B⊥ E))

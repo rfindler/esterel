@@ -70,33 +70,23 @@
    ---- "trap"
    (mc* fn (trap e) E* (Pr S* (↓ K*)))]
 
-  [(mc* Must e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∈ s (dom S*_⊥)) (mc* Must e (extend* E* s tt) (Pr S* K*))
-   ---- "Must\\tt"
-   (mc* Must (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
+  [(mc* Must e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∈ s (dom S*_⊥)) (mc* fn+ e (extend* E* s tt) (Pr S* K*))
+   ---- "fn+\\tt"
+   (mc* fn+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Can+ e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥)) (mc* Must e (extend* E* s ff) (Pr S* K*))
-   ---- "Must\\ff"
-   (mc* Must (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
-
-  [(mc* Must e (extend* E* s ⊥) (Pr S*_m⊥ K*_m⊥))
-   (mc* Can+ e (extend* E* s ⊥) (Pr S*_c⊥ K*_c⊥))
-   (∉ s (dom S*_m⊥)) (∈ s (dom S*_c⊥)) (mc* Must e (extend* E* s ⊥) (Pr S* K*))
-   ---- "Must\\⊥"
-   (mc* Must (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
-
-  [(mc* Must e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∈ s (dom S*_⊥)) (mc* Can+ e (extend* E* s tt) (Pr S* K*))
-   ---- "Can\\tt"
-   (mc* Can+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
-
-  [(mc* Can e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥)) (mc* Can e (extend* E* s ff) (Pr S* K*))
-   ---- "Can\\ff"
-   (mc* Can (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
+  [(mc* Can+ e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥)) (mc* fn+ e (extend* E* s ff) (Pr S* K*))
+   ---- "fn+\\ff"
+   (mc* fn+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
   [(mc* Must e (extend* E* s ⊥) (Pr S*_m⊥ K*_m⊥))
    (mc* Can+ e (extend* E* s ⊥) (Pr S*_c⊥ K*_c⊥))
-   (∉ s (dom S*_m⊥)) (∈ s (dom S*_c⊥)) (mc* Can+ e (extend* E* s ⊥) (Pr S* K*))
-   ---- "Can+\\⊥"
-   (mc* Can+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
+   (∉ s (dom S*_m⊥)) (∈ s (dom S*_c⊥)) (mc* fn+ e (extend* E* s ⊥) (Pr S* K*))
+   ---- "fn+\\⊥"
+   (mc* fn+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
+
+  [(mc* Can⊥ e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥)) (mc* Can⊥ e (extend* E* s ff) (Pr S* K*))
+   ---- "Can⊥\\ff"
+   (mc* Can⊥ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
   [(mc* Can⊥ e (extend* E* s ⊥) (Pr S* K*)) (∈ s (dom S*))
    ---- "Can⊥\\⊥"

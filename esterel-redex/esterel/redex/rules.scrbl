@@ -39,8 +39,10 @@ the conditional and can be used with @tt{if}.
 For the purpose of removing some cases, if a rule is written
 with @tt{fn}, then it is a case for Must and both variations
 of Can. If the rule is written with Can, then it applies to
-both variants of Can. Otherwise, the rule applies only to
-the specific function it names.
+both variants of Can. If a rule is written with @tt{fn+},
+then it applies to Must and Can+ (this is used only in the
+signal rules, where Can⊥ is special). Otherwise, the rule
+applies only to the specific function it names.
 
 The @tt{pickfn-seq} returns Can+ when it's first argument is
 Can+ and nothing is an element of its second argument.

@@ -77,7 +77,7 @@
 
 (define (grammar)
   (define nts
-    (remove* '(p q Can fn set K K* S E s N R)
+    (remove* '(p q Can fn fn+ set K K* S E s N R)
              (language-nts L)))
   (with-the-rewriters
       (λ () (render-language L #:nts nts))))
