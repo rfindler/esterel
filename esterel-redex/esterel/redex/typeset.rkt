@@ -20,7 +20,7 @@
 (define (set--rewrite lws)
   (list ""
         (list-ref lws 2)
-        "\\"
+        "\\ "
         (list-ref lws 3)
         ""))
 
@@ -60,6 +60,19 @@
         (list-ref lws 4)
         ""))
 
+(define (extend*-rewrite lws)
+  (list ""
+        (list-ref lws 2)
+        " + "
+        (list-ref lws 3)
+        " = ⟨"
+        (list-ref lws 4)
+        ", "
+        (list-ref lws 5)
+        ", "
+        (list-ref lws 6)
+        "⟩"))
+
 (define (lookup-rewrite lws)
   (list ""
         (list-ref lws 2)
@@ -68,6 +81,17 @@
         ") = "
         (list-ref lws 4)
         ""))
+
+(define (lookup-S*-rewrite lws)
+  (define K* (list-ref lws 4))
+  (define S (list-ref (lw-e K*) 1))
+  (list ""
+        (list-ref lws 2)
+        "("
+        (list-ref lws 3)
+        ") = {"
+        S
+        "}"))
 
 (define (rule->pict rule)
   (with-the-rewriters
@@ -81,7 +105,7 @@
              (language-nts L)))
   (with-the-rewriters
       (λ () (render-language L #:nts nts))))
-  
+
 (define (with-the-rewriters thunk)
   (with-compound-rewriters (['mc* mc-rewrite]
                             ['∈ binop-rewrite]
@@ -89,15 +113,18 @@
                             ['∪ binop-rewrite]
                             ['set set-rewrite]
                             ['set- set--rewrite]
+                            ['remove-from-dom set--rewrite]
                             ['Pr Pr-rewrite]
                             ['op-each-pair op-rewrite]
                             ['extend extend-rewrite]
-                            ['extend* extend-rewrite]
+                            ['extend* extend*-rewrite]
                             ['lookup lookup-rewrite]
                             ['lookup* lookup-rewrite]
                             ['lookup*-B⊥ lookup-rewrite]
+                            ['lookup-S* lookup-S*-rewrite]
                             ['parens parens-rewrite])
-    (thunk)))
+    (with-atomic-rewriters (['\\ "\\ "])
+      (thunk))))
 
 (define (format-rules width height mandatory-breaks
                       #:rules [rules (judgment-form->rule-names mc*)]

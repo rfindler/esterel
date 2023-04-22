@@ -35,7 +35,7 @@
   ;; signal to be ready which currently never happens
   [(lookup*-value E* s ready N)
    ---- "? ready"
-   (mc* fn (? s) E* (Pr (set) (set n)))]
+   (mc* fn (? s) E* (Pr (set) (set N)))]
 
   [(lookup*-value E* s new N)
    ---- "? new"
@@ -70,25 +70,28 @@
    ---- "trap"
    (mc* fn (trap e) E* (Pr S* (↓ K*)))]
 
-  [(mc* Must e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∈ s (dom S*_⊥)) (mc* fn+ e (extend* E* s tt) (Pr S* K*))
+  [(mc* Must e (extend* E* s ⊥ new 0) (Pr S*_⊥ K*_⊥)) (∈ s (dom S*_⊥)) (lookup-S* S*_⊥ s (N ·))
+   (mc* fn+ e (extend* E* s tt ready N) (Pr S* K*))
    ---- "fn+\\tt"
    (mc* fn+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Can+ e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥)) (mc* fn+ e (extend* E* s ff) (Pr S* K*))
+  [(mc* Can+ e (extend* E* s ⊥ new 0) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥))
+   (mc* fn+ e (extend* E* s ff new 0) (Pr S* K*))
    ---- "fn+\\ff"
    (mc* fn+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Must e (extend* E* s ⊥) (Pr S*_m⊥ K*_m⊥))
-   (mc* Can+ e (extend* E* s ⊥) (Pr S*_c⊥ K*_c⊥))
-   (∉ s (dom S*_m⊥)) (∈ s (dom S*_c⊥)) (mc* fn+ e (extend* E* s ⊥) (Pr S* K*))
+  [(mc* Must e (extend* E* s ⊥ new 0) (Pr S*_m⊥ K*_m⊥))
+   (mc* Can+ e (extend* E* s ⊥ new 0) (Pr S*_c⊥ K*_c⊥))
+   (∉ s (dom S*_m⊥)) (∈ s (dom S*_c⊥)) (mc* fn+ e (extend* E* s ⊥ new 0) (Pr S* K*))
    ---- "fn+\\⊥"
    (mc* fn+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Can⊥ e (extend* E* s ⊥) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥)) (mc* Can⊥ e (extend* E* s ff) (Pr S* K*))
+  [(mc* Can⊥ e (extend* E* s ⊥ new 0) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥))
+   (mc* Can⊥ e (extend* E* s ff new 0) (Pr S* K*))
    ---- "Can⊥\\ff"
    (mc* Can⊥ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
-  [(mc* Can⊥ e (extend* E* s ⊥) (Pr S* K*)) (∈ s (dom S*))
+  [(mc* Can⊥ e (extend* E* s ⊥ new 0) (Pr S* K*)) (∈ s (dom S*))
    ---- "Can⊥\\⊥"
    (mc* Can⊥ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
@@ -120,7 +123,7 @@
   (test-judgment-holds
    (mc* Can+
         (+ (if S 2 4) (if S 10 30))
-        (extend* · S ⊥)
+        (extend* · S ⊥ new 0)
         (Pr · (12 (32 (14 (34 ·))))))))
 
 (define-metafunction L
@@ -163,3 +166,50 @@
   (redex-check
    L (fn p) #:ad-hoc
    (mc-same? (term fn) (term p))))
+
+(module+ main
+  (require redex/gui)
+
+  (define (remove-from-derivations to-remove derivations)
+    (let loop ([derivations derivations])
+      (for/list ([a-derivation (in-list derivations)]
+                 #:unless
+                 (member (car (derivation-term a-derivation)) to-remove))
+        (derivation (derivation-term a-derivation)
+                    (derivation-name a-derivation)
+                    (loop (derivation-subs a-derivation))))))
+
+  #;
+  (show-derivations
+   (remove-from-derivations
+    '(lookup lookup*-value ∈ ∉)
+    (append
+     (build-derivations
+      (mc* Can+
+           ((seq (! S 2) (! O (? S))) \\ S)
+           (O = ⊥ new 0 ·)
+           R*))
+     (build-derivations
+      (mc* Must
+           ((seq (! S 2) (! O (? S))) \\ S)
+           (O = ⊥ new 0 ·)
+           R*)))))
+
+  (show-derivations
+   (remove-from-derivations
+    '(lookup lookup*-value ∈ ∉)
+    (append
+     (build-derivations
+      (mc* Can+
+           (((par (if (= 0 (? S1)) (! S2 1) nothing)
+                  (if (= 0 (? S2)) (! O1 0) (! O2 0)))
+             \\ S2) \\ S1)
+           (O1 = ⊥ new 0 (O2 = ⊥ new 0 ·))
+           R*))
+     (build-derivations
+      (mc* Must
+           (((par (if (= 0 (? S1)) (! S2 1) nothing)
+                  (if (= 0 (? S2)) (! O1 0) (! O2 0)))
+             \\ S2) \\ S1)
+           (O1 = ⊥ new 0 (O2 = ⊥ new 0 ·))
+           R*))))))

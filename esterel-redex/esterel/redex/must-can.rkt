@@ -151,6 +151,8 @@
   (test-judgment-holds (mc Can⊥ (seq nothing pause)  · (Pr · (pause ·))))
 
   (test-judgment-holds (mc Can+ (? I nothing pause) (I = tt (O = ⊥ ·)) (Pr · (nothing ·))))
+
+  (test-judgment-holds (mc Can+ (? J pause pause) (⊥E (J ·)) dunno))
   )
 
 (module+ main
