@@ -152,27 +152,3 @@
              (loop (cdr rules))]
             [else
              (values rules pict)])])])))
-
-(module+ main
-  (define counts '(4 3 1 1 1 3 1 1 1 1 1 1 1 2 2))
-  (define p
-    (apply
-     vc-append
-     20
-     (let loop ([counts counts]
-                [names (judgment-form->rule-names mc*)])
-       (cond
-         [(null? counts)
-          (cond
-            [(null? names) '()]
-            [else
-             (loop (cons 1 counts) names)])]
-         [else
-          (define line (car counts))
-          (cons (apply hc-append 20
-                       (for/list ([name (in-list names)]
-                                  [i (in-range (car counts))])
-                         (rule->pict name)))
-                (loop (cdr counts)
-                      (drop names (car counts))))]))))
-  (pict-width p))
