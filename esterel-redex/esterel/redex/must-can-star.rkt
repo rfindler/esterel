@@ -76,7 +76,7 @@
    (mc* fn+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
   [(mc* Can+ e (extend* E* s ⊥ new 0) (Pr S*_⊥ K*_⊥)) (∉ s (dom S*_⊥))
-   (mc* fn+ e (extend* E* s ff new 0) (Pr S* K*))
+   (mc* fn+ e (extend* E* s ff ready 0) (Pr S* K*))
    ---- "fn+\\ff"
    (mc* fn+ (e \\ s) E* (Pr (remove-from-dom S* s) K*))]
 
