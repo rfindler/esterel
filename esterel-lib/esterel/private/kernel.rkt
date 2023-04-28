@@ -677,13 +677,10 @@ value for can explorations and subsequent must evaluation.
 
   ;; emits : the signals that can be emitted (that we've learned about so far)
   ;; ordered-signals : the order tracks the bits in `signal-states` telling of the signals' state
-  ;; newly-ready : the signals that we were blocked on with `signal-value`;
-  ;;               unblock to see if there are emits past them.
   ;; signal-states : the bits tell us which signals are present/absent
   ;; starting-point : this is the continuations at the point where must mode is waiting for us
   (struct/contract can ([emits (set/c signal?)]
                         [ordered-signals (listof signal?)]
-                        [newly-ready (set/c signal?)]
                         [signal-states (and/c exact? integer?)]
                         [starting-point (λ (x) (starting-point? x))])
                    #:transparent)
@@ -706,23 +703,20 @@ value for can explorations and subsequent must evaluation.
   ;; set-can-signals! : can? -> void?
   ;; STATE: updates `signal-status` and `signal-ready` based on the choices in `a-can`
   (define (set-can-signals! a-can)
-    (match-define (can emits ordered-signals newly-ready signal-states starting-point) a-can)
+    (match-define (can emits ordered-signals signal-states starting-point) a-can)
     (set! signal-status
           (for/fold ([signal-status signal-status])
                     ([a-signal (in-list ordered-signals)]
                      [i (in-naturals)])
             (define on? (bitwise-bit-set? signal-states i))
-            (hash-set signal-status a-signal on?)))
-    (set! signal-ready (set-union newly-ready signal-ready)))
+            (hash-set signal-status a-signal on?))))
 
   ;; get-unemitted-signals : can? -> (set/c signal?)
   ;; returns the set of signals that cannot be emitted
   (define (get-unemitted-signals a-can)
-    (match-define (can emits ordered-signals newly-ready
-                       signal-states starting-point)
+    (match-define (can emits ordered-signals signal-states starting-point)
       a-can)
-    (for/set ([signal (in-set (set-union (list->set ordered-signals)
-                                         newly-ready))]
+    (for/set ([signal (in-set (list->set ordered-signals))]
               #:unless (set-member? emits signal))
       signal))
   
@@ -1132,7 +1126,7 @@ value for can explorations and subsequent must evaluation.
           before-par-trap-counter)]
         [(hash-has-key? paused-threads thread)
          (error 'build-rb-tree-from-current-state
-                "paused threads should be ignored when building the rb tree")]
+                "paused threads should be ignored when building the rb tree ~s" thread)]
         [(find-presence-waiter thread)
          =>
          (λ (signal+blocked-thread)
@@ -1326,14 +1320,24 @@ value for can explorations and subsequent must evaluation.
        (for ([(par-parent a-par-state) (in-hash parent->par-state)])
          (match-define (par-state checkpoint/result-chan presence-waiting value-waiting paused active a-trap)
            a-par-state)
-         (for ([child-thread (in-set (set-union presence-waiting value-waiting
+         (for ([child-thread (in-set (set-union presence-waiting
+                                                value-waiting
                                                 paused active))])
            (unless (equal? (hash-ref par-parents child-thread #f) par-parent)
+             (log-par-state)
              (internal-error "parents relationship lost; parent ~s child ~s" par-parent child-thread)))
+
+         (unless (set-empty? (set-intersect paused presence-waiting))
+           (log-par-state)
+           (internal-error "paused and presence-waiting have overlap"))
+         (unless (set-empty? (set-intersect active presence-waiting))
+           (log-par-state)
+           (internal-error "active and presence-waiting have overlap"))
 
          (for ([active-child-thread (in-set active)])
            (unless (or (set-member? running-threads active-child-thread)
                        (hash-has-key? parent->par-state active-child-thread))
+             (log-par-state)
              (internal-error "par ~s has active child ~s that isn't in a parent nor in running-threads"
                              par-parent active-child-thread))))
        ""))
@@ -1342,7 +1346,7 @@ value for can explorations and subsequent must evaluation.
 
       ;; the instant is over
       [(and (= 0 (hash-count presence-waiters))
-            (= 0 (hash-count value-waiters))
+            ;(= 0 (hash-count value-waiters))
             (set-empty? running-threads)
             instant-complete-chan)
        (log-esterel-debug "~a: ~a"
@@ -1374,11 +1378,6 @@ value for can explorations and subsequent must evaluation.
                       (for/fold ([signal-status signal-status])
                                 ([a-signal (in-set unemitted-signals)])
                         (hash-set signal-status a-signal #f)))
-                (set! signal-ready (set-union
-                                    signal-ready
-                                    (for/set ([a-signal (in-set unemitted-signals)]
-                                              #:when (signal-combine a-signal))
-                                      a-signal)))
                 (define unemitted-signal-list (set->list unemitted-signals))
                 (unblock-presence-threads unemitted-signal-list)
                 (unblock-value-threads unemitted-signal-list)
@@ -1510,7 +1509,11 @@ value for can explorations and subsequent must evaluation.
        (define ordered-signals
          (for/list ([(a-signal blocked-threads) (in-hash presence-waiters)])
            a-signal))
-       (define newly-ready (list->set (hash-keys value-waiters)))
+       (when (set-empty? ordered-signals)
+         (eprintf "ack! ~s\n" value-waiters)
+         (eprintf "vals ~s\n" signal-value)
+         (printf "mode ~s\n" mode)
+         (error))
        (cond
          [(can? mode)
           ;; it might be possible to do something more efficient here but when we
@@ -1518,14 +1521,12 @@ value for can explorations and subsequent must evaluation.
           ;; add some signals into the can and start everything over again
           (set! mode (can (set)
                           (append ordered-signals (can-ordered-signals mode))
-                          (set-union newly-ready (can-newly-ready mode))
                           0
                           (can-starting-point mode)))]
          [else
           (save-must-state)
           (set! mode (can (set)
                           ordered-signals
-                          newly-ready
                           0
                           (get-starting-point)))])
        (rollback! (can-starting-point mode))
@@ -1655,10 +1656,9 @@ value for can explorations and subsequent must evaluation.
                         ((signal-combine a-signal) (hash-ref signal-value a-signal) a-value)
                         a-value))
                   (set! signal-value (hash-set signal-value a-signal new-value))
-                  (when (set-member? signal-ready a-signal)
-                    (internal-error "emission of a ready signal\n  signal: ~s\n  value: ~e"
-                                    a-signal
-                                    a-value))))
+
+                  ;; as soon as we have a value, the signal is ready
+                  (set! signal-ready (set-add signal-ready a-signal))))
               (match (hash-ref signal-status a-signal 'unknown)
                 ['unknown
                  ;; the signal's not dead, so send back a message that doesn't trigger
@@ -1678,12 +1678,8 @@ value for can explorations and subsequent must evaluation.
                        (define new-par-state
                          (struct-copy
                           par-state old-par-state
-                          [presence-waiting (if value-provided?
-                                                (par-state-presence-waiting old-par-state)
-                                                (set-remove (par-state-presence-waiting old-par-state) thread))]
-                          [value-waiting (if value-provided?
-                                             (set-remove (par-state-value-waiting old-par-state) thread)
-                                             (par-state-value-waiting old-par-state))]
+                          [presence-waiting (set-remove (par-state-presence-waiting old-par-state) thread)]
+                          [value-waiting (set-remove (par-state-value-waiting old-par-state) thread)]
                           [active (set-add (par-state-active old-par-state) thread)]))
                        (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
                      (add-running-thread thread))
