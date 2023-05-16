@@ -203,3 +203,21 @@ exited, Can should be able to know that the signal is not
 going to be emitted. To ensure that that deduction that Can
 makes is legal, @racket[emit] raises an error instead of
 emitting the signal.
+
+@section{Onwards from Here}
+
+The documentation for the @racketmodname[esterel/kernel]
+library contains a reference-style manual description for
+the primitives from Kernel Esterel. Each blue box gives an
+overview of a construct and is followed by a technical
+description of how it behaves. In each case, the examples
+will run in a file that starts with @codeblock{ #lang racket
+ (require esterel/kernel) }
+
+The documentation for the @racketmodname[esterel/full] is
+similar, but it reexports everything from
+@racketmodname[esterel/kernel] as well as adding in some of
+the constructs from full Esterel.
+
+See also @other-doc['(lib "scribblings/guide/guide.scrbl")]
+for an overview of Racket.
