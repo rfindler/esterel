@@ -11,6 +11,9 @@
 
 @title{Esterel in Racket, for Racket Programmers}
 
+@margin-note{If you are familiar with Esterel but not
+ Racket, start by reading @seclink["sec:eir-esterel"] instead
+ of this section.}
 Esterel is a synchronous reactive programming language that
 dates to 1983. It has imperative features combined with
 parallelism and the ability to abort already-running

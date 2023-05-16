@@ -6,7 +6,7 @@
 @(define esterel-eval (make-base-eval '(require esterel/full)))
 @(define-syntax-rule (ex expr ...) (examples #:eval esterel-eval #:label #f expr ...))
 
-@title{Esterel in Racket, for Esterel Programmers}
+@title[#:tag "sec:eir-esterel"]{Esterel in Racket, for Esterel Programmers}
 
 The primary design goal for Esterel in Racket is to
 faithfully implement the semantics of Kernel Esterel
