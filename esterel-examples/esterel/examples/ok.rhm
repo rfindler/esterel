@@ -43,7 +43,7 @@ end module
 
 // this tests to make sure that we get
 // the right results in `N` iterations
-submodule main:
+module main:
   def N = 100
   for:
     each i: 0..N
