@@ -26,6 +26,6 @@ jobs:
         with:
           version: 'current'
       - name: Install Esterel
-        run: raco pkg install --auto $GITHUB_WORKSPACE/esterel/ $GITHUB_WORKSPACE/esterel-doc/ $GITHUB_WORKSPACE/esterel-examples/ $GITHUB_WORKSPACE/esterel-lib/ $GITHUB_WORKSPACE/esterel-rhombus-lib/ $GITHUB_WORKSPACE/esterel-test/
+        run: raco pkg install --auto $GITHUB_WORKSPACE/esterel/ $GITHUB_WORKSPACE/esterel-doc/ $GITHUB_WORKSPACE/esterel-examples/ $GITHUB_WORKSPACE/esterel-lib/ $GITHUB_WORKSPACE/esterel-rhombus-lib/ $GITHUB_WORKSPACE/esterel-test/ $GITHUB_WORKSPACE/esterel-redex/
       - name: Test Esterel
         run: xvfb-run -a raco test -p esterel-lib esterel-rhombus-lib esterel-test esterel-doc esterel-examples esterel-redex
