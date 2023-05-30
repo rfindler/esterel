@@ -29,18 +29,6 @@
    ---- "s Can ⊥"
    (mc* Can s E* (Pr (set) (set tt ff)))]
 
-  ;; these two rules aren't yet right---
-  ;; maybe must and can differ; also there
-  ;; is the question of how we ever get a
-  ;; signal to be ready which currently never happens
-  [(lookup*-value E* s ready N)
-   ---- "? ready"
-   (mc* fn (? s) E* (Pr (set) (set N)))]
-
-  [(lookup*-value E* s new N)
-   ---- "? new"
-   (mc* fn (? s) E* (Pr (set) (set)))]
-
   [(mc* fn e E* R*)
    ---- "⊃"
    (mc* fn (s ⊃ e) E* R*)]
@@ -179,37 +167,13 @@
                     (derivation-name a-derivation)
                     (loop (derivation-subs a-derivation))))))
 
-  #;
   (show-derivations
    (remove-from-derivations
     '(lookup lookup*-value ∈ ∉)
-    (append
-     (build-derivations
-      (mc* Can+
-           ((seq (! S 2) (! O (? S))) \\ S)
-           (O = ⊥ new 0 ·)
-           R*))
-     (build-derivations
-      (mc* Must
-           ((seq (! S 2) (! O (? S))) \\ S)
-           (O = ⊥ new 0 ·)
-           R*)))))
-
-  (show-derivations
-   (remove-from-derivations
-    '(lookup lookup*-value ∈ ∉)
-    (append
-     (build-derivations
-      (mc* Can+
-           (((par (if (= 0 (? S1)) (! S2 1) nothing)
-                  (if (= 0 (? S2)) (! O1 0) (! O2 0)))
-             \\ S2) \\ S1)
-           (O1 = ⊥ new 0 (O2 = ⊥ new 0 ·))
-           R*))
-     (build-derivations
-      (mc* Must
-           (((par (if (= 0 (? S1)) (! S2 1) nothing)
-                  (if (= 0 (? S2)) (! O1 0) (! O2 0)))
-             \\ S2) \\ S1)
-           (O1 = ⊥ new 0 (O2 = ⊥ new 0 ·))
-           R*))))))
+    (build-derivations
+     (mc* Can+
+          (((par (if S1 (! S2) nothing)
+                 (if S2 nothing nothing))
+            \\ S2) \\ S1)
+          (O1 = ⊥ new 0 (O2 = ⊥ new 0 ·))
+          R*)))))

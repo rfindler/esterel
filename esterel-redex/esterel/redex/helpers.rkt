@@ -1,14 +1,14 @@
 #lang racket
 (require redex/reduction-semantics "lang.rkt")
-(provide Max ↓
-         lookup extend
+(provide Max ↓ ↓k
+         lookup extend remove
          lookup* lookup*-B⊥ lookup*-value extend*
          ∈ ∉ ∪ set- set
          ⊥E ⊥E* close
          dom remove-from-dom
          op-each-pair
          merge-S* update-S* lookup-S*
-         parens)
+         parens ≠)
 
 (define-metafunction L
   close : p -> S
@@ -304,6 +304,11 @@
   [(extend · s B⊥) (s = B⊥ ·)]
   [(extend (s_1 = B⊥_1 E) s_1 B⊥_2) (s_1 = B⊥_2 E)]
   [(extend (s_1 = B⊥_1 E) s_2 B⊥_2) (s_1 = B⊥_1 (extend E s_2 B⊥_2))])
+
+(define-metafunction L
+  remove : E s -> E
+  ;; does this need other cases, to recur inside? Not sure
+  [(remove (s_1 = B⊥_1 E) s_1) E])
 
 (module+ test
   (test-judgment-holds (lookup (extend (extend (extend · s3 ⊥) s2 ff) s1 tt) s1 tt))
