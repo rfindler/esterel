@@ -1,6 +1,6 @@
 #lang racket
 (require redex/reduction-semantics "lang.rkt")
-(provide Max ↓ ↓k
+(provide Max ↓ ↓k Max-kk
          lookup extend remove
          lookup* lookup*-B⊥ lookup*-value extend*
          ∈ ∉ ∪ set- set
@@ -196,14 +196,14 @@
 (define-metafunction L
   ↓ : K -> K
   [(↓ ·) ·]
-  [(↓ (k K)) (∪ (↓k k) (↓ K))])
+  [(↓ (k K)) (∪ ((↓k k) ·) (↓ K))])
 
 (define-metafunction L
-  ↓k : k -> K
-  [(↓k nothing) (nothing ·)]
-  [(↓k (exit 0)) (nothing ·)]
-  [(↓k pause) (pause ·)]
-  [(↓k (exit N)) ((exit ,(- (term N) 1)) ·)])
+  ↓k : k -> k
+  [(↓k nothing) nothing]
+  [(↓k (exit 0)) nothing]
+  [(↓k pause) pause]
+  [(↓k (exit N)) (exit ,(- (term N) 1))])
 
 (module+ test
   (test-equal (term (↓ ((exit 11) ((exit 12) ((exit 15) ·)))))
@@ -307,8 +307,9 @@
 
 (define-metafunction L
   remove : E s -> E
-  ;; does this need other cases, to recur inside? Not sure
-  [(remove (s_1 = B⊥_1 E) s_1) E])
+  [(remove · s_1) ·]
+  [(remove (s_1 = B⊥_1 E) s_1) E]
+  [(remove (s_1 = B⊥_1 E) s_2) (s_1 = B⊥_1 (remove E s_2))])
 
 (module+ test
   (test-judgment-holds (lookup (extend (extend (extend · s3 ⊥) s2 ff) s1 tt) s1 tt))
