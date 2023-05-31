@@ -1,5 +1,5 @@
 #lang racket
-(require "must-can-star.rkt" "lang.rkt"
+(require "must-can-hat.rkt" "lang.rkt"
          redex pict)
 (provide format-rules grammar)
 
@@ -97,17 +97,17 @@
   (with-the-rewriters
       (λ ()
         (parameterize ([judgment-form-cases (list rule)])
-          (render-judgment-form mc*)))))
+          (render-judgment-form mc^)))))
 
 (define (grammar)
   (define nts
-    (remove* '(p q Can fn fn+ set K K* S E s N R)
+    (remove* '(p q Can fn fn+ set K K* S E F s N R)
              (language-nts L)))
   (with-the-rewriters
       (λ () (render-language L #:nts nts))))
 
 (define (with-the-rewriters thunk)
-  (with-compound-rewriters (['mc* mc-rewrite]
+  (with-compound-rewriters (['mc^ mc-rewrite]
                             ['∈ binop-rewrite]
                             ['∉ binop-rewrite]
                             ['∪ binop-rewrite]
@@ -127,7 +127,7 @@
       (thunk))))
 
 (define (format-rules width height mandatory-breaks
-                      #:rules [rules (judgment-form->rule-names mc*)]
+                      #:rules [rules (judgment-form->rule-names mc^)]
                       #:horizontal-gap [horizontal-gap 40]
                       #:vertical-gap [vertical-gap 20])
   (define line (blank))

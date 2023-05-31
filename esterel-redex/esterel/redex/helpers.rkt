@@ -2,12 +2,9 @@
 (require redex/reduction-semantics "lang.rkt")
 (provide Max ↓ ↓k Max-kk
          lookup extend remove
-         lookup* lookup*-B⊥ lookup*-value extend*
          ∈ ∉ ∪ set- set
-         ⊥E ⊥E* close
-         dom remove-from-dom
+         ⊥E close
          op-each-pair
-         merge-S* update-S* lookup-S*
          parens ≠)
 
 (define-metafunction L
@@ -36,103 +33,19 @@
   [(⊥E (s S)) (s = ⊥ (⊥E S))])
 
 (define-metafunction L
-  ⊥E* : S -> E*
-  [(⊥E* ·) ·]
-  [(⊥E* (s S)) (s = ⊥ new 0 (⊥E* S))])
+  op-each-pair : op K^ K^ -> K^
+  [(op-each-pair op · K^) ·]
+  [(op-each-pair op (k^ K^_1) K^_2)
+   (∪ (op-each op k^ K^_2) (op-each-pair op K^_1 K^_2))])
 
 (define-metafunction L
-  dom : S* -> S
-  [(dom ·) ·]
-  [(dom (s = K* S*)) (s (dom S*))])
+  op-each : op k^ K^ -> K^
+  [(op-each op k^ ·) ·]
+  [(op-each op k^_1 (k^_2 K^))
+   (∪ (set (δ op k^_1 k^_2)) (op-each op k^_1 K^))])
 
 (define-metafunction L
-  merge-S* : S* S* -> S*
-  [(merge-S* · S*) S*]
-  [(merge-S* (s = K* S*_1) S*_2)
-   (update-S* (merge-S* S*_1 S*_2) s K*)])
-
-(define-metafunction L
-  update-S* : S* s K* -> S*
-  [(update-S* S* s K*)
-   (s = K* S*)
-   (judgment-holds (∉ s (dom S*)))]
-  [(update-S* (s = K*_1 S*) s K*_2)
-   (s = (op-each-pair + K*_1 K*_2) S*)]
-  [(update-S* (s_1 = K*_1 S*) s_2 K*_2)
-   (s_1 = K*_1 (update-S* S* s_2 K*_2))])
-
-(module+ test
-  (test-equal (term (update-S* · s (0 ·))) (term (s = (0 ·) ·)))
-  (test-equal (term (update-S* (s = (1 ·) ·) s (2 ·))) (term (s = (3 ·) ·)))
-  (test-equal (term (update-S* (s = (1 (2 ·)) ·) s (3 ·))) (term (s = (4 (5 ·)) ·)))
-  (test-equal (term (update-S* (s = (3 ·) ·) s (1 (2 ·)))) (term (s = (4 (5 ·)) ·)))
-  (test-equal (term (update-S* (s = (1 ·) (t = (1 ·) (u = (1 ·) ·))) t (2 ·)))
-              (term (s = (1 ·) (t = (3 ·) (u = (1 ·) ·)))))
-  (test-equal (term (update-S* (s = (1 ·) (t = (1 ·) ·)) u (2 ·)))
-              (term (u = (2 ·) (s = (1 ·) (t = (1 ·) ·)))))
-  (test-equal (term (merge-S* (a = (1 ·) (b = (2 ·) ·))
-                              (c = (3 ·) (d = (4 ·) ·))))
-              (term (a = (1 ·) (b = (2 ·) (c = (3 ·) (d = (4 ·) ·)))))))
-
-(define-judgment-form L
-  #:mode (lookup-S* I I O)
-  #:contract (lookup-S* S* s K*)
-  [-------------
-   (lookup-S* (s = K* S*) s K*)]
-  
-  [(where #true (≠ s_1 s_2))
-   (lookup-S* S* s_1 K*)
-   ------
-   (lookup-S* (s_2 = K*_2 S*) s_1 K*)])
-
-(module+ test
-  (test-judgment-holds (lookup-S* (update-S* · s (0 ·)) s (0 ·)))
-  (test-judgment-holds (lookup-S* (update-S* (s = (1 ·) ·) s (2 ·)) s (3 ·)))
-  (test-judgment-holds (lookup-S* (merge-S* (a = (1 ·) (b = (2 ·) ·))
-                                            (c = (3 ·) (d = (4 ·) ·)))
-                                  a
-                                  (1 ·)))
-  (test-judgment-holds (lookup-S* (s = (4 (5 ·)) ·) s (4 (5 ·))))
-  (test-judgment-holds (lookup-S* (merge-S* (a = (1 ·) (b = (2 ·) ·))
-                                            (c = (3 ·) (d = (4 ·) ·)))
-                                  b
-                                  (2 ·)))
-  (test-judgment-holds (lookup-S* (merge-S* (a = (1 ·) (b = (2 ·) ·))
-                                            (c = (3 ·) (d = (4 ·) ·)))
-                                  c
-                                  (3 ·)))
-  (test-judgment-holds (lookup-S* (merge-S* (a = (1 ·) (b = (2 ·) ·))
-                                            (c = (3 ·) (d = (4 ·) ·)))
-                                  d
-                                  (4 ·))))
-
-
-(define-metafunction L
-  remove-from-dom : S* s -> S*
-  [(remove-from-dom · s) ·]
-  [(remove-from-dom (s = K* S*) s) S*]
-  [(remove-from-dom (s_1 = K*_1 S*) s_2)
-   (s_1 = K*_1 (remove-from-dom S* s_2))])
-(module+ test
-  (test-equal (term (remove-from-dom (s1 = (3 ·) (s2 = (4 ·) (s3 = (5 ·) ·))) s2))
-              (term (s1 = (3 ·) (s3 = (5 ·) ·))))
-  (test-equal (term (remove-from-dom (s1 = (3 ·) (s2 = (4 ·) (s3 = (5 ·) ·))) s4))
-              (term (s1 = (3 ·) (s2 = (4 ·) (s3 = (5 ·) ·))))))
-
-(define-metafunction L
-  op-each-pair : op K* K* -> K*
-  [(op-each-pair op · K*) ·]
-  [(op-each-pair op (k* K*_1) K*_2)
-   (∪ (op-each op k* K*_2) (op-each-pair op K*_1 K*_2))])
-
-(define-metafunction L
-  op-each : op k* K* -> K*
-  [(op-each op k* ·) ·]
-  [(op-each op k*_1 (k*_2 K*))
-   (∪ (set (δ op k*_1 k*_2)) (op-each op k*_1 K*))])
-
-(define-metafunction L
-  δ : op k* k* -> k*
+  δ : op k^ k^ -> k^
   [(δ + N_1 N_2) ,(+ (term N_1) (term N_2))]
   [(δ - N_1 N_2) ,(- (term N_1) (term N_2))]
   [(δ < N_1 N_2) ,(if (< (term N_1) (term N_2)) (term tt) (term ff))]
@@ -153,29 +66,29 @@
               (term (set 3 4 2 1))))
 
 (define-metafunction L
-  Max : K* K* -> K*
+  Max : K^ K^ -> K^
   [(Max · K) ·]
   [(Max (k K_1) K_2)
    (∪ (Max-kK k K_2)
       (Max K_1 K_2))])
 
 (define-metafunction L
-  Max-kK : k* K* -> K*
-  [(Max-kK k* ·) ·]
-  [(Max-kK k*_1 (k*_2 K*)) (∪ (Max-kK k*_1 K*) ((Max-kk k*_1 k*_2) ·))])
+  Max-kK : k^ K^ -> K^
+  [(Max-kK k^ ·) ·]
+  [(Max-kK k^_1 (k^_2 K^)) (∪ (Max-kK k^_1 K^) ((Max-kk k^_1 k^_2) ·))])
 
 (define-metafunction L
-  Max-kk : k* k* -> k*
+  Max-kk : k^ k^ -> k^
   [(Max-kk (exit N_1) (exit N_2)) (exit ,(max (term N_1) (term N_2)))]
-  [(Max-kk (exit N) k*) (exit N)]
-  [(Max-kk k* (exit N)) (exit N)]
-  [(Max-kk k* pause) pause]
-  [(Max-kk pause k*) pause]
+  [(Max-kk (exit N) k^) (exit N)]
+  [(Max-kk k^ (exit N)) (exit N)]
+  [(Max-kk k^ pause) pause]
+  [(Max-kk pause k^) pause]
 
   ;; just declare that `par` discards the results of
   ;; the branches and always returns `nothing`
-  [(Max-kk nothing k*) nothing]
-  [(Max-kk k* nothing) nothing])
+  [(Max-kk nothing k^) nothing]
+  [(Max-kk k^ nothing) nothing])
 
 (module+ test
   (test-equal (term (Max-kk pause pause)) (term pause))
@@ -317,55 +230,6 @@
   (test-judgment-holds (lookup (extend (extend (extend · s3 ⊥) s2 ff) s1 tt) s3 ⊥))
   (test-equal (term (extend (extend · s1 ff) s1 tt))
               (term (s1 = tt ·))))
-
-(define-judgment-form L
-  #:mode (lookup*-B⊥ I I O)
-  #:contract (lookup*-B⊥ E* s B⊥)
-  [(lookup* E* s (B⊥ status N))
-   ------
-   (lookup*-B⊥ E* s B⊥)])
-
-(define-judgment-form L
-  #:mode (lookup*-value I I O O)
-  #:contract (lookup*-value E* s status N)
-  [(lookup* E* s (B⊥ status N))
-   ------
-   (lookup*-value E* s status N)])
-
-(define-judgment-form L
-  #:mode (lookup* I I O)
-  #:contract (lookup* E* s (B⊥ status N))
-  [-------------
-   (lookup* (s = B⊥ status N E*) s (B⊥ status N))]
-
-  [(where #true (≠ s_1 s_2))
-   (lookup* E* s_1 (B⊥_1 status_1 N_1))
-   ------
-   (lookup* (s_2 = B⊥_2 status N E*) s_1 (B⊥_1 status_1 N_1))])
-
-(define-metafunction L
-  extend* : E* s B⊥ status N -> E*
-  [(extend* · s B⊥ status N) (s = B⊥ status N ·)]
-  [(extend* (s_1 = B⊥_1 status_1 N_1 E*) s_1 B⊥_2 status_2 N_2)
-   (s_1 = B⊥_2 status_2 N_2 E*)]
-  [(extend* (s_1 = B⊥_1 status_1 N_1 E*) s_2 B⊥_2 status_2 N_2)
-   (s_1 = B⊥_1 status_1 N_1 (extend* E* s_2 B⊥_2 status_2 N_2))])
-
-(module+ test
-  (test-judgment-holds
-   (lookup* (extend* (extend* (extend* · s3 ⊥ new 0) s2 ff new 0) s1 tt new 0) s1 (tt new 0)))
-  (test-judgment-holds
-   (lookup* (extend* (extend* (extend* · s3 ⊥ new 0) s2 ff new 0) s1 tt new 0) s2 (ff new 0)))
-  (test-judgment-holds
-   (lookup* (extend* (extend* (extend* · s3 ⊥ new 0) s2 ff new 0) s1 tt new 0) s3 (⊥ new 0)))
-  (test-equal (term (extend* (extend* · s1 ff new 0) s1 tt new 0))
-              (term (s1 = tt new 0 ·)))
-  (test-judgment-holds
-   (lookup* (extend* (extend* (extend* · s3 ⊥ ready 2) s2 ff new 3) s1 tt ready 4) s1 (tt ready 4)))
-  (test-judgment-holds
-   (lookup* (extend* (extend* (extend* · s3 ⊥ ready 2) s2 ff new 3) s1 tt ready 4) s2 (ff new 3)))
-  (test-judgment-holds
-   (lookup* (extend* (extend* (extend* · s3 ⊥ ready 2) s2 ff new 3) s1 tt ready 4) s3 (⊥ ready 2))))
 
 (define-metafunction L
   parens : any -> any

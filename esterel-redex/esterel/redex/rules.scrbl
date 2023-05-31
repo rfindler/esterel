@@ -1,6 +1,6 @@
 #lang scribble/base
 @(require "typeset.rkt"
-          "must-can-star.rkt"
+          "must-can-hat.rkt"
           scriblib/figure
           racket/list
           redex/reduction-semantics)
@@ -18,22 +18,9 @@ generalized to k* by treating nothing as the unit value and
 adding in other values. Thus, an expression can produce
 either pause, trap, or produce a value.
 
-S*, K*, and R* play the role of S, K and R in the original,
-but generalized in a way corresponding to the generalization
-from k to k* and a generalization of S to S* that
-accommodates holding a set of values for each signal after
-the given expression. For each binding in each of the given
-S*'s, the merge-S* function combines all of the elements of
-the K* pairwise, using + (much like the Max combination when
-computing the exit status of a parallel composition).
-
-E* is like E but in addition to having a B⊥ for
-each signal, it also has either ``new'' or ``ready'' each
-signal, as well as a value. We skip ``old'', instead
-imagining that each signal's value does not carry forward
-from instant to instant and is initialized to 0 with + as
-the combining operation (so the first emission will
-effectively ignore the 0 anyway).
+K^ and R^ play the role of S and R in the original, but
+generalized in a way corresponding to the generalization
+from k to k*.
 
 The @tt{?} operator is changed from a conditional to an
 operation that returns a boolean, which is decoupled from
@@ -51,13 +38,12 @@ The @tt{pickfn-seq} returns Can+ when it's first argument is
 Can+ and nothing is an element of its second argument.
 Otherwise it returns Can⊥.
 
-
 @(define max-figure-height 600)
 @(define max-figure-width 400)
 @(define mandatory-breaks '())
 @(define-values (signal-rules other-rules)
    (partition (λ (x) (regexp-match? #rx"[\\]" (symbol->string x)))
-              (judgment-form->rule-names mc*)))
+              (judgment-form->rule-names mc^)))
 @(define-values (rest-of-rules1 rules1-pict)
    (format-rules max-figure-width max-figure-height mandatory-breaks
                  #:rules other-rules))
