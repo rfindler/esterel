@@ -1,5 +1,6 @@
 #lang racket
 (require "must-can-hat.rkt" "must-can.rkt"
+         "red.rkt" "red-hat.rkt"
          "lang.rkt" "helpers.rkt"
          redex/reduction-semantics)
 
@@ -24,7 +25,17 @@
 (define (mc-same? fn p)
   (equal? (call-mc fn p)
           (call-mc^ fn p)))
-  
+
+(define (red p B)
+  (judgment-holds (---> ,p E k (S->E ,B (close ,p)) q) (E k (p-to-e q))))
+(define (red^ p B)
+  (judgment-holds (-->^ (p-to-e ,p) E k (S->E ,B (close ,p)) e) (E k e)))
+
 (redex-check
  L (fn p) #:ad-hoc
  (mc-same? (term fn) (term p)))
+
+(redex-check
+ L (p B) #:ad-hoc
+ (equal? (red (term p) (term B))
+         (red^ (term p) (term B))))

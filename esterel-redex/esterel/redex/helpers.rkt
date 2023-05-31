@@ -3,7 +3,7 @@
 (provide Max ↓ ↓k Max-kk
          lookup extend remove
          ∈ ∉ ∪ set- set
-         ⊥E close
+         ⊥E S->E close
          op-each-pair
          parens ≠)
 
@@ -31,6 +31,11 @@
   ⊥E : S -> E
   [(⊥E ·) ·]
   [(⊥E (s S)) (s = ⊥ (⊥E S))])
+
+(define-metafunction L
+  S->E : B S -> E
+  [(S->E B ·) ·]
+  [(S->E B (s S)) (s = B (S->E B S))])
 
 (define-metafunction L
   op-each-pair : op K^ K^ -> K^
