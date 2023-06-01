@@ -4,7 +4,7 @@
          lookup extend remove
          ∈ ∉ ∪ set- set
          ⊥E S->E close
-         op-each-pair
+         op-each-pair δ
          parens ≠)
 
 (define-metafunction L
@@ -51,6 +51,11 @@
 
 (define-metafunction L
   δ : op k^ k^ -> k^
+  [(δ op (exit N_1) (exit N_2)) (exit ,(max (term N_1) (term N_2)))]
+  [(δ op pause (exit N)) (exit N)]
+  [(δ op (exit N) pause) (exit N)]
+  [(δ op pause k^) pause]
+  [(δ op k^ pause) pause]
   [(δ + N_1 N_2) ,(+ (term N_1) (term N_2))]
   [(δ - N_1 N_2) ,(- (term N_1) (term N_2))]
   [(δ < N_1 N_2) ,(if (< (term N_1) (term N_2)) (term tt) (term ff))]

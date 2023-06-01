@@ -14,8 +14,14 @@
   ;; a set of signals instead
   #:contract (-->^ e S k E e)
 
-  [--------------- "compl"
+  [---------------------- "compl"
    (-->^ k · k E nothing)]
+
+  [---------------------- "complN"
+   (-->^ N · nothing E N)]
+
+  [---------------------- "complB"
+   (-->^ B · nothing E B)]
 
   [-------------------------------------------- "emit"
    (-->^ (! s) (s ·) nothing E nothing)]
@@ -60,7 +66,6 @@
    ----------------------------------------------------- "parallel"
    (-->^ (par e_1 e_2) (∪ S_1 S_2) (Max-kk k l) E (par e_1′ e_2′))]
 
-
   [(-->^ e S_′ k E e_′) (∈ k (set nothing (exit 0)))
    ------------------------------------------------ "trap1"
    (-->^ (trap e) S_′ nothing E nothing)]
@@ -69,25 +74,36 @@
    ------------------------------------------------ "trap2"
    (-->^ (trap e) S_′ (↓k k) E (trap e_′))]
 
-  [(mc^ Must e (extend E s ⊥) (Pr S K)) (∈ s S) (-->^ e S_′ k (extend E s tt) e_′)
-   ----------------------------------------------------------------------------- "csig+"
+  [(mc^ Must e (extend E s ⊥) (Pr S K^)) (∈ s S) (-->^ e S_′ k (extend E s tt) e_′)
+   -------------------------------------------------------------------------------- "csig+"
    (-->^ (e \\ s) (set- S_′ s) k E (e_′ \\ s))]
 
-  [(mc^ Can+ e (extend E s ⊥) (Pr S K)) (∉ s S) (-->^ e S_′ k (extend E s ff) e_′)
-   ----------------------------------------------------------------------------- "csig-"
-   (-->^ (e \\ s) (set- S_′ s) k E (e_′ \\ s))])
+  [(mc^ Can+ e (extend E s ⊥) (Pr S K^)) (∉ s S) (-->^ e S_′ k (extend E s ff) e_′)
+   ------------------------------------------------------------------------------- "csig-"
+   (-->^ (e \\ s) (set- S_′ s) k E (e_′ \\ s))]
+
+  [(-->^ e_1 S_1 nothing E k^_1) (-->^ e_2 S_2 nothing E k^_2)
+   ------------------------------------------------------------- "op"
+   (-->^ (op e_1 e_2) (∪ S_1 S_2) nothing E (δ op k^_1 k^_2))]
+
+  [(-->^ e_1 S_1 k E e_1′) (where #t (≠ k nothing))
+   ------------------------------------------------ "opl-non-nothing"
+   (-->^ (op e_1 e_2) S_1 k E (op e_1′ e_2))]
+
+  [(-->^ e_1 S_1 nothing E k^) (-->^ e_2 S_2 k E e_2′) (where #t (≠ k nothing))
+   ---------------------------------------------------------------------------- "opr-non-nothing"
+   (-->^ (op e_1 e_2) (∪ S_1 S_2) k E (op k^ e_2′))]
+  )
 
 
 (module+ test
-  #;
+  (test-judgment-holds (-->^ (+ 1 2) · nothing · 3))
   (test-judgment-holds (-->^ ((+ 3 (if s 1 2)) \\ s)
                              · nothing ·
-                             (nothing \\ s)))
-  #;
+                             (5 \\ s)))
   (test-judgment-holds (-->^ ((+ (seq pause 3) (if s 1 2)) \\ s)
-                             · nothing ·
+                             · pause ·
                              ((+ (seq nothing 3) (if s 1 2)) \\ s)))
-  #;
   (test-judgment-holds (-->^ ((+ (if s 1 2) (seq pause 3)) \\ s)
-                             · nothing ·
-                             ((+ (if s 1 2) (seq nothing 3)) \\ s))))
+                             · pause ·
+                             ((+ 2 (seq nothing 3)) \\ s))))

@@ -111,7 +111,9 @@
    (mc^ Can+
         (+ (if S 2 4) (if S 10 30))
         (extend · S ⊥)
-        (Pr · (12 (32 (14 (34 ·))))))))
+        (Pr · (12 (32 (14 (34 ·)))))))
+  (test-judgment-holds
+   (mc^ Can+ (+ (seq pause 3) 4) · (Pr · (pause ·)))))
 
 (define-metafunction L
   pickfn-seq : Can set -> Can
