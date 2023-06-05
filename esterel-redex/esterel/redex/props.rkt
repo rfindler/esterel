@@ -2,6 +2,7 @@
 (require "must-can-hat.rkt" "must-can.rkt"
          "red.rkt" "red-hat.rkt"
          "lang.rkt" "helpers.rkt"
+         "eval.rkt"
          redex/reduction-semantics)
 
 (define-metafunction L
@@ -39,3 +40,14 @@
  L (p B) #:ad-hoc
  (equal? (red (term p) (term B))
          (red^ (term p) (term B))))
+
+#;
+;; this currently fails because an
+;; instantaneous infinite loop is generated
+(redex-check
+ L
+ e
+ (begin
+   (printf "~s\n" (term e))
+   (equal? (judgment-holds (eval e · E) E)
+           (judgment-holds (eval& e · E) E))))

@@ -1,6 +1,10 @@
 #lang racket
 (require redex/reduction-semantics
-         "helpers.rkt" "lang.rkt" "must-can-hat.rkt")
+         "helpers.rkt" "lang.rkt"
+         "must-can-hat.rkt"
+         "red-and.rkt")
+
+(provide eval eval&)
 
 (define-judgment-form L
   #:mode (eval I I O)
@@ -42,3 +46,11 @@
    (eval ((if s (! O1) (! s)) \\ s)
          ·
          nonconstructive)))
+
+(define-judgment-form L
+  #:mode (eval& I I O)
+  #:contract (eval& e E E+nc)
+
+  [(-->&* e_1 E_in e_2 E_out)
+   ---------------------
+   (eval& e_1 E_in E_out)])
