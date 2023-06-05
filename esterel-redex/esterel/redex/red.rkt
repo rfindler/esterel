@@ -62,11 +62,11 @@
 
   [(mc Must p (extend E s ⊥) (Pr S K)) (∈ s S) (---> p S_′ k (extend E s tt) p_′)
    ----------------------------------------------------------------------------- "csig+"
-   (---> (p \\ s) (set- S_′ s) k E (p_′ \\ s))]
+   (---> (p \\ s) (set- S_′ (set s)) k E (p_′ \\ s))]
 
   [(mc Can+ p (extend E s ⊥) (Pr S K)) (∉ s S) (---> p S_′ k (extend E s ff) p_′)
    ----------------------------------------------------------------------------- "csig-"
-   (---> (p \\ s) (set- S_′ s) k E (p_′ \\ s))])
+   (---> (p \\ s) (set- S_′ (set s)) k E (p_′ \\ s))])
 
 (module+ test
   (test-judgment-holds (---> pause E pause · nothing))

@@ -19,17 +19,17 @@
   [(p-to-e (p \\ s)) ((p-to-e p) \\ s)])
 
 (define (call-mc fn p)
-  (judgment-holds (mc ,fn ,p (⊥E (close ,p)) R) R))
+  (judgment-holds (mc ,fn ,p (⊥E (fv-p ,p)) R) R))
 (define (call-mc^ fn p)
-  (judgment-holds (mc^ ,fn (p-to-e ,p) (⊥E (close ,p)) R^) R^))
+  (judgment-holds (mc^ ,fn (p-to-e ,p) (⊥E (fv-p ,p)) R^) R^))
 (define (mc-same? fn p)
   (equal? (call-mc fn p)
           (call-mc^ fn p)))
 
 (define (red p B)
-  (judgment-holds (---> ,p E k (S->E ,B (close ,p)) q) (E k (p-to-e q))))
+  (judgment-holds (---> ,p E k (S->E ,B (fv-p ,p)) q) (E k (p-to-e q))))
 (define (red^ p B)
-  (judgment-holds (-->^ (p-to-e ,p) E k (S->E ,B (close ,p)) e) (E k e)))
+  (judgment-holds (-->^ (p-to-e ,p) E k (S->E ,B (fv-p ,p)) e) (E k e)))
 
 (redex-check
  L (fn p) #:ad-hoc

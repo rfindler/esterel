@@ -38,12 +38,12 @@
 
   [(mc^ Must e_1 E (Pr S_1 K^_1)) (∈ nothing K^_1) (mc^ Must e_2 E (Pr S_2 K^_2))
    ---- "Must ; 0 ∈ p"
-   (mc^ Must (seq e_1 e_2) E (Pr (∪ S_1 S_2) (∪ (parens (set- K^_1 nothing)) K^_2)))]
+   (mc^ Must (seq e_1 e_2) E (Pr (∪ S_1 S_2) (∪ (parens (set- K^_1 (set nothing))) K^_2)))]
 
   [(mc^ Can e_1 E (Pr S_1 K^_1)) (∈ nothing K^_1) (mc^ Must e_2 E (Pr S_mustp K^_must1))
    (where fn_2 (pickfn-seq Can K^_must1)) (mc^ fn_2 e_2 E (Pr S_2 K^_2))
    ---- "Can ; 0 ∈ p"
-   (mc^ Can (seq e_1 e_2) E (Pr (∪ S_1 S_2) (∪ (set- K^_1 nothing) K^_2)))]
+   (mc^ Can (seq e_1 e_2) E (Pr (∪ S_1 S_2) (∪ (set- K^_1 (set nothing)) K^_2)))]
 
   [(mc^ fn e E R^)
    ---- "*"
@@ -60,27 +60,27 @@
   [(mc^ Must e (extend E s ⊥) (Pr S_⊥ K^_⊥)) (∈ s S_⊥)
    (mc^ fn+ e (extend E s tt) (Pr S K^))
    ---- "fn+\\tt"
-   (mc^ fn+ (e \\ s) E (Pr (set- S s) K^))]
+   (mc^ fn+ (e \\ s) E (Pr (set- S (set s)) K^))]
 
   [(mc^ Can+ e (extend E s ⊥) (Pr S_⊥ K^_⊥)) (∉ s S_⊥)
    (mc^ fn+ e (extend E s ff) (Pr S K^))
    ---- "fn+\\ff"
-   (mc^ fn+ (e \\ s) E (Pr (set- S s) K^))]
+   (mc^ fn+ (e \\ s) E (Pr (set- S (set s)) K^))]
 
   [(mc^ Must e (extend E s ⊥) (Pr S_m⊥ K^_m⊥))
    (mc^ Can+ e (extend E s ⊥) (Pr S_c⊥ K^_c⊥))
-   (∉ s S_m⊥) (∈ s S_c⊥) (mc^ fn+ e (extend^ E^ s ⊥) (Pr S K^))
+   (∉ s S_m⊥) (∈ s S_c⊥) (mc^ fn+ e (extend E s ⊥) (Pr S K^))
    ---- "fn+\\⊥"
-   (mc^ fn+ (e \\ s) E (Pr (set- S s) K^))]
+   (mc^ fn+ (e \\ s) E (Pr (set- S (set s)) K^))]
 
   [(mc^ Can⊥ e (extend E s ⊥) (Pr S_⊥ K^_⊥)) (∉ s S_⊥)
    (mc^ Can⊥ e (extend E s ff) (Pr S K^))
    ---- "Can⊥\\ff"
-   (mc^ Can⊥ (e \\ s) E (Pr (set- S s) K^))]
+   (mc^ Can⊥ (e \\ s) E (Pr (set- S (set s)) K^))]
 
   [(mc^ Can⊥ e (extend E s ⊥) (Pr S K^)) (∈ s S)
    ---- "Can⊥\\⊥"
-   (mc^ Can⊥ (e \\ s) E (Pr (set- S s) K^))]
+   (mc^ Can⊥ (e \\ s) E (Pr (set- S (set s)) K^))]
 
   [(mc^ fn e_1 E (Pr S_1 K^_1)) (∈ tt K^_1) (∉ ff K^_1) (mc^ fn e_2 E (Pr S_2 K^_2))
    ---- "if tt"

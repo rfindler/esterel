@@ -25,6 +25,7 @@
 
   (N ::= natural)
   (k l ::= nothing pause (exit N))
+  (k& l& ::= k (blocked S))
   (s ::= variable-not-otherwise-mentioned)
 
   (k^ ::= k B N)
@@ -42,4 +43,19 @@
 
   (op ::= + - < =)
   (K^ ::= · (k^ K^))
-  (R^ ::= (Pr S K^)))
+  (R^ ::= (Pr S K^))
+
+  (E+nc ::= E nonconstructive)
+  
+  (EC ::=
+      hole
+      (s ⊃ EC)
+      (seq EC e)
+      (par EC e)
+      (par e EC)
+      (trap EC)
+      (if EC e e)
+      (op EC e)
+      (op v EC))
+  (v ::= nothing B N (par v v))
+  )

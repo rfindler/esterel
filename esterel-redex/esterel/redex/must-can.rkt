@@ -47,7 +47,7 @@
    ---- "Must ; nothing ∈ p"
    (mc Must (seq p q) E
        (Pr (∪ S_p S_q)
-           (∪ (set- K_p nothing) K_q)))]
+           (∪ (set- K_p (set nothing)) K_q)))]
 
   [(mc Can p E (Pr S_p K_p))
    (∈ nothing K_p)
@@ -57,7 +57,7 @@
    ---- "Can ; nothing ∈ p"
    (mc Can (seq p q) E
        (Pr (∪ S_p S_q)
-           (∪ (set- K_p nothing) K_q)))]
+           (∪ (set- K_p (set nothing)) K_q)))]
 
   [(mc fn p E R)
    ---- "*"
@@ -78,13 +78,13 @@
    (∈ s S_⊥)
    (mc Must p (extend E s tt) (Pr S K))
    ---- "Must\\tt"
-   (mc Must (p \\ s) E (Pr (set- S s) K))]
+   (mc Must (p \\ s) E (Pr (set- S (set s)) K))]
 
   [(mc Can+ p (extend E s ⊥) (Pr S_⊥ K_⊥))
    (∉ s S_⊥)
    (mc Must p (extend E s ff) (Pr S K))
    ---- "Must\\ff"
-   (mc Must (p \\ s) E (Pr (set- S s) K))]
+   (mc Must (p \\ s) E (Pr (set- S (set s)) K))]
 
   [(mc Must p (extend E s ⊥) (Pr S_m⊥ K_m⊥))
    (mc Can+ p (extend E s ⊥) (Pr S_c⊥ K_c⊥))
@@ -92,19 +92,19 @@
    (∈ s S_c⊥)
    (mc Must p (extend E s ⊥) (Pr S K))
    ---- "Must\\⊥"
-   (mc Must (p \\ s) E (Pr (set- S s) K))]
+   (mc Must (p \\ s) E (Pr (set- S (set s)) K))]
 
   [(mc Must p (extend E s ⊥) (Pr S_⊥ K_⊥))
    (∈ s S_⊥)
    (mc Can+ p (extend E s tt) (Pr S K))
    ---- "Can\\tt"
-   (mc Can+ (p \\ s) E (Pr (set- S s) K))]
+   (mc Can+ (p \\ s) E (Pr (set- S (set s)) K))]
 
   [(mc Can p (extend E s ⊥) (Pr S_⊥ K_⊥))
    (∉ s S_⊥)
    (mc Can p (extend E s ff) (Pr S K))
    ---- "Can\\ff"
-   (mc Can (p \\ s) E (Pr (set- S s) K))]
+   (mc Can (p \\ s) E (Pr (set- S (set s)) K))]
 
   [(mc Must p (extend E s ⊥) (Pr S_m⊥ K_m⊥))
    (mc Can+ p (extend E s ⊥) (Pr S_c⊥ K_c⊥))
@@ -112,12 +112,12 @@
    (∈ s S_c⊥)
    (mc Can+ p (extend E s ⊥) (Pr S K))
    ---- "Can+\\⊥"
-   (mc Can+ (p \\ s) E (Pr (set- S s) K))]
+   (mc Can+ (p \\ s) E (Pr (set- S (set s)) K))]
 
   [(mc Can⊥ p (extend E s ⊥) (Pr S K))
    (∈ s S)
    ---- "Can⊥\\⊥"
-   (mc Can⊥ (p \\ s) E (Pr (set- S s) K))]
+   (mc Can⊥ (p \\ s) E (Pr (set- S (set s)) K))]
   )
 
 

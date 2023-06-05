@@ -1,30 +1,52 @@
 #lang racket
 (require redex/reduction-semantics "lang.rkt")
-(provide Max ↓ ↓k Max-kk
-         lookup extend remove
-         ∈ ∉ ∪ set- set
-         ⊥E S->E close
+(provide Max ↓ ↓k Max-kk Max-k&k&
+         lookup extend extend-S
+         remove dom
+         ∈ ∉ ∪ set- set set= set≠
+         ⊥E S->E fv-p fv-e
          op-each-pair δ
          parens ≠)
 
 (define-metafunction L
-  close : p -> S
-  [(close (! s)) (s ·)]
-  [(close (? s p q)) (∪ (s ·) (∪ (close p) (close q)))]
-  [(close (s ⊃ p)) (∪ (s ·) (close p))]
-  [(close (seq p q)) (∪ (close p) (close q))]
-  [(close (p *)) (close p)]
-  [(close (par p q)) (∪ (close p) (close q))]
-  [(close (trap p)) (close p)]
-  [(close nothing) ·]
-  [(close pause) ·]
-  [(close (exit N)) ·]
-  [(close (p \\ s)) (set- (close p) s)])
+  fv-p : p -> S
+  [(fv-p (! s)) (s ·)]
+  [(fv-p (? s p q)) (∪ (s ·) (∪ (fv-p p) (fv-p q)))]
+  [(fv-p (s ⊃ p)) (∪ (s ·) (fv-p p))]
+  [(fv-p (seq p q)) (∪ (fv-p p) (fv-p q))]
+  [(fv-p (p *)) (fv-p p)]
+  [(fv-p (par p q)) (∪ (fv-p p) (fv-p q))]
+  [(fv-p (trap p)) (fv-p p)]
+  [(fv-p nothing) ·]
+  [(fv-p pause) ·]
+  [(fv-p (exit N)) ·]
+  [(fv-p (p \\ s)) (set- (fv-p p) (set s))])
 
 (module+ test
-  (test-equal (term (close (? s (! t) (trap (w ⊃ ((! z) *))))))
+  (test-equal (term (fv-p (? s (! t) (trap (w ⊃ ((! z) *))))))
               (term (s (t (w (z ·))))))
-  (test-equal (term (close ((! t) \\ t)))
+  (test-equal (term (fv-p ((! t) \\ t)))
+              (term ·)))
+
+(define-metafunction L
+  fv-e : e -> S
+  [(fv-e (! s)) (s ·)]
+  [(fv-e s) (s ·)]
+  [(fv-e (if e_1 e_2 e_3)) (∪ (fv-e e_1) (∪ (fv-e e_2) (fv-e e_3)))]
+  [(fv-e (s ⊃ e)) (∪ (s ·) (fv-e e))]
+  [(fv-e (seq e_1 e_2)) (∪ (fv-e e_1) (fv-e e_2))]
+  [(fv-e (e *)) (fv-e e)]
+  [(fv-e (par e_1 e_2)) (∪ (fv-e e_1) (fv-e e_2))]
+  [(fv-e (trap e)) (fv-e e)]
+  [(fv-e nothing) ·]
+  [(fv-e pause) ·]
+  [(fv-e (exit N)) ·]
+  [(fv-e (e \\ s)) (set- (fv-e e) (set s))])
+
+(module+ test
+  (test-equal (term (fv-e (if s (! t) (trap (w ⊃ ((! z) *))))))
+              (term (s (t (w (z ·))))))
+  (test-equal (term (fv-e ((! t) \\ t)))
               (term ·)))
 
 (define-metafunction L
@@ -100,6 +122,13 @@
   [(Max-kk nothing k^) nothing]
   [(Max-kk k^ nothing) nothing])
 
+(define-metafunction L
+  Max-k&k& : k& k& -> k&
+  [(Max-k&k& (blocked S_1) (blocked S_2)) (blocked (∪ S_1 S_2))]
+  [(Max-k&k& (blocked S) k^) (blocked S)]
+  [(Max-k&k& k^ (blocked S)) (blocked S)]
+  [(Max-k&k& k^_1 k^_2) (Max-kk k^_1 k^_2)])
+
 (module+ test
   (test-equal (term (Max-kk pause pause)) (term pause))
   (test-equal (term (Max · ·)) (term ·))
@@ -145,16 +174,63 @@
 (define-metafunction L
   ∪ : set set -> set
   [(∪ · set) set]
-  [(∪ (any set_1) set_2) (any (∪ set_1 (set- set_2 any)))])
+  [(∪ (any set_1) set_2) (any (∪ set_1 (set-1 set_2 any)))])
 (module+ test
   (test-equal (term (∪ (a (b ·)) (c (d ·))))
               (term (a (b (c (d ·)))))))
 
 (define-metafunction L
-  set- : set any -> set
-  [(set- · any) ·]
-  [(set- (any set) any) set]
-  [(set- (any_1 set) any_2) (any_1 (set- set any_2))])
+  set-1 : set any -> set
+  [(set-1 · any) ·]
+  [(set-1 (any set) any) set]
+  [(set-1 (any_1 set) any_2) (any_1 (set-1 set any_2))])
+
+(define-metafunction L
+  set- : set set -> set
+  [(set- set ·) set]
+  [(set- set_1 (any set_2)) (set- (set-1 set_1 any) set_2)])
+
+(define-judgment-form L
+  #:mode (set= I I)
+  #:contract (set= S S)
+  [(where #t (subset S_1 S_2))
+   (where #t (subset S_2 S_1))
+   --------------
+   (set= S_1 S_2)])
+
+(module+ test
+  (test-equal (judgment-holds (set= (a (b (c ·))) (a (d (b (c (e ·))))))) #f)
+  (test-judgment-holds (set= (a (b (c ·))) (c (b (a ·))))))
+
+(define-metafunction L
+  subset : S S -> boolean
+  [(subset · S) #t]
+  [(subset (s S_1) S_2)
+   (subset S_1 S_2)
+   (where #t (∈ s S_2))]
+  [(subset S_1 S_2) #f])
+
+(module+ test
+  (test-equal (term (subset (a (b (c ·))) (a (d (b (c (e ·))))))) #t)
+  (test-equal (term (subset (a (d (b (c (e ·))))) (a (b (c ·))))) #f))
+
+(define-judgment-form L
+  #:mode (set≠ I I)
+  #:contract (set≠ S S)
+  [(where #f (subset S_1 S_2))
+   --------------
+   (set≠ S_1 S_2)]
+
+  [(where #f (subset S_2 S_1))
+   --------------
+   (set≠ S_1 S_2)])
+
+(module+ test
+  (test-equal (judgment-holds (set≠ · ·)) #f)
+  (test-equal (judgment-holds (set≠ (a (b (c ·))) (c (b (a ·))))) #f)
+  (test-equal (judgment-holds (set≠ (a (b (c ·))) (a (b (c ·))))) #f)
+  (test-judgment-holds (set≠ (a (b (c ·))) (a (b (c (d ·))))))
+  (test-judgment-holds (set≠ (a (b (c (d ·)))) (a (b (c ·))))))
 
 (define-judgment-form L
   #:mode (∈ I I)
@@ -196,10 +272,11 @@
   (test-equal (judgment-holds (∉ 3 (2 (3 ·)))) #false))
 
 (module+ test
-  (test-equal (term (set- · 1)) (term ·))
-  (test-equal (term (set- (1 ·) 1)) (term ·))
-  (test-equal (term (set- (2 (1 ·)) 1)) (term (2 ·)))
-  (test-equal (term (set- (1 (2 ·)) 1)) (term (2 ·)))
+  (test-equal (term (set- · (1 ·))) (term ·))
+  (test-equal (term (set- (1 ·) (1 ·))) (term ·))
+  (test-equal (term (set- (2 (1 ·)) (1 ·))) (term (2 ·)))
+  (test-equal (term (set- (1 (2 ·)) (1 ·))) (term (2 ·)))
+  (test-equal (term (set- (1 (2 (3 ·))) (2 (1 ·)))) (term (3 ·)))
   (test-equal (term (∪ · ·)) (term ·))
   (test-equal (term (∪ (1 ·) ·)) (term (1 ·)))
   (test-equal (term (∪ · (1 ·))) (term (1 ·)))
@@ -229,6 +306,11 @@
   [(extend (s_1 = B⊥_1 E) s_2 B⊥_2) (s_1 = B⊥_1 (extend E s_2 B⊥_2))])
 
 (define-metafunction L
+  extend-S : E S B⊥ -> E
+  [(extend-S E · B⊥) E]
+  [(extend-S E (s_1 S) B⊥) (extend-S (extend E s_1 B⊥) S B⊥)])
+
+(define-metafunction L
   remove : E s -> E
   [(remove · s_1) ·]
   [(remove (s_1 = B⊥_1 E) s_1) E]
@@ -239,7 +321,19 @@
   (test-judgment-holds (lookup (extend (extend (extend · s3 ⊥) s2 ff) s1 tt) s2 ff))
   (test-judgment-holds (lookup (extend (extend (extend · s3 ⊥) s2 ff) s1 tt) s3 ⊥))
   (test-equal (term (extend (extend · s1 ff) s1 tt))
-              (term (s1 = tt ·))))
+              (term (s1 = tt ·)))
+  (test-judgment-holds (lookup (extend-S (extend · s3 ⊥) (s2 (s1 ·)) tt) s2 tt))
+  (test-judgment-holds (lookup (extend-S (extend · s3 ⊥) (s2 (s1 ·)) ff) s1 ff))
+  (test-judgment-holds (lookup (extend-S (extend · s3 ⊥) (s2 (s1 ·)) ff) s3 ⊥)))
+
+(define-metafunction L
+  dom : E -> S
+  [(dom ·) ·]
+  [(dom (s = B⊥ E)) (∪ (set s) (dom E))])
+
+(module+ test
+  (test-equal (term (dom (extend-S (extend · s3 ⊥) (s2 (s1 ·)) tt)))
+              (term (s3 (s2 (s1 ·))))))
 
 (define-metafunction L
   parens : any -> any
