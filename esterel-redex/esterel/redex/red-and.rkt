@@ -6,51 +6,90 @@
 (provide -->& -->&*)
 
 (define-judgment-form L
-  #:mode (-->& I I O O)
-  #:contract (-->& e E e E)
+  #:mode (-->&* I I I O O O)
+  #:contract (-->&* e E S⊥ e E S⊥)
 
-  [------------------------------------------- "emit"
-   (-->& (in-hole EC (! s)) E
-         (in-hole EC nothing) (extend E s tt))]
+  [(done e)
+   --------------- "refl"
+   (-->&* e E S⊥ e E S⊥)]
+
+  [(-->& e_1 E_1 S⊥_1 e_2 E_2 S⊥_2) (-->&* e_2 E_2 S⊥_2 e_3 E_3 S⊥_3)
+   ------------------------------------------------------------------ "step"
+   (-->&* e_1 E_1 S⊥_1 e_3 E_3 S⊥_3)])
+
+(define-judgment-form L
+  #:mode (-->& I I I O O O)
+  #:contract (-->& e E S⊥ e E S⊥)
+
+  [--------------------------------------------- "emit+"
+   (-->& (in-hole EC (! s)) E ⊥
+         (in-hole EC nothing) (extend E s tt) ⊥)]
+
+  [------------------------------------------- "emitS"
+   (-->& (in-hole EC (! s)) E S
+         (in-hole EC nothing) E (∪ S (set s)))]
 
   [(lookup E s B)
-   ----------------------- "signal"
-   (-->& (in-hole EC s) E
-         (in-hole EC B) E)]
+   --------------------------- "signal"
+   (-->& (in-hole EC s) E S⊥
+         (in-hole EC B) E S⊥)]
 
-  [---------------------------- "suspend done"
-   (-->& (in-hole EC (s ⊃ v)) E
-         (in-hole EC v) E)]
+  [------------------------------- "suspend done"
+   (-->& (in-hole EC (s ⊃ v)) E S⊥
+         (in-hole EC v) E S⊥)]
 
-  [------------------------------ "seq"
-   (-->& (in-hole EC (seq v e)) E
-         (in-hole EC e) E)]
+  [--------------------------------- "seq"
+   (-->& (in-hole EC (seq v e)) E S⊥
+         (in-hole EC e) E S⊥)]
 
-  [----------------------------------- "*"
-   (-->& (in-hole EC (e *)) E
-         (in-hole EC (seq e (e *))) E)]
+  [------------------------------------- "*"
+   (-->& (in-hole EC (e *)) E S⊥
+         (in-hole EC (seq e (e *))) E S⊥)]
 
   [(no-trap-context EC_2)
-   ----------------------------------------------------- "exit"
-   (-->& (in-hole EC_1 (trap (in-hole EC_2 (exit N)))) E
-         (in-hole EC_1 (↓k (exit N))) E)]
+   -------------------------------------------------------- "exit"
+   (-->& (in-hole EC_1 (trap (in-hole EC_2 (exit N)))) E S⊥
+         (in-hole EC_1 (↓k (exit N))) E S⊥)]
 
-  [------------------------------- "trap done"
-   (-->& (in-hole EC_1 (trap v)) E
-         (in-hole EC_1 v) E)]
+  [---------------------------------- "trap done"
+   (-->& (in-hole EC_1 (trap v)) E S⊥
+         (in-hole EC_1 v) E S⊥)]
 
 
-  [------------------------------------ "if-tt"
-   (-->& (in-hole EC (if tt e_1 e_2)) E
-         (in-hole EC e_1) E)]
+  [--------------------------------------- "if-tt"
+   (-->& (in-hole EC (if tt e_1 e_2)) E S⊥
+         (in-hole EC e_1) E S⊥)]
 
-  [------------------------------------ "if-f"
-   (-->& (in-hole EC (if ff e_1 e_2)) E
-         (in-hole EC e_2) E)]
+  [--------------------------------------- "if-f"
+   (-->& (in-hole EC (if ff e_1 e_2)) E S⊥
+         (in-hole EC e_2) E S⊥)]
 
-  [------------------------------------ "op"
-   (-->& (in-hole EC (op v_1 v_2)) E
-         (in-hole EC (δ op v_1 v_2)) E)])
+  [-------------------------------------- "op"
+   (-->& (in-hole EC (op v_1 v_2)) E S⊥
+         (in-hole EC (δ op v_1 v_2)) E S⊥)]
+
+  [(blocked e_1 E_1 S_1)
+   (where #t (≠ S_1 ·))
+   (emits e_1 E_1 S_1 S_2)
+   (where #t (≠ S_2 ·)) ;; empty => nonconstructive
+   --------------------------------------------- "can"
+   ;; this rule doesn't seem general enough as we
+   ;; might encounter a nested blocked configuration
+   (-->& e_1 E_1 ⊥
+         e_1 (extend-S E_1 S_2 ff) ⊥)])
+
+(define-judgment-form L
+  #:contract (emits e E S S)
+  #:mode (emits I I I O)
+
+  [(emits e (extend E s tt) S_1 S_tt)
+   (emits e (extend E s ff) S_1 S_ff)
+   --------------------------------- "fork"
+   (emits e E (s S_1) (∪ S_tt S_ff))]
+
+  [(-->&* e_1 E_1 · e_2 E_2 S)
+   ------------------------------------ "run"
+   (emits e_1 E_1 · (set- (dom E_1) S))])
 
 (define-judgment-form L
   #:contract (blocked e E S)
@@ -78,18 +117,6 @@
   [(blocked e E S) (where #t (≠ S ·))
    ---------------------------------- "trap"
    (blocked (trap e) E S)])
-  
-(define-judgment-form L
-  #:mode (-->&* I I O O)
-  #:contract (-->&* e E e E)
-
-  [(done e)
-   --------------- "refl"
-   (-->&* e E e E)]
-
-  [(-->& e_1 E_1 e_2 E_2) (-->&* e_2 E_2 e_3 E_3)
-   ---------------------------------------------- "step"
-   (-->&* e_1 E_1 e_3 E_3)])
 
 (define-judgment-form L
   #:contract (done e)
@@ -146,23 +173,49 @@
   (test-judgment-holds
    (-->&* (if (< 1 2) (! O1) (! O2))
           ·
+          ⊥
           nothing
-          (O1 = tt ·)))
+          (O1 = tt ·)
+          ⊥))
 
   (test-judgment-holds
    (-->&* (seq (trap (+ 2 (trap (if (exit 1) (! O1) (! O2))))) 3)
           ·
-          3
-          ·))
+          ⊥
+          3 · ⊥))
 
   (test-judgment-holds
    (-->&* (+ (trap (+ 2 3)) 4)
-          ·
-          9
-          ·))
+          · ⊥
+          9 · ⊥))
 
   (test-judgment-holds
    (-->&* (pause *)
-          ·
+          · ⊥
           (seq pause (pause *))
-          ·)))
+          · ⊥))
+
+  (test-judgment-holds
+   (blocked (if s1 (! O1) (! O2)) (extend · s1 ⊥) (s1 ·)))
+
+  (test-judgment-holds
+   (emits (if s1 (! O1) (! O2))
+          (extend · s1 ⊥)
+          (s1 ·)
+          (s1 ·)))
+
+  (test-judgment-holds
+   (-->& (if s1 (! O1) (! O2))
+         (extend · s1 ⊥)
+         ⊥
+         (if s1 (! O1) (! O2))
+         (s1 = ff ·)
+         ⊥))
+
+  (test-judgment-holds
+   (-->&* (if s1 (! O1) (! O2))
+          (extend · s1 ⊥)
+          ⊥
+          nothing
+          (s1 = ff (O2 = tt ·))
+          ⊥)))

@@ -44,6 +44,8 @@
 #;
 ;; this currently fails because an
 ;; instantaneous infinite loop is generated
+;; -- consider if loop safety (6.6, page 69 in constructive semantics book)
+;;    would be a good fix for this here
 (redex-check
  L
  e

@@ -58,4 +58,5 @@
       (op EC e)
       (op v EC))
   (v ::= nothing B N (par v v))
+  (S⊥ ::= ⊥ S)
   )
