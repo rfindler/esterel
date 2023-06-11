@@ -54,3 +54,26 @@
   [(-->&* e_1 E_in ⊥ e_2 E_out ⊥)
    ------------------------------
    (eval& e_1 E_in E_out)])
+
+(module+ test
+
+  ;; this test case is kind of suspect,
+  ;; because I'm "guessing" that the fresh
+  ;; name is `s1` but maybe s1 shouldn't
+  ;; even be in there at all
+  (test-judgment-holds
+   (eval& ((if s (! O1) (! O2)) \\ s)
+          ·
+          (s1 = ff (O2 = tt ·))))
+
+  #;
+  (test-judgment-holds
+   (eval ((if s (! s) (! O2)) \\ s)
+         ·
+         nonconstructive))
+
+  #;
+  (test-judgment-holds
+   (eval ((if s (! O1) (! s)) \\ s)
+         ·
+         nonconstructive)))

@@ -68,6 +68,11 @@
    (-->& (in-hole EC (op v_1 v_2)) E S⊥
          (in-hole EC (δ op v_1 v_2)) E S⊥)]
 
+  [(where s_2 ,(variable-not-in (term (EC e E)) (term s_1)))
+   -------------------------------------------------------- "\\"
+   (-->& (in-hole EC (e \\ s_1)) E S⊥
+         (in-hole EC (rename e s_1 s_2)) (extend E s_2 ⊥) S⊥)]
+
   [(blocked e_1 E_1 S_1)
    (where #t (≠ S_1 ·))
    (emits e_1 E_1 S_1 S_2)
@@ -78,14 +83,53 @@
    (-->& e_1 E_1 ⊥
          e_1 (extend-S E_1 S_2 ff) ⊥)])
 
+(define-metafunction L
+  rename : e s s -> e
+  [(rename (! s_1) s_1 s_2) (! s_2)]
+  [(rename (! s_3) s_1 s_2) (! s_3)]
+  [(rename s_1 s_1 s_2) s_2]
+  [(rename s_3 s_1 s_2) s_3]
+  [(rename (s_1 ⊃ e) s_1 s_2) (s_2 ⊃ e)]
+  [(rename (s_3 ⊃ e) s_1 s_2) (s_3 ⊃ e)]
+  [(rename (seq e_1 e_2) s_1 s_2)
+   (seq (rename e_1 s_1 s_2)
+        (rename e_2 s_1 s_2))]
+  [(rename (e *) s_1 s_2) ((rename e s_1 s_2) *)]
+  [(rename (par e_1 e_2) s_1 s_2)
+   (par (rename e_1 s_1 s_2)
+        (rename e_2 s_1 s_2))]
+  [(rename nothing s_1 s_2) nothing]
+  [(rename pause s_1 s_2) pause]
+  [(rename (trap e) s_1 s_2) (trap (rename e s_1 s_2))]
+  [(rename (exit N) s_1 s_2) (exit N)]
+  [(rename (e \\ s_1) s_1 s_2) (e \\ s_1)]
+  [(rename (e \\ s_3) s_1 s_2) ((rename e s_1 s_2) \\ s_3)]
+  [(rename (if e_1 e_2 e_3) s_1 s_2)
+   (if (rename e_1 s_1 s_2)
+       (rename e_2 s_1 s_2)
+       (rename e_3 s_1 s_2))]
+  [(rename B s_1 s_2) B]
+  [(rename N s_1 s_2) N]
+  [(rename (op e_1 e_2) s_1 s_2)
+   (op (rename e_1 s_1 s_2)
+       (rename e_2 s_1 s_2))])
+(module+ test
+  (test-equal (term (rename (seq (par (! x) x)
+                                 (+ (x \\ x)
+                                    (x \\ y)))
+                            x z))
+              (term (seq (par (! z) z)
+                         (+ (x \\ x)
+                            (z \\ y))))))
+
 (define-judgment-form L
   #:contract (emits e E S S)
   #:mode (emits I I I O)
 
-  [(emits e (extend E s tt) S_1 S_tt)
-   (emits e (extend E s ff) S_1 S_ff)
-   --------------------------------- "fork"
-   (emits e E (s S_1) (∪ S_tt S_ff))]
+  [(emits e (extend E s tt) S_1 S_s=tt)
+   (emits e (extend E s ff) S_1 S_s=ff)
+   ------------------------------------- "fork"
+   (emits e E (s S_1) (∪ S_s=tt S_s=ff))]
 
   [(-->&* e_1 E_1 · e_2 E_2 S)
    ------------------------------------ "run"
@@ -218,4 +262,11 @@
           ⊥
           nothing
           (s1 = ff (O2 = tt ·))
-          ⊥)))
+          ⊥))
+
+  (test-judgment-holds
+   (emits (par (if s1 (! s1) (! O1))
+               (if s2 (! O2) (! s1)))
+          (s2 = ⊥ (s1 = ⊥ ·))
+          (s2 (s1 ·))
+          S)))
