@@ -46,10 +46,20 @@
    (-->& (in-hole EC (e *)) E S⊥
          (in-hole EC (seq e (e *))) E S⊥)]
 
-  [(no-trap-context EC_2)
+  [(no-trap/par-context EC_2)
    -------------------------------------------------------- "exit"
    (-->& (in-hole EC_1 (trap (in-hole EC_2 (exit N)))) E S⊥
          (in-hole EC_1 (↓k (exit N))) E S⊥)]
+
+  [(no-trap/par-context EC_2) (no-trap/par-context EC_3)
+   --------------------------------------------------------------------------- "parexitL"
+   (-->& (in-hole EC_1 (par (in-hole EC_2 (exit N)) (in-hole EC_3 pe_3))) E S⊥
+         (in-hole EC_1 (Max-kk (exit N) pe_3)) E S⊥)]
+
+  [(no-trap/par-context EC_2) (no-trap/par-context EC_3)
+   --------------------------------------------------------------------------- "parexitR"
+   (-->& (in-hole EC_1 (par (in-hole EC_2 pe_2) (in-hole EC_3 (exit N)))) E S⊥
+         (in-hole EC_1 (Max-kk pe_2 (exit N))) E S⊥)]
 
   [---------------------------------- "trap done"
    (-->& (in-hole EC_1 (trap v)) E S⊥
@@ -186,32 +196,26 @@
    (done (seq e_1 e_2))])
   
 (define-judgment-form L
-  #:mode (no-trap-context I)
-  #:contract (no-trap-context EC)
+  #:mode (no-trap/par-context I)
+  #:contract (no-trap/par-context EC)
   
   [----
-   (no-trap-context hole)]
-  [(no-trap-context EC)
+   (no-trap/par-context hole)]
+  [(no-trap/par-context EC)
    ---
-   (no-trap-context (s ⊃ EC))]
-  [(no-trap-context EC)
+   (no-trap/par-context (s ⊃ EC))]
+  [(no-trap/par-context EC)
    ---
-   (no-trap-context (seq EC e))]
-  [(no-trap-context EC)
+   (no-trap/par-context (seq EC e))]
+  [(no-trap/par-context EC)
    ---
-   (no-trap-context (par EC e))]
-  [(no-trap-context EC)
+   (no-trap/par-context (if EC e_1 e_2))]
+  [(no-trap/par-context EC)
    ---
-   (no-trap-context (par e EC))]
-  [(no-trap-context EC)
+   (no-trap/par-context (op EC e))]
+  [(no-trap/par-context EC)
    ---
-   (no-trap-context (if EC e_1 e_2))]
-  [(no-trap-context EC)
-   ---
-   (no-trap-context (op EC e))]
-  [(no-trap-context EC)
-   ---
-   (no-trap-context (op v EC))])
+   (no-trap/par-context (op v EC))])
 
 (module+ test
   (test-judgment-holds
@@ -262,6 +266,31 @@
           ⊥
           nothing
           (s1 = ff (O2 = tt ·))
+          ⊥))
+
+  (test-equal
+   (judgment-holds
+    (-->&* (trap
+            (seq (trap (par (exit 0)
+                            (exit 1)))
+                 (! O1)))
+           (extend · O1 ⊥)
+           ⊥
+           nothing
+           (O1 = tt ·)
+           ⊥))
+   #f)
+
+  (test-judgment-holds
+   (-->&* (seq (trap
+                (seq (trap (par (exit 0)
+                                (exit 1)))
+                     (! O1)))
+               (! O2))
+          (extend (extend · O2 ⊥) O1 ⊥)
+          ⊥
+          nothing
+          (O2 = tt (O1 = ⊥ ·))
           ⊥))
 
   (test-judgment-holds

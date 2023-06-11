@@ -29,6 +29,7 @@
   (s ::= variable-not-otherwise-mentioned)
 
   (k^ ::= k B N)
+  (pe ::= pause (exit N))
   (B⊥ ::= B ⊥)
   (B ::= tt ff)
 
