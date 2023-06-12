@@ -3,7 +3,7 @@
          "helpers.rkt"
          redex/reduction-semantics)
 
-(provide -->& -->&*)
+(provide -->& -->&* blocked emits)
 
 (define-judgment-form L
   #:mode (-->&* I I I O O O)
@@ -89,7 +89,7 @@
          (in-hole EC (δ op v_1 v_2)) E S⊥)]
 
   [(where s_2 ,(variable-not-in (term (EC e E)) (term s_1)))
-   -------------------------------------------------------- "\\"
+   ---------------------------------------------------------- "\\"
    (-->& (in-hole EC (e \\ s_1)) E S⊥
          (in-hole EC (rename e s_1 s_2)) (extend E s_2 ⊥) S⊥)]
 

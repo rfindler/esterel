@@ -52,8 +52,16 @@
   #:contract (eval& e E E+nc)
 
   [(-->&* e_1 E_in ⊥ e_2 E_out ⊥)
-   ------------------------------
-   (eval& e_1 E_in E_out)])
+   ------------------------------ "constructive"
+   (eval& e_1 E_in E_out)]
+
+
+  [(-->&* e_1 E_in ⊥ e_2 E_out ⊥)
+   (blocked e_2 E_in S)
+   (where #t (≠ S ·))
+   (emits e_2 E_in S ·)
+   -------------------------------- "nonconstructive"
+   (eval& e_1 E_in nonconstructive)])
 
 (module+ test
 
@@ -66,13 +74,11 @@
           ·
           (s1 = ff (O2 = tt ·))))
 
-  #;
   (test-judgment-holds
    (eval ((if s (! s) (! O2)) \\ s)
          ·
          nonconstructive))
 
-  #;
   (test-judgment-holds
    (eval ((if s (! O1) (! s)) \\ s)
          ·
