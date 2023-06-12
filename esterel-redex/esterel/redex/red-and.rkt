@@ -52,14 +52,24 @@
          (in-hole EC_1 (↓k (exit N))) E S⊥)]
 
   [(no-trap/par-context EC_2) (no-trap/par-context EC_3)
-   --------------------------------------------------------------------------- "parexitL"
+   --------------------------------------------------------------------------- "parexitPL"
    (-->& (in-hole EC_1 (par (in-hole EC_2 (exit N)) (in-hole EC_3 pe_3))) E S⊥
          (in-hole EC_1 (Max-kk (exit N) pe_3)) E S⊥)]
 
   [(no-trap/par-context EC_2) (no-trap/par-context EC_3)
-   --------------------------------------------------------------------------- "parexitR"
+   --------------------------------------------------------------------------- "parexitPR"
    (-->& (in-hole EC_1 (par (in-hole EC_2 pe_2) (in-hole EC_3 (exit N)))) E S⊥
          (in-hole EC_1 (Max-kk pe_2 (exit N))) E S⊥)]
+
+  [(no-trap/par-context EC_2)
+   --------------------------------------------------------- "parexitVL"
+   (-->& (in-hole EC_1 (par (in-hole EC_2 (exit N)) v)) E S⊥
+         (in-hole EC_1 (exit N)) E S⊥)]
+
+  [(no-trap/par-context EC_2)
+   --------------------------------------------------------- "parexitVR"
+   (-->& (in-hole EC_1 (par v (in-hole EC_2 (exit N)))) E S⊥
+         (in-hole EC_1 (exit N)) E S⊥)]
 
   [---------------------------------- "trap done"
    (-->& (in-hole EC_1 (trap v)) E S⊥
@@ -291,6 +301,16 @@
           ⊥
           nothing
           (O2 = tt (O1 = ⊥ ·))
+          ⊥))
+
+  (test-judgment-holds
+   (-->&* (seq (trap (par (exit 0)
+                          1))
+               5)
+          ·
+          ⊥
+          5
+          ·
           ⊥))
 
   (test-judgment-holds
