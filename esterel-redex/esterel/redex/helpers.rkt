@@ -3,7 +3,7 @@
 (provide Max ↓ ↓k Max-kk Max-k&k&
          lookup extend extend-S
          remove dom
-         ∈ ∉ ∪ set- set set= set≠
+         ∈ ∉ ∪ ⊂ set- set set= set≠
          ⊥E S->E fv-p fv-e
          op-each-pair δ
          parens ≠)
@@ -193,8 +193,8 @@
 (define-judgment-form L
   #:mode (set= I I)
   #:contract (set= S S)
-  [(where #t (subset S_1 S_2))
-   (where #t (subset S_2 S_1))
+  [(where #t (⊂ S_1 S_2))
+   (where #t (⊂ S_2 S_1))
    --------------
    (set= S_1 S_2)])
 
@@ -203,25 +203,27 @@
   (test-judgment-holds (set= (a (b (c ·))) (c (b (a ·))))))
 
 (define-metafunction L
-  subset : S S -> boolean
-  [(subset · S) #t]
-  [(subset (s S_1) S_2)
-   (subset S_1 S_2)
-   (where #t (∈ s S_2))]
-  [(subset S_1 S_2) #f])
+  ⊂ : set set -> boolean
+  [(⊂ · set) #t]
+  [(⊂ (any set_1) set_2)
+   (⊂ set_1 set_2)
+   (where #t (∈ any set_2))]
+  [(⊂ set_1 set_2) #f])
 
 (module+ test
-  (test-equal (term (subset (a (b (c ·))) (a (d (b (c (e ·))))))) #t)
-  (test-equal (term (subset (a (d (b (c (e ·))))) (a (b (c ·))))) #f))
+  (test-equal (term (⊂ (a (b (c ·))) (a (d (b (c (e ·))))))) #t)
+  (test-equal (term (⊂ (a (b (c (q ·)))) (a (d (b (c (e ·))))))) #f)
+  (test-equal (term (⊂ (a (d (b (c (e ·))))) (a (b (c ·))))) #f)
+  (test-equal (term (⊂ (1 (2 ·)) (3 (2 (1 ·))))) #t))
 
 (define-judgment-form L
   #:mode (set≠ I I)
   #:contract (set≠ S S)
-  [(where #f (subset S_1 S_2))
+  [(where #f (⊂ S_1 S_2))
    --------------
    (set≠ S_1 S_2)]
 
-  [(where #f (subset S_2 S_1))
+  [(where #f (⊂ S_2 S_1))
    --------------
    (set≠ S_1 S_2)])
 
