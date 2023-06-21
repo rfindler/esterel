@@ -57,8 +57,8 @@
    (equal? (judgment-holds (eval e · E) E)
            (judgment-holds (eval& e · E) E))))
 
-(define (must-can-preserved-by-red& e print?)
-  (define e+Es (judgment-holds (-->& ,e (⊥E (fv-e ,e)) ⊥ e E ⊥) (e E)))
+(define (can-and-must-preserved-by-red& e print?)
+  (define e+Es (judgment-holds (-->&-mc ,e (⊥E (fv-e ,e)) ⊥ e E ⊥) (e E)))
   (for/and ([e+E (in-list e+Es)])
     (match e+E
       [(list e2 E2)
@@ -72,17 +72,28 @@
        (define Pr2-C (call-mc^ (term Can+) e2 E2))
        (when print? (printf "Pr-M: ~s ~s\n" Pr1-M Pr2-M))
        (when print? (printf "Pr-C: ~s ~s\n" Pr1-C Pr2-C))
-       (judgment-holds (thing ,e ,e2))])))
+       (and (judgment-holds (Must-grows ,e ,e2))
+            (judgment-holds (Can-shrinks ,e ,e2)))])))
 
 (define-judgment-form L
-  #:mode (thing I I)
-  [(-->& e (⊥E (fv-e e)) ⊥ e_2 E_2 ⊥)
+  #:mode (Must-grows I I)
+  [(-->&-mc e (⊥E (fv-e e)) ⊥ e_2 E_2 ⊥)
    (mc^ Must e (⊥E (fv-e e)) (Pr S K^))
    (mc^ Must e_2 E_2 (Pr S_2 K^_2))
-   (where #t (⊂ (∪ (emitted E_2) S_2) S))
+   (where #t (⊂ (∩ (fv-e e) (∪ (emitted E_2) S_2)) S))
    (where #t (⊂ K^ K^_2))
    ------
-   (thing e e_2)])
+   (Must-grows e e_2)])
+
+(define-judgment-form L
+  #:mode (Can-shrinks I I)
+  [(-->&-mc e (⊥E (fv-e e)) ⊥ e_2 E_2 ⊥)
+   (mc^ Can+ e (⊥E (fv-e e)) (Pr S K^))
+   (mc^ Can+ e_2 E_2 (Pr S_2 K^_2))
+   (where #t (⊂ S (∩ (fv-e e) (∪ (emitted E_2) S_2))))
+   (where #t (⊂ K^_2 K^))
+   ------
+   (Can-shrinks e e_2)])
 
 (define-metafunction L
   emitted : E -> S
@@ -93,9 +104,29 @@
   (test-equal (term (emitted (extend (extend (extend (extend · s4 tt) s3 ⊥) s2 ff) s1 tt)))
               (term (set s4 s1))))
 
-;; this isn't quite right
-#;
+#|
+
+Must and Can are not preserved by the reduction relation
+-->& because of the way that reduction handles signal forms.
+
+For example, consider the term:
+
+   (a \\ a)
+
+Must of this expression contains the result ff, as there are
+no emissions of a, so Must recurs with a bound to ff when looking
+at the body.
+
+The reduction semantics (and the implementation), however, just
+add a = ⊥ to the environment and keep going. In the resulting
+term, Must[[a, a = ⊥]] does not produce a value. The reduction
+semantics does eventually get the right answer but it takes
+more reduction steps before a = ff is added to the environment.
+
+|#
+
+
 (redex-check
  L
  e
- (must-can-preserved-by-red& (term e) #f))
+ (can-and-must-preserved-by-red& (term e) #f))

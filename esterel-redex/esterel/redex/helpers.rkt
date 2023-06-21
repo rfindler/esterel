@@ -3,7 +3,7 @@
 (provide Max ↓ ↓k Max-kk Max-k&k&
          lookup extend extend-S
          remove dom
-         ∈ ∉ ∪ ⊂ set- set set= set≠
+         ∈ ∉ ∪ ⊂ ∩ set- set set= set≠
          ⊥E S->E fv-p fv-e
          op-each-pair δ
          parens ≠)
@@ -41,7 +41,10 @@
   [(fv-e nothing) ·]
   [(fv-e pause) ·]
   [(fv-e (exit N)) ·]
-  [(fv-e (e \\ s)) (set- (fv-e e) (set s))])
+  [(fv-e (e \\ s)) (set- (fv-e e) (set s))]
+  [(fv-e N) ·]
+  [(fv-e B) ·]
+  [(fv-e (op e_1 e_2)) (∪ (fv-e e_1) (fv-e e_2))])
 
 (module+ test
   (test-equal (term (fv-e (if s (! t) (trap (w ⊃ ((! z) *))))))
@@ -69,10 +72,13 @@
   op-each : op k^ K^ -> K^
   [(op-each op k^ ·) ·]
   [(op-each op k^_1 (k^_2 K^))
-   (∪ (set (δ op k^_1 k^_2)) (op-each op k^_1 K^))])
+   (∪ (set k^_3) (op-each op k^_1 K^))
+   (where k^_3 (δ op k^_1 k^_2))]
+  [(op-each op k^_1 (k^_2 K^))
+   (op-each op k^_1 K^)])
 
 (define-metafunction L
-  δ : op k^ k^ -> k^
+  δ : op k^ k^ -> k^ or ⊥
   [(δ op (exit N_1) (exit N_2)) (exit ,(max (term N_1) (term N_2)))]
   [(δ op pause (exit N)) (exit N)]
   [(δ op (exit N) pause) (exit N)]
@@ -82,7 +88,8 @@
   [(δ - N_1 N_2) ,(- (term N_1) (term N_2))]
   [(δ < N_1 N_2) ,(if (< (term N_1) (term N_2)) (term tt) (term ff))]
   [(δ = N_1 N_1) tt]
-  [(δ = N_1 N_2) ff])
+  [(δ = N_1 N_2) ff]
+  [(δ op k^_1 k^_2) ⊥])
 
 (module+ test
   (test-equal (term (δ + 1 2)) (term 3))
@@ -94,15 +101,17 @@
 
   (test-equal (term (op-each-pair + (set 1) (set 2)))
               (term (set 3)))
+  (test-equal (term (op-each-pair + (set 1 ff) (set 2 tt)))
+              (term (set 3)))
   (test-equal (term (op-each-pair - (set 5 4 3) (set 2 1)))
               (term (set 3 4 2 1))))
 
 (define-metafunction L
   Max : K^ K^ -> K^
-  [(Max · K) ·]
-  [(Max (k K_1) K_2)
-   (∪ (Max-kK k K_2)
-      (Max K_1 K_2))])
+  [(Max · K^) ·]
+  [(Max (k^ K^_1) K^_2)
+   (∪ (Max-kK k^ K^_2)
+      (Max K^_1 K^_2))])
 
 (define-metafunction L
   Max-kK : k^ K^ -> K^
@@ -119,8 +128,7 @@
 
   ;; just declare that `par` discards the results of
   ;; the branches and always returns `nothing`
-  [(Max-kk nothing k^) nothing]
-  [(Max-kk k^ nothing) nothing])
+  [(Max-kk k^_1 k^_2) nothing])
 
 (define-metafunction L
   Max-k&k& : k& k& -> k&
@@ -143,21 +151,29 @@
   (test-equal (term (Max (nothing ((exit 0) ((exit 2) ((exit 4) ·)))) (pause ((exit 1) ((exit 3) ·)))))
               (term ((exit 3) ((exit 1) (pause ((exit 0) ((exit 2) ((exit 4) ·))))))))
   (test-equal (term (Max (pause ((exit 1) ((exit 3) ·))) (nothing ((exit 0) ((exit 2) ((exit 4) ·))))))
-              (term ((exit 4) ((exit 2) ((exit 0) (pause ((exit 1) ((exit 3) ·)))))))))
+              (term ((exit 4) ((exit 2) ((exit 0) (pause ((exit 1) ((exit 3) ·))))))))
+  (test-equal (term (Max (nothing ·) (tt (ff ·))))
+              (term (nothing ·)))
+  (test-equal (term (Max (tt ·) (ff ·)))
+              (term (nothing ·))))
 
 (define-metafunction L
-  ↓ : K -> K
+  ↓ : K^ -> K^
   [(↓ ·) ·]
-  [(↓ (k K)) (∪ ((↓k k) ·) (↓ K))])
+  [(↓ (k^ K^)) (∪ ((↓k k^) ·) (↓ K^))])
 
 (define-metafunction L
-  ↓k : k -> k
+  ↓k : k^ -> k^
   [(↓k nothing) nothing]
+  [(↓k N) N]
+  [(↓k B) B]
   [(↓k (exit 0)) nothing]
   [(↓k pause) pause]
   [(↓k (exit N)) (exit ,(- (term N) 1))])
 
 (module+ test
+  (test-equal (term (↓ (tt (ff (3 ·)))))
+              (term (tt (ff (3 ·)))))
   (test-equal (term (↓ ((exit 11) ((exit 12) ((exit 15) ·)))))
               (term ((exit 10) ((exit 11) ((exit 14) ·)))))
   (test-equal (term (↓ (nothing ((exit 0) ·))))
@@ -178,6 +194,18 @@
 (module+ test
   (test-equal (term (∪ (a (b ·)) (c (d ·))))
               (term (a (b (c (d ·)))))))
+
+(define-metafunction L
+  ∩ : set set -> set
+  [(∩ · set) ·]
+  [(∩ (any set_1) set_2)
+   (∪ (set any) (∩ set_1 set_2))
+   (where #t (∈ any set_2))]
+  [(∩ (any set_1) set_2)
+   (∩ set_1 set_2)])
+(module+ test
+  (test-equal (term (∩ (1 (2 (3 (4 ·)))) (2 (4 (6 ·)))))
+              (term (set 2 4))))
 
 (define-metafunction L
   set-1 : set any -> set
