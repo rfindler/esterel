@@ -51,7 +51,7 @@ fun react(r, ~emit: signals = []):
   // hash into an equal-always hash in
   // order to cooperate better with Rhombus
   for Map:
-    each (k,v): kernel.#{react!}(r, ~emit: signals)
+    each (k,v): kernel.#{react!}(r, ~emit: signals) :~ Map
     values(k,v)
 
 expr.macro 'with_trap $t:
