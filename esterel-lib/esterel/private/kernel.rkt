@@ -447,56 +447,55 @@ value for can explorations and subsequent must evaluation.
   (define resp-chan (make-channel))
   (channel-put (signal-table-pause-chan signal-table)
                (vector (current-thread) resp-chan))
-  (let loop ([resp-chan resp-chan])
-    (define val (channel-get resp-chan))
-    (cond
-      [(exn? val) (raise val)]
-      [(trap? val) (exit-trap val)]
-      [else
-       (define iter
-         (continuation-mark-set->iterator
-          (current-continuation-marks)
-          (list suspend-mark)))
-       (define-values (suspend? suspended-signals)
-         (let loop ([iter iter]
-                    [suspend? #f]
-                    [suspended-signals (set)]
-                    [pending-signals (set)])
-           (define-values (next-val next-iter) (iter))
-           (match next-val
-             [(vector (? procedure? suspend-proc))
-              (cond
-                [(suspend-proc)
-                 (set! suspended-signals
-                       (set-union pending-signals suspended-signals))
-                 (loop next-iter
-                       #t
-                       (set-union pending-signals suspended-signals)
-                       (set))]
-                [else
-                 (loop next-iter
-                       suspend?
-                       suspended-signals
-                       pending-signals)])]
-             [(vector (? set? signals))
-              (loop next-iter
-                    suspend?
-                    suspended-signals
-                    (set-union signals pending-signals))]
-             [#f (values suspend? suspended-signals)])))
-       (cond
-         [suspend?
-          (unless (set-empty? suspended-signals)
-            (define resp-chan (make-channel))
-            (channel-put (signal-table-suspended-signals-chan signal-table)
-                         (cons suspended-signals resp-chan))
-            (define resp (channel-get resp-chan))
-            (when resp
-              (error 'suspend "suspended signal was used\n  signal: ~e"
-                     resp)))
-          (pause)]
-         [else
-          (void)])])))
+  (define val (channel-get resp-chan))
+  (cond
+    [(exn? val) (raise val)]
+    [(trap? val) (exit-trap val)]
+    [else
+     (define iter
+       (continuation-mark-set->iterator
+        (current-continuation-marks)
+        (list suspend-mark)))
+     (define-values (suspend? suspended-signals)
+       (let loop ([iter iter]
+                  [suspend? #f]
+                  [suspended-signals (set)]
+                  [pending-signals (set)])
+         (define-values (next-val next-iter) (iter))
+         (match next-val
+           [(vector (? procedure? suspend-proc))
+            (cond
+              [(suspend-proc)
+               (set! suspended-signals
+                     (set-union pending-signals suspended-signals))
+               (loop next-iter
+                     #t
+                     (set-union pending-signals suspended-signals)
+                     (set))]
+              [else
+               (loop next-iter
+                     suspend?
+                     suspended-signals
+                     pending-signals)])]
+           [(vector (? set? signals))
+            (loop next-iter
+                  suspend?
+                  suspended-signals
+                  (set-union signals pending-signals))]
+           [#f (values suspend? suspended-signals)])))
+     (cond
+       [suspend?
+        (unless (set-empty? suspended-signals)
+          (define resp-chan (make-channel))
+          (channel-put (signal-table-suspended-signals-chan signal-table)
+                       (cons suspended-signals resp-chan))
+          (define resp (channel-get resp-chan))
+          (when resp
+            (error 'suspend "suspended signal was used\n  signal: ~e"
+                   resp)))
+        (pause)]
+       [else
+        (void)])]))
 
 (define-syntax (suspend stx)
   (syntax-case stx ()
