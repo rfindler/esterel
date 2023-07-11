@@ -306,7 +306,8 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
 @defform[(par expr ...)]{
 
  Executes each @racket[expr] in parallel, waiting for all of
- them to complete.
+ them to complete. The result is a set of all of the values
+ of the @racket[expr]s.
 
 }
 

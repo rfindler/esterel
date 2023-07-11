@@ -302,7 +302,7 @@ value for can explorations and subsequent must evaluation.
   (define before-par-trap-counter (get-current-trap-counter))
   (define result-chans+children-threads
     (for/set ([thunk (in-list thunks)])
-      ;; par-child-result-chan : channel[(or/c #f trap? exn?)]
+      ;; par-child-result-chan : channel[(or/c esterel-thread-value? trap? exn?)]
       (define par-child-result-chan (make-channel))
       (define par-child-thread
         (make-esterel-thread
@@ -346,11 +346,11 @@ value for can explorations and subsequent must evaluation.
                              checkpoint-resp-chan-or-final-result
                              pending-result-chans+par-threads))
            (exit-trap checkpoint-resp-chan-or-final-result)]
-          [#f
+          [(esterel-thread-value vals)
            (unless (set-empty? pending-result-chans+par-threads)
              (internal-error "exiting the par but still have children.2 ~s ~s"
                              (current-thread) pending-result-chans+par-threads))
-           (void)])))
+           vals])))
      (for/list ([result-chan+pending-par-thread (in-set pending-result-chans+par-threads)])
        (match-define (cons result-chan pending-par-thread) result-chan+pending-par-thread)
        (handle-evt
@@ -396,11 +396,11 @@ value for can explorations and subsequent must evaluation.
               (with-continuation-mark trap-start-of-par-mark
                 (vector escape before-par-trap-counter)
                 (with-continuation-mark trap-counter-mark before-par-trap-counter
-                  (begin
+                  (esterel-thread-value
+                   (set
                     (call-with-continuation-prompt
                      thunk
-                     esterel-prompt-tag)
-                    #f)))))))]
+                     esterel-prompt-tag)))))))))]
       [else
        (λ ()
          (call-with-continuation-prompt
@@ -412,13 +412,20 @@ value for can explorations and subsequent must evaluation.
               (procedure-rename thunk-to-run thunk-name)
               thunk-to-run)))
 
+;; values : (set/c any/c)
+;; these are the values of the par
+(struct esterel-thread-value (values))
+
 (define (raise-argument->exn x)
   (if (exn? x)
       x
       (make-exn:fail (format "uncaught exn: ~e" x)
                      (current-continuation-marks))))
 
-;; outermost-trap : (or/c #f trap? exn?) (or/c #f trap? exn?) -> (or/c #f trap? exn?)
+;; outermost-trap :
+;;    (or/c esterel-thread-value? trap? exn?)
+;;    (or/c esterel-thread-value? trap? exn?)
+;; -> (or/c esterel-thread-value? trap? exn?)
 (define (outermost-trap t1 t2)
   (cond
     [(or (exn? t1) (exn? t2))
@@ -427,7 +434,13 @@ value for can explorations and subsequent must evaluation.
      (if (< (trap-counter t1) (trap-counter t2))
          t1
          t2)]
-    [else (or t1 t2)]))
+    [(or (trap? t1) (trap? t2))
+     (if (trap? t1) t1 t2)]
+    [else
+     (esterel-thread-value
+      (set-union
+       (esterel-thread-value-values t1)
+       (esterel-thread-value-values t2)))]))
 
 (define (pause)
   (define signal-table (current-signal-table))
@@ -482,7 +495,8 @@ value for can explorations and subsequent must evaluation.
               (error 'suspend "suspended signal was used\n  signal: ~e"
                      resp)))
           (pause)]
-         [else val])])))
+         [else
+          (void)])])))
 
 (define-syntax (suspend stx)
   (syntax-case stx ()
@@ -886,7 +900,7 @@ value for can explorations and subsequent must evaluation.
                               (set/c thread?)
                               (set/c thread?)
                               (set/c thread?)
-                              (or/c #f trap? exn?))
+                              (or/c esterel-thread-value? trap? exn?))
             #:flat? #t #:immutable #t)
     (hash))
 
@@ -1262,7 +1276,7 @@ value for can explorations and subsequent must evaluation.
          (channel-put result/checkpoint-chan a-trap)
          (set! parent->par-state (hash-remove parent->par-state parent-thread))
          (add-running-thread parent-thread)]
-        [a-trap
+        [(or (exn? a-trap) (trap? a-trap))
          ;; here we have a trap (or an exn) and there is at least one paused
          ;; thread; we need to tell all the paused threads to exit to the trap
          ;; when that finishes we'll be back here to close up the par itself
@@ -1293,7 +1307,7 @@ value for can explorations and subsequent must evaluation.
       (match-define (par-state result/checkpoint-chan presence-waiting value-waiting paused active the-trap-of-this-par)
         (hash-ref parent->par-state parent-thread))
       (unless first-one?
-        (when the-trap-of-this-par
+        (when (or (exn? the-trap-of-this-par) (trap? the-trap-of-this-par))
           (internal-error
            "found a par as we went down to unpause things that has a trap, par-parent: ~s"
            parent-thread)))
@@ -1493,7 +1507,8 @@ value for can explorations and subsequent must evaluation.
                    ;; picking up after an instant has terminated
                    (values parent-thread (par-state checkpoint/result-chan
                                                     presence-waiting value-waiting
-                                                    (set) paused #f))))
+                                                    (set) paused
+                                                    (esterel-thread-value (set))))))
            (loop))))]
 
       ;; nothing is running, but at least one thread is
@@ -1726,7 +1741,8 @@ value for can explorations and subsequent must evaluation.
            (remove-running-thread parent-thread)
            (set! parent->par-state
                  (hash-set parent->par-state parent-thread
-                           (par-state checkpoint/result-chan (set) (set) (set) children-threads #f)))
+                           (par-state checkpoint/result-chan (set) (set) (set) children-threads
+                                      (esterel-thread-value (set)))))
            (for ([child-thread (in-set children-threads)])
              (set! par-parents (hash-set par-parents child-thread parent-thread)))
            (loop)))
