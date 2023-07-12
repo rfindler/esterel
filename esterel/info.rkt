@@ -2,8 +2,8 @@
 
 (define collection 'multi)
 
-(define deps '("esterel-doc" "esterel-examples" "esterel-lib" "esterel-test" "esterel-rhombus-lib" "esterel-redex"))
-(define implies '("esterel-doc" "esterel-examples" "esterel-lib" "esterel-test" "esterel-rhombus-lib" "esterel-redex"))
+(define deps '("esterel-doc" "esterel-examples" "esterel-lib" "esterel-test" "esterel-rhombus-lib"))
+(define implies '("esterel-doc" "esterel-examples" "esterel-lib" "esterel-test" "esterel-rhombus-lib"))
 
 (define pkg-desc "Esterel implementation in Racket")
 
