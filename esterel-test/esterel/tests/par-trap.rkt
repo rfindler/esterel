@@ -71,6 +71,14 @@
               (pause)))))))
  (hash))
 
+(with-signal (O1 O2)
+  (check-equal?
+   (react! (esterel
+            (if (equal? (set 1 2) (par 1 2))
+                (emit O1)
+                (emit O2))))
+   (hash O1 #t)))
+
 (with-signal (s1 s2)
   (define r
     (esterel
