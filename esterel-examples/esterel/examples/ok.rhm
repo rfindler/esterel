@@ -54,4 +54,4 @@ module main:
               ++ "  i: " +& i ++ "\n"
               ++ "  signals: " +& sigs ++ "\n"
               ++ "  expected: " +& expected_sigs)
-  displayln("ok was ok for " +& N ++ " iterations")
+  println("ok was ok for " +& N ++ " iterations")
