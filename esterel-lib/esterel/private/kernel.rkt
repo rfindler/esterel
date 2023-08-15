@@ -302,7 +302,7 @@ value for can explorations and subsequent must evaluation.
   (define before-par-trap-counter (get-current-trap-counter))
   (define result-chans+children-threads
     (for/set ([thunk (in-list thunks)])
-      ;; par-child-result-chan : channel[(or/c esterel-thread-value? trap? exn?)]
+      ;; par-child-result-chan : channel[(or/c esterel-thread-value? trap+vals? exn?)]
       (define par-child-result-chan (make-channel))
       (define par-child-thread
         (make-esterel-thread
@@ -339,13 +339,13 @@ value for can explorations and subsequent must evaluation.
            (when (set-empty? pending-result-chans+par-threads)
              (internal-error "asked for a par checkpoint with no children"))
            (loop new-pending-result-chans+par-threads new-checkpoint-or-par-result-chan)]
-          [(? (or/c trap? exn?))
+          [(? (or/c trap+vals? exn?))
            (unless (set-empty? pending-result-chans+par-threads)
              (internal-error "exiting the par but still have children.1 ~s ~s ~s"
                              (current-thread)
                              checkpoint-resp-chan-or-final-result
                              pending-result-chans+par-threads))
-           (exit-trap checkpoint-resp-chan-or-final-result)]
+           (exit-trap/internal checkpoint-resp-chan-or-final-result)]
           [(esterel-thread-value vals)
            (unless (set-empty? pending-result-chans+par-threads)
              (internal-error "exiting the par but still have children.2 ~s ~s"
@@ -423,19 +423,23 @@ value for can explorations and subsequent must evaluation.
                      (current-continuation-marks))))
 
 ;; outermost-trap :
-;;    (or/c esterel-thread-value? trap? exn?)
-;;    (or/c esterel-thread-value? trap? exn?)
-;; -> (or/c esterel-thread-value? trap? exn?)
+;;    (or/c esterel-thread-value? trap+val? exn?)
+;;    (or/c esterel-thread-value? trap+val? exn?)
+;; -> (or/c esterel-thread-value? trap+val? exn?)
 (define (outermost-trap t1 t2)
   (cond
     [(or (exn? t1) (exn? t2))
      (if (exn? t1) t1 t2)]
-    [(and (trap? t1) (trap? t2))
-     (if (< (trap-counter t1) (trap-counter t2))
-         t1
-         t2)]
-    [(or (trap? t1) (trap? t2))
-     (if (trap? t1) t1 t2)]
+    [(and (trap+vals? t1) (trap+vals? t2))
+     (match-define (trap+vals (trap name1 counter1 escape1) vals1) t1)
+     (match-define (trap+vals (trap name2 counter2 escape2) vals2) t2)
+     (cond
+       [(= counter1 counter2)
+        (trap+vals (trap+vals-trap t1) (set-union vals1 vals2))]
+       [(< counter1 counter2) t1]
+       [else t2])]
+    [(or (trap+vals? t1) (trap+vals? t2))
+     (if (trap+vals? t1) t1 t2)]
     [else
      (esterel-thread-value
       (set-union
@@ -450,7 +454,7 @@ value for can explorations and subsequent must evaluation.
   (define val (channel-get resp-chan))
   (cond
     [(exn? val) (raise val)]
-    [(trap? val) (exit-trap val)]
+    [(trap+vals? val) (exit-trap/internal val)]
     [else
      (define iter
        (continuation-mark-set->iterator
@@ -534,25 +538,25 @@ value for can explorations and subsequent must evaluation.
       ;; `with-mark`s).
       (body trap))))
 
-;; internally, this might be called with an exception, but from the
-;; outside, it is called only with traps (thanks to the contract) and
-;; exceptions have to be `raise`d.
-(define (exit-trap exn-or-trap)
+(define (exit-trap trap [val (void)])
+  (exit-trap/internal (trap+vals trap (set val))))
+
+(define (exit-trap/internal exn-or-trap+vals)
   (define start-of-par-counter (continuation-mark-set-first #f trap-start-of-par-mark))
   (cond
     [(or (not start-of-par-counter)
          ;; the start of the par value will be the same as
          ;; the counter used for the first trap inside the par
          ;; so this should be an inclusive comparison
-         (exn? exn-or-trap)
-         (<= (vector-ref start-of-par-counter 1) (trap-counter exn-or-trap)))
+         (exn? exn-or-trap+vals)
+         (<= (vector-ref start-of-par-counter 1) (trap-counter (trap+vals-trap exn-or-trap+vals))))
      ;; here the trap doesn't span a par, so we can just escape
-     (if (exn? exn-or-trap)
-         (raise exn-or-trap)
-         ((trap-escape exn-or-trap) (void)))]
+     (if (exn? exn-or-trap+vals)
+         (raise exn-or-trap+vals)
+         ((trap-escape (trap+vals-trap exn-or-trap+vals)) (trap+vals-vals exn-or-trap+vals)))]
     [else
      ;; here we tell the enclosing par that a trap has happened
-     ((vector-ref start-of-par-counter 0) exn-or-trap)]))
+     ((vector-ref start-of-par-counter 0) exn-or-trap+vals)]))
 
 (struct signal-table (new-signal-chan
                       signal-presence/value-chan
@@ -899,7 +903,7 @@ value for can explorations and subsequent must evaluation.
                               (set/c thread?)
                               (set/c thread?)
                               (set/c thread?)
-                              (or/c esterel-thread-value? trap? exn?))
+                              (or/c esterel-thread-value? trap+vals? exn?))
             #:flat? #t #:immutable #t)
     (hash))
 
@@ -1112,7 +1116,7 @@ value for can explorations and subsequent must evaluation.
   ;; active : (set/c rb-tree?)
   ;;     -- `active` are children of the current par
   ;;        that have children; they aren't running
-  ;; trap : (or/c trap? exn? #f)
+  ;; trap : (or/c trap+vals? exn? #f)
   ;; before-par-trap-counter : natural?
   (struct rb-par rb-tree (cont presence-waiting value-waiting active trap before-par-trap-counter)
     #:transparent)
@@ -1275,7 +1279,7 @@ value for can explorations and subsequent must evaluation.
          (channel-put result/checkpoint-chan a-trap)
          (set! parent->par-state (hash-remove parent->par-state parent-thread))
          (add-running-thread parent-thread)]
-        [(or (exn? a-trap) (trap? a-trap))
+        [(or (exn? a-trap) (trap+vals? a-trap))
          ;; here we have a trap (or an exn) and there is at least one paused
          ;; thread; we need to tell all the paused threads to exit to the trap
          ;; when that finishes we'll be back here to close up the par itself
@@ -1297,7 +1301,7 @@ value for can explorations and subsequent must evaluation.
                                         new-par-state))
            (maybe-finalize-a-par parent-parent-thread))])))
 
-  ;; unpause-to-trap : thread? (or/c trap? exn?) -> void
+  ;; unpause-to-trap : thread? (or/c trap+vals? exn?) -> void
   ;; unpause all of the paused children threads of `parent-thread`,
   ;; sending them to `trap-to-exit-to` instead
   (define (unpause-to-trap parent-thread trap-to-exit-to)
@@ -1306,7 +1310,7 @@ value for can explorations and subsequent must evaluation.
       (match-define (par-state result/checkpoint-chan presence-waiting value-waiting paused active the-trap-of-this-par)
         (hash-ref parent->par-state parent-thread))
       (unless first-one?
-        (when (or (exn? the-trap-of-this-par) (trap? the-trap-of-this-par))
+        (when (or (exn? the-trap-of-this-par) (trap+vals? the-trap-of-this-par))
           (internal-error
            "found a par as we went down to unpause things that has a trap, par-parent: ~s"
            parent-thread)))

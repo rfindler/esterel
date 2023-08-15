@@ -65,6 +65,13 @@
   #:methods gen:custom-write
   [(define write-proc (mk-write-proc (λ (x) (trap-name x)) "trap"))])
 
+;; trap : trap?
+;; vals : (set/c any/c)
+;; when escaping, we pair a trap with a set of values; the trap is where we are
+;; escaping to and the value is which values we'll return to the trap
+(struct trap+vals (trap vals) #:transparent)
+
 (provide (struct-out signal)
          signal-index
-         (struct-out trap))
+         (struct-out trap)
+         (struct-out trap+vals))

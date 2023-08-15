@@ -64,6 +64,6 @@
                      #:pre/desc (pre-cond-check)
                      void?))]
   [pause (values (->* () #:pre/desc (pre-cond-check) void?))]
-  [exit-trap (-> trap? any)]
+  [exit-trap (->* (trap?) (any/c) any)]
   [trap? (-> any/c boolean?)]
   [exn:fail:not-constructive? (-> any/c boolean?)]))

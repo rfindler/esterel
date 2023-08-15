@@ -412,7 +412,10 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
 @defform[(with-trap trap-id body-expr ...)]{
 
  Binds @racket[trap-id] to a newly created trap and evaluates the
- @racket[body-expr]s.
+ @racket[body-expr]s. If the trap bound to @racket[trap-id] is
+ passed to @racket[exit-trap], the computation in the rest of
+ the @racket[body-expr]s is skipped and the result of the
+ @racket[with-trap] is the value passed to @racket[exit-trap].
 
  In this example, the @racket[(exit-trap t)] causes the first
  instant to not have @racket[S2] emitted and causes
@@ -435,8 +438,10 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  ]
 }
 
-@defproc[(exit-trap [t trap?]) any/c]{
- Exits to the trap @racket[t]; does not return. See also @racket[with-trap].
+@defproc[(exit-trap [t trap?] [v any/c (void)]) any/c]{
+ Exits to the trap @racket[t] with the value @racket[v]; does not return.
+
+ See also @racket[with-trap].
 }
 
 @defproc[(trap? [v any/c]) boolean?]{

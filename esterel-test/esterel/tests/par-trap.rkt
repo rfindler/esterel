@@ -658,3 +658,45 @@
      (emit O)))
   (check-equal? (react! r) (hash O #t can-explore #f))
   (check-equal? (react! r) (hash)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;;  traps with values
+;;
+
+(with-signal (O1 O2)
+  (check-equal?
+   (react!
+    (esterel
+     (if (equal? (set 1)
+                 (with-trap T1
+                   (exit-trap T1 1)))
+         (emit O1)
+         (emit O2))))
+   (hash O1 #t)))
+
+(with-signal (O1 O2)
+  (check-equal?
+   (react!
+    (esterel
+     (if (equal? (set 2)
+                 (with-trap T2
+                   (with-trap T1
+                     (par (exit-trap T1 1)
+                          (exit-trap T2 2)))))
+         (emit O1)
+         (emit O2))))
+   (hash O1 #t)))
+
+(with-signal (O1 O2)
+  (check-equal?
+   (react!
+    (esterel
+     (if (equal? (set 1 2)
+                 (with-trap T1
+                   (par (exit-trap T1 1)
+                        (exit-trap T1 2))))
+         (emit O1)
+         (emit O2))))
+   (hash O1 #t)))
