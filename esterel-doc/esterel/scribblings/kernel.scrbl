@@ -91,6 +91,36 @@ provides additional functionality.
 
 }
 
+@defform[(debug-when-must e1 e2 ...)]{
+ Evaluates @racket[e1] and @racket[e2]s when the entire
+ @racket[debug-when-must] form must be executed. Raises an error
+ if evaluated outside of an @racket[esterel] form.
+
+ This can be used to debug Esterel in Racket programs.
+ Sometimes, code inside @racket[esterel] is run as part of an
+ exploration to determine if signal might be emitted and, in
+ that case, we do not know that that code must run. In such
+ situations, effectful code (such as @racket[printf]) can run
+ multiple times, leading to confusing behavior. Wrapping such
+ debugging IO operations in a @racket[debug-when-must] form can
+ help to understand an Esterel in Racket program.
+
+
+ In this example, the use of @racket[debug-when-must] prevents
+ @racket["hi!"] from being printed out, as that code runs
+ only in can exploration. In contrast @racket["bye!"] is printed
+ out because that code must run, as @racket[_S1] is not present.
+ Note that without the @racket[debug-when-must] forms wrapped
+ around the calls to @racket[printf], more printouts happen.
+ @examples[
+ #:eval esterel-eval
+ (define-signal S1)
+ (react! (esterel (if (present? S1)
+                      (debug-when-must (printf "hi!\n"))
+                      (debug-when-must (printf"bye!\n")))))
+ ]
+}
+
 @section{Signals}
 
 @defform[(with-signal (signal ...)

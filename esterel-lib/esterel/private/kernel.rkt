@@ -41,7 +41,8 @@
  par/proc
  with-trap/proc
  run-and-kill-signals!
- no-init)
+ no-init
+ debug-when-must)
 
 
 #|
@@ -558,6 +559,19 @@ value for can explorations and subsequent must evaluation.
      ;; here we tell the enclosing par that a trap has happened
      ((vector-ref start-of-par-counter 0) exn-or-trap+vals)]))
 
+(define-syntax (debug-when-must stx)
+  (syntax-parse stx
+    [(_ e1 e2 ...)
+     #'(debug-when-must/proc (λ () e1 e2 ...))]))
+(define (debug-when-must/proc thunk)
+  (define signal-table (current-signal-table))
+  (unless signal-table (error 'debug-when-must "not in `esterel`"))
+  (define c (make-channel))
+  (channel-put (signal-table-when-must-chan signal-table) c)
+  (define must? (channel-get c))
+  (when must?
+    (thunk)))
+
 (struct signal-table (new-signal-chan
                       signal-presence/value-chan
                       signal-dead-chan
@@ -566,6 +580,7 @@ value for can explorations and subsequent must evaluation.
                       pause-chan instant-chan
                       react-thread-done-chan
                       suspended-signals-chan
+                      when-must-chan
                       pre-count))
   
 (struct esterel (signal-table) #:mutable)
@@ -579,7 +594,7 @@ value for can explorations and subsequent must evaluation.
   (define the-signal-table
     (signal-table (make-channel) (make-channel) (make-channel) (make-channel)
                   (make-channel) (make-channel) (make-channel) (make-channel)
-                  (make-channel) (make-channel) pre-count))
+                  (make-channel) (make-channel) (make-channel) pre-count))
   (thread (λ () (run-esterel-thread pre-count thunk the-signal-table)))
   (esterel the-signal-table))
 
@@ -662,6 +677,7 @@ value for can explorations and subsequent must evaluation.
                               pause-chan instant-chan
                               react-thread-done-chan
                               suspended-signals-chan
+                              when-must-chan
                               pre-count)
     the-signal-table)
 
@@ -1816,6 +1832,11 @@ value for can explorations and subsequent must evaluation.
            (log-par-state)
            (when (exn? exn) (set! raised-exns (cons exn raised-exns)))
            (remove-running-thread esterel-thread)
+           (loop)))
+        (handle-evt
+         when-must-chan
+         (λ (resp)
+           (channel-put resp (not (can? mode)))
            (loop)))
         )])))
 

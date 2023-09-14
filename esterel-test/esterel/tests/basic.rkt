@@ -222,3 +222,37 @@
   ;; one of these errors should be guaranteed, however.
   (check-exn #rx"(emit: signal is suspended)|(suspend: suspended signal was used)"
              (λ () (react! r))))
+
+(with-signal (S)
+  (define r
+    (esterel
+     (debug-when-must
+      (fprintf sp "hi\n"))))
+  (define sp (open-output-string))
+  (parameterize ([current-output-port sp])
+    (react! r))
+  (check-equal? (get-output-string sp) "hi\n"))
+
+(with-signal (S)
+  (define sp (open-output-string))
+  (define r
+    (esterel
+     (if (present? S)
+         (debug-when-must (fprintf sp "hi\n"))
+         (void))
+     (debug-when-must (fprintf sp "bye\n"))))
+  (parameterize ([current-output-port sp])
+    (react! r))
+  (check-equal? (get-output-string sp) "bye\n"))
+
+(with-signal (S)
+  (define sp (open-output-string))
+  (define r
+    (esterel
+     (if (present? S)
+         (void)
+         (debug-when-must (fprintf sp "hi\n")))
+     (debug-when-must (fprintf sp "bye\n"))))
+  (parameterize ([current-output-port sp])
+    (react! r))
+  (check-equal? (get-output-string sp) "hi\nbye\n"))
