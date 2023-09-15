@@ -747,17 +747,6 @@ value for can explorations and subsequent must evaluation.
             (define on? (bitwise-bit-set? signal-states i))
             (hash-set signal-status a-signal on?)))
     (set! signal-ready (set-union newly-ready signal-ready)))
-
-  ;; get-unemitted-signals : can? -> (set/c signal?)
-  ;; returns the set of signals that cannot be emitted
-  (define (get-unemitted-signals a-can)
-    (match-define (can emits ordered-signals newly-ready
-                       signal-states starting-point)
-      a-can)
-    (for/set ([signal (in-set (set-union (list->set ordered-signals)
-                                         newly-ready))]
-              #:unless (set-member? emits signal))
-      signal))
   
   ;; add-emitted-signal : can? signal? -> can?
   ;; adds `a-signal` as emitted to `a-can`
@@ -1392,9 +1381,13 @@ value for can explorations and subsequent must evaluation.
              ;; we've explored all possibilities of relevant signals
              ;; either go back to must mode or report the discovery
              ;; of a non-constructive program
-             (define unemitted-signals (get-unemitted-signals mode))
+             (match-define (can emits ordered-signals newly-ready
+                                signal-states starting-point)
+               mode)
+             (define unemitted-signals (set-subtract (list->set ordered-signals) emits))
              (cond
-               [(set-empty? unemitted-signals)
+               [(and (set-empty? unemitted-signals)
+                     (set-empty? newly-ready))
                 (channel-put instant-complete-chan (cons 'non-constructive
                                                          (list->set (can-ordered-signals mode))))
                 ;; when we send back 'non-constructive, then we will
@@ -1407,11 +1400,7 @@ value for can explorations and subsequent must evaluation.
                       (for/fold ([signal-status signal-status])
                                 ([a-signal (in-set unemitted-signals)])
                         (hash-set signal-status a-signal #f)))
-                (set! signal-ready (set-union
-                                    signal-ready
-                                    (for/set ([a-signal (in-set unemitted-signals)]
-                                              #:when (signal-combine a-signal))
-                                      a-signal)))
+                (set! signal-ready (set-union signal-ready newly-ready))
                 (define unemitted-signal-list (set->list unemitted-signals))
                 (unblock-presence-threads unemitted-signal-list)
                 (unblock-value-threads unemitted-signal-list)
