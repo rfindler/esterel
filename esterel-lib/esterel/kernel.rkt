@@ -17,6 +17,7 @@
  suspend
  with-trap
  debug-when-must
+ exec
  (contract-out
   [esterel? (-> any/c boolean?)]
   [react! (->* (esterel?)

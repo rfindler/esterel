@@ -256,3 +256,134 @@
   (parameterize ([current-output-port sp])
     (react! r))
   (check-equal? (get-output-string sp) "hi\nbye\n"))
+
+
+(with-signal (S0 S1)
+  (define s (make-semaphore 0))
+  (define r
+    (esterel
+     (par
+      (begin (emit S0)
+             (pause)
+             (emit S1))
+      (exec
+       r
+       ()
+       (semaphore-post s)))))
+
+  (define react-chan (make-channel))
+  (define react-thread
+    (thread
+     (λ ()
+       (let loop ()
+         (check-equal? (channel-get react-chan)
+                       (react! r))
+         (loop)))))
+  (channel-put react-chan (hash S0 #t))
+  (semaphore-wait s)
+  (channel-put react-chan (hash S1 #t)))
+
+(with-signal (S0 S1)
+  (define s (make-semaphore 1))
+  (define actions '())
+  (define r
+    (esterel
+     (par
+      (begin (emit S0)
+             (pause)
+             (emit S1)
+             (pause))
+      (suspend (exec
+                r
+                ()
+
+                ;; never complete the exec
+                (semaphore-wait (make-semaphore 0))
+
+                #:kill
+                (semaphore-wait s)
+                (set! actions (cons 'kill actions))
+                (semaphore-post s)
+                #:suspend
+                (semaphore-wait s)
+                (set! actions (cons 'suspend actions))
+                (semaphore-post s)
+                #:resume
+                (semaphore-wait s)
+                (set! actions (cons 'resume actions))
+                (semaphore-post s))
+               (present? S1)))))
+
+  (react! r)
+  (react! r)
+  (react! r)
+  (semaphore-wait s)
+  (check-equal? (reverse actions) '(suspend resume)))
+
+(with-signal ()
+  (define s (make-semaphore 1))
+  (define actions '())
+  (define r
+    (esterel
+     (with-trap T
+       (par
+        (begin (pause)
+               (exit-trap T))
+        (exec
+         r
+         ()
+
+         ;; never complete the exec
+         (semaphore-wait (make-semaphore 0))
+         #:kill
+         (semaphore-wait s)
+         (set! actions (cons 'kill actions))
+         (semaphore-post s)
+         #:suspend
+         (semaphore-wait s)
+         (set! actions (cons 'suspend actions))
+         (semaphore-post s)
+         #:resume
+         (semaphore-wait s)
+         (set! actions (cons 'resume actions))
+         (semaphore-post s))))))
+
+  (react! r)
+  (react! r)
+  (semaphore-wait s)
+  (check-equal? (reverse actions) '(kill)))
+
+(with-signal (S0 S1)
+  (define s (make-semaphore 1))
+  (define actions '())
+  (define r
+    (esterel
+     (with-trap T
+       (par
+        (begin (emit S0)
+               (pause)
+               (exit-trap T))
+        (suspend (exec
+                  r
+                  ()
+
+                  ;; never complete the exec
+                  (semaphore-wait (make-semaphore 0))
+                  #:kill
+                  (semaphore-wait s)
+                  (set! actions (cons 'kill actions))
+                  (semaphore-post s)
+                  #:suspend
+                  (semaphore-wait s)
+                  (set! actions (cons 'suspend actions))
+                  (semaphore-post s)
+                  #:resume
+                  (semaphore-wait s)
+                  (set! actions (cons 'resume actions))
+                  (semaphore-post s))
+                 (present? S1))))))
+
+  (react! r)
+  (react! r)
+  (semaphore-wait s)
+  (check-equal? (reverse actions) '(kill)))

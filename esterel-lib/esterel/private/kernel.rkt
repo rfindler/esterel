@@ -42,7 +42,8 @@
  with-trap/proc
  run-and-kill-signals!
  no-init
- debug-when-must)
+ debug-when-must
+ exec)
 
 
 #|
@@ -457,50 +458,52 @@ value for can explorations and subsequent must evaluation.
     [(exn? val) (raise val)]
     [(trap+vals? val) (exit-trap/internal val)]
     [else
-     (define iter
-       (continuation-mark-set->iterator
-        (current-continuation-marks)
-        (list suspend-mark)))
-     (define-values (suspend? suspended-signals)
-       (let loop ([iter iter]
-                  [suspend? #f]
-                  [suspended-signals (set)]
-                  [pending-signals (set)])
-         (define-values (next-val next-iter) (iter))
-         (match next-val
-           [(vector (? procedure? suspend-proc))
-            (cond
-              [(suspend-proc)
-               (set! suspended-signals
-                     (set-union pending-signals suspended-signals))
-               (loop next-iter
-                     #t
-                     (set-union pending-signals suspended-signals)
-                     (set))]
-              [else
-               (loop next-iter
-                     suspend?
-                     suspended-signals
-                     pending-signals)])]
-           [(vector (? set? signals))
-            (loop next-iter
-                  suspend?
-                  suspended-signals
-                  (set-union signals pending-signals))]
-           [#f (values suspend? suspended-signals)])))
+     (define suspend? (handle-suspension signal-table))
      (cond
        [suspend?
-        (unless (set-empty? suspended-signals)
-          (define resp-chan (make-channel))
-          (channel-put (signal-table-suspended-signals-chan signal-table)
-                       (cons suspended-signals resp-chan))
-          (define resp (channel-get resp-chan))
-          (when resp
-            (error 'suspend "suspended signal was used\n  signal: ~e"
-                   resp)))
         (pause)]
        [else
         (void)])]))
+
+(define (handle-suspension signal-table)
+  (define iter
+    (continuation-mark-set->iterator
+     (current-continuation-marks)
+     (list suspend-mark)))
+  (define-values (suspend? suspended-signals)
+    (let loop ([iter iter]
+             [suspend? #f]
+             [suspended-signals (set)]
+             [pending-signals (set)])
+    (define-values (next-val next-iter) (iter))
+    (match next-val
+      [(vector (? procedure? suspend-proc))
+       (cond
+         [(suspend-proc)
+          (loop next-iter
+                #t
+                (set-union pending-signals suspended-signals)
+                (set))]
+         [else
+          (loop next-iter
+                suspend?
+                suspended-signals
+                pending-signals)])]
+      [(vector (? set? signals))
+       (loop next-iter
+             suspend?
+             suspended-signals
+             (set-union signals pending-signals))]
+      [#f (values suspend? suspended-signals)])))
+  (unless (set-empty? suspended-signals)
+    (define resp-chan (make-channel))
+    (channel-put (signal-table-suspended-signals-chan signal-table)
+                 (cons suspended-signals resp-chan))
+    (define resp (channel-get resp-chan))
+    (when resp
+      (error 'suspend "suspended signal was used\n  signal: ~e"
+             resp)))
+  suspend?)
 
 (define-syntax (suspend stx)
   (syntax-case stx ()
@@ -566,11 +569,85 @@ value for can explorations and subsequent must evaluation.
 (define (debug-when-must/proc thunk)
   (define signal-table (current-signal-table))
   (unless signal-table (error 'debug-when-must "not in `esterel`"))
+  (when (in-must-mode? signal-table)
+    (thunk)))
+
+(define (in-must-mode? signal-table)
   (define c (make-channel))
   (channel-put (signal-table-when-must-chan signal-table) c)
-  (define must? (channel-get c))
-  (when must?
-    (thunk)))
+  (channel-get c))
+
+(define-syntax (exec stx)
+  (syntax-parse stx
+    [(_ esterel:id ([x:id x-e:expr] ...)
+        body-e1:expr body-e2:expr ...
+        (~optional (~seq #:kill kill-e1:expr kill-e2:expr ...)
+                   #:defaults ([kill-e1 #'(void)] [(kill-e2 1) '()]))
+        (~optional (~seq #:suspend suspend-e1:expr suspend-e2:expr ...)
+                   #:defaults ([suspend-e1 #'(void)] [(suspend-e2 1) '()]))
+        (~optional (~seq #:resume resume-e1:expr resume-e2:expr ...)
+                   #:defaults ([resume-e1 #'(void)] [(resume-e2 1) '()])))
+     #'(exec/proc
+        (λ (esterel)
+          (let ([x x-e] ...)
+            (values
+             (λ () body-e1 body-e2 ...)
+             (λ () kill-e1 kill-e2 ...)
+             (λ () suspend-e1 suspend-e2 ...)
+             (λ () resume-e1 resume-e2 ...)))))]))
+
+(define (exec/proc mk)
+  (define signal-table (current-signal-table))
+  (unless signal-table (error 'exec "not in `esterel`"))
+  (define-values (body-thunk kill-thunk suspend-thunk resume-thunk)
+    (mk (signal-table-the-esterel signal-table)))
+  (define exec-finished (make-channel))
+  (thread (λ ()
+            (body-thunk)
+            (channel-put exec-finished (void))))
+  (define (start-a-new-pause)
+    (define resp-chan (make-channel))
+    (channel-put (signal-table-pause-chan signal-table)
+                 (vector (current-thread) resp-chan))
+    resp-chan)
+  (let loop ([suspended? #f]
+             [finished? #f]
+             [resp-chan (start-a-new-pause)])
+    (sync
+     (handle-evt
+      resp-chan
+      (λ (val)
+        (cond
+          [(exn? val)
+           (unless finished? (when (in-must-mode? signal-table) (kill-thunk)))
+           (raise val)]
+          [(trap+vals? val)
+           (unless finished? (when (in-must-mode? signal-table) (kill-thunk)))
+           (exit-trap/internal val)]
+          [else
+           (define suspend? (handle-suspension signal-table))
+           (cond
+             [(in-must-mode? signal-table)
+              (unless finished?
+                (unless (equal? suspend? suspended?)
+                  (set! suspended? suspend?)
+                  (if suspend?
+                      (suspend-thunk)
+                      (resume-thunk))))
+              (cond
+                [(and (not suspend?) finished?)
+                 (void)]
+                [else
+                 (loop suspend? finished? (start-a-new-pause))])]
+             [else
+              ;; `handle-suspension` might return in can mode;
+              ;; in that case, we just pretend to be a pause
+              ;; and don't communicate with the running exec.
+              (loop suspended? finished? (start-a-new-pause))])])))
+     (handle-evt
+      exec-finished
+      (λ (_)
+        (loop suspended? #t resp-chan))))))
 
 (struct signal-table (new-signal-chan
                       signal-presence/value-chan
@@ -581,7 +658,8 @@ value for can explorations and subsequent must evaluation.
                       react-thread-done-chan
                       suspended-signals-chan
                       when-must-chan
-                      pre-count))
+                      pre-count
+                      [the-esterel #:mutable]))
   
 (struct esterel (signal-table) #:mutable)
 (define-syntax (-esterel stx)
@@ -594,9 +672,11 @@ value for can explorations and subsequent must evaluation.
   (define the-signal-table
     (signal-table (make-channel) (make-channel) (make-channel) (make-channel)
                   (make-channel) (make-channel) (make-channel) (make-channel)
-                  (make-channel) (make-channel) (make-channel) pre-count))
+                  (make-channel) (make-channel) (make-channel) pre-count #f))
   (thread (λ () (run-esterel-thread pre-count thunk the-signal-table)))
-  (esterel the-signal-table))
+  (define me (esterel the-signal-table))
+  (set-signal-table-the-esterel! the-signal-table me)
+  me)
 
 (define (react! an-esterel #:emit [signals-to-emit '()])
   (define signal-table (esterel-signal-table an-esterel))
@@ -678,7 +758,8 @@ value for can explorations and subsequent must evaluation.
                               react-thread-done-chan
                               suspended-signals-chan
                               when-must-chan
-                              pre-count)
+                              pre-count
+                              _)
     the-signal-table)
 
   ;; tracks the values of signals in previous instants
@@ -860,6 +941,7 @@ value for can explorations and subsequent must evaluation.
   ;; each paused thread is blocked on the corresponding channel
   ;; when a par's threads are all paused, the parent thread does
   ;; *not* end up here (even though it is morally paused)
+  ;; also, threads that're currently running an exec are here too
   (define/contract paused-threads
     (hash/c thread? channel? #:flat? #t #:immutable #t)
     (hash))
@@ -1289,17 +1371,18 @@ value for can explorations and subsequent must evaluation.
       ;; anything more in this instant. time to close the par up
       (cond
         [(set-empty? paused)
-         ;; if there are no paused threads, then we know that the result
+         ;; if there are no paused or execing threads, then we know that the result
          ;; of this par is the trap (which might be #f meaning no actual
          ;; trap); send it to the parent thread
          (channel-put result/checkpoint-chan a-trap)
          (set! parent->par-state (hash-remove parent->par-state parent-thread))
+         ;; also, shut down all of the execs
          (add-running-thread parent-thread)]
         [(or (exn? a-trap) (trap+vals? a-trap))
-         ;; here we have a trap (or an exn) and there is at least one paused
-         ;; thread; we need to tell all the paused threads to exit to the trap
+         ;; here we have a trap (or an exn) and there is at least one paused or
+         ;; execing thread; we need to tell all the paused threads to exit to the trap
          ;; when that finishes we'll be back here to close up the par itself
-         (unpause-to-trap parent-thread a-trap)]
+         (unpause-to-trap parent-thread (or a-trap (if (can? mode) 'can-exploration (void))))]
         [else
          ;; here we should count the entire par as paused, since there are no
          ;; traps and at least one paused thread. update the state and recur

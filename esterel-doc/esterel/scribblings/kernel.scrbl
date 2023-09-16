@@ -478,4 +478,67 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  Recognizes values bound by @racket[with-trap].
 }
 
+@defform[(exec esterel-id
+               ([id id-expr] ...)
+               exec-expr ...
+               maybe-kill-exprs
+               maybe-suspend-exprs
+               maybe-resume-exprs)
+         #:grammar
+         ([maybe-kill-exprs (code:line) (code:line #:kill kill-expr ...)]
+          [maybe-suspend-exprs (code:line) (code:line #:suspend suspend-expr ...)]
+          [maybe-resume-exprs (code:line) (code:line #:resume resume-expr ...)])]{
+
+ Creates a separate thread to evaluate the @racket[exec-expr]s.
+ Meanwhile, @racket[pause]s until the first instant after the
+ @racket[exec-expr]s terminate.
+
+ The @racket[id-expr] expressions are evaluated when the
+ @racket[exec] is evaluated and they are bound to the
+ @racket[id]s, whose scope spans the @racket[exec-expr]s,
+ @racket[kill-expr]s, @racket[suspend-expr]s, and the
+ @racket[resume-expr]s.
+
+ In first instant when @racket[exec] is @racket[suspend]ed
+ then the @racket[suspend-expr] expressions are evaluated.
+ Once it has been suspended, in the first instant when the
+ @racket[exec] is no longer suspended, the
+ @racket[resume-expr]s are evaluated. This process repeats
+ each time the @racket[exec] is @racket[suspend]ed.
+
+ If the @racket[exec] is terminated (because a parallel
+ thread @racket[exit-trap]s to an enclosing @racket[with-trap])
+ the @racket[kill-expr]s are evaluated.
+
+ If they are evaluated, the @racket[kill-expr]s,
+ @racket[suspend-expr]s, and @racket[resume-expr]s are
+ evaluated on the same thread as each other, and that thread
+ is different from the thread evaluating the @racket[exec-expr]s.
+ Also, the @racket[kill-expr]s, @racket[suspend-expr]s, and
+ @racket[resume-expr]s must not raise errors or otherwise
+ fail to return normally, as the overall @racket[esterel]
+ that they are running in will not function properly in that
+ situation.
+
+ The intention of @racket[exec] is to offer a controlled way
+ to connect the synchronous computation (inside
+ @racket[esterel]) to the asynchronous computation that's
+ going on outside it. As such, the idea is that the
+ @racket[exec-expr]s may run some asynchronous computation,
+ such as connecting to a website or waiting for a timeout
+ and, when that completes, trigger another reaction with the
+ results of the asynchronous computation communicated to the
+ synchronous world via values on signals. That is, the last
+ thing that the @racket[exec-exprs]s should probably trigger
+ a reaction. But, that reaction should probably be triggered
+ on the same thread that triggered the original reaction (or,
+ at least, in a way that guarantees that only one reaction is
+ running at a time). The syncronization required to establish
+ that is left to the user of @racket[exec]. One possibility,
+ if a GUI is involved, is to use @racket[queue-callback] in
+ the @racket[exec-expr]s, keeping every reaction on an
+ eventspace's handler thread.
+
+}
+
 @(close-eval esterel-eval)
