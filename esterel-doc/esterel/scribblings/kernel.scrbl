@@ -499,13 +499,16 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  @racket[kill-expr]s, @racket[suspend-expr]s, and the
  @racket[resume-expr]s.
 
- In first instant when @racket[exec] is @racket[suspend]ed
- then the @racket[suspend-expr] expressions are evaluated.
- Once it has been suspended, in the first instant when the
- @racket[exec] is no longer suspended, the
- @racket[resume-expr]s are evaluated. This process repeats
- each time the @racket[exec] is @racket[suspend]ed.
-
+ The @racket[suspend-expr]s and @racket[resume-expr]s are
+ evaluated each instant that the @racket[exec] is
+ @racket[suspend]ed or resumed, with the caveat that, if the
+ @racket[exec] is suspended for multiple instants, the
+ @racket[suspend-expr]s are evaluated only during the first
+ instant when the @racket[expr] is suspended. Similarly, when
+ the @racket[exec] is resumed, the @racket[resume-expr]s are
+ evaluated only once, until the next time the @racket[exec]
+ is resumed (following some future suspension).
+ 
  If the @racket[exec] is terminated (because a parallel
  thread @racket[exit-trap]s to an enclosing @racket[with-trap])
  the @racket[kill-expr]s are evaluated.
@@ -529,7 +532,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  and, when that completes, trigger another reaction with the
  results of the asynchronous computation communicated to the
  synchronous world via values on signals. That is, the last
- thing that the @racket[exec-exprs]s should probably trigger
+ thing that the @racket[exec-exprs]s should do is trigger
  a reaction. But, that reaction should probably be triggered
  on the same thread that triggered the original reaction (or,
  at least, in a way that guarantees that only one reaction is
