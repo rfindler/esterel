@@ -2,7 +2,7 @@
 
 (define collection 'multi)
 
-(define deps '("base"))
+(define deps '(["base" #:version "8.9"]))
 
 (define pkg-desc "Esterel implementation in Racket")
 

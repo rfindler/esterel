@@ -1,4 +1,5 @@
 #lang racket/base
+(require racket/hash-code)
 
 (define (mk-write-proc get-name what)
   (define (write-proc a-signal port mode)
@@ -54,8 +55,7 @@
    (define (hash-mode-proc self rec mode)
      (define self-id (signal-identity self))
      (cond
-       ;; bitwise-xor should be replaced by a call to hash-code-mix after 8.9 is out
-       [self-id (bitwise-xor (equal-hash-code self-id))]
+       [self-id (hash-code-combine (equal-hash-code self-id))]
        [else (eq-hash-code self)]))])
 (define (signal-index s)
   (define id (signal-identity s))
