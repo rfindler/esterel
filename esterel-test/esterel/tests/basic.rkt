@@ -108,7 +108,7 @@
 
 ;; test that suspension suspends signals
 (with-signal (S2
-              O #:init (set) #:combine set-union)
+              O #:init (set) #:value)
   (define r
     (esterel
      #:pre 1
@@ -131,7 +131,7 @@
   (check-equal? (react!/names r) (hash "S1" #t "O" (set #t) "S2" #f))
   (check-equal? (react!/names r) (hash "S1" #t "O" (set #t) "S2" #f)))
 
-(with-signal (C #:combine (λ (x y) x) S2)
+(with-signal (C #:value S2)
   (define r
     (esterel
      #:pre 1
@@ -154,7 +154,7 @@
   (check-exn #rx"(emit: signal is suspended)|(suspend: suspended signal was used)"
              (λ () (react! r))))
 
-(with-signal (C #:combine (λ (x y) x) S2)
+(with-signal (C #:value S2)
   (define r
     (esterel
      #:pre 1
@@ -177,12 +177,12 @@
   (check-exn #rx"(present[?]: signal is suspended)|(suspend: suspended signal was used)"
              (λ () (react! r))))
 
-(with-signal (C #:combine (λ (x y) x) S2)
+(with-signal (C #:value S2)
   (define r
     (esterel
      #:pre 1
      (par (suspend
-           (with-signal (S1 #:combine +)
+           (with-signal (S1 #:value)
              (emit C S1)
              (let loop ()
                (emit S1 0)
@@ -200,7 +200,7 @@
   (check-exn #rx"(signal-value: signal is suspended)|(suspend: suspended signal was used)"
              (λ () (react! r))))
 
-(with-signal (C #:combine (λ (x y) x) S2)
+(with-signal (C #:value S2)
   (define r
     (esterel
      #:pre 1

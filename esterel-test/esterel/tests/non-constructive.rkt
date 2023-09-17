@@ -98,15 +98,17 @@
    non-constructive-exn?
    (λ () (react! r))))
 
-(check-exn
- non-constructive-exn?
- (λ ()
-   (react!
+(let ()
+  (define r
     (esterel
      (with-signal (s #:init 0 #:combine +)
        (emit s 1)
        (let ([x (signal-value s)])
-         (emit s x)))))))
+         (emit s x)))))
+  (check-equal?
+   (for/hash ([(k v) (in-hash (react! r))])
+     (values (signal-name k) v))
+   (hash "s" 1)))
 
 (check-exn
  non-constructive-exn?
@@ -165,32 +167,6 @@
 (with-signal (S1 #:combine + O1 O2)
   (define r
     (esterel
-     (emit S1 #f)
-     (pause)
-     (if (signal-value S1)
-         (emit O1)
-         (emit O2))))
-
-  (react! r)
-  (check-equal? (react! r)
-                (hash O2 #t)))
-
-(with-signal (S1 #:combine + O1 O2)
-  (define r
-    (esterel
-     (emit S1 #t)
-     (pause)
-     (if (signal-value S1)
-         (emit O1)
-         (emit O2))))
-
-  (react! r)
-  (check-equal? (react! r)
-                (hash O1 #t)))
-
-(with-signal (S1 #:combine + O1 O2)
-  (define r
-    (esterel
      (par (emit S1 3)
           (if (signal-value S1)
               (emit O1)
@@ -203,12 +179,9 @@
   (define r
     (esterel
      (par (emit S1 3)
-          (emit S1 5)
           (if (signal-value S1)
               (emit O1)
               (emit O2)))))
 
   (check-equal? (react! r)
-                (hash S1 8 O1 #t)))
-
-
+                (hash S1 3 O1 #t)))

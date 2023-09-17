@@ -28,7 +28,7 @@
 ;; If the identity is not #t, it is expected to be a pair
 ;; whose car component is might be useful as debugging
 ;; information so it printed as part of the signal
-(struct signal (name identity init combine)
+(struct signal (name identity init value?)
   #:methods gen:custom-write
   [(define write-proc
      (mk-write-proc

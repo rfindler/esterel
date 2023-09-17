@@ -2,97 +2,48 @@
 (require esterel/kernel rackunit
          "private/util.rkt")
 
-(with-signal (S #:combine +)
+(printf "1\n")
+(with-signal (S #:value)
   (check-equal?
    (react!
     (esterel
      (emit S 1)))
    (hash S 1)))
-
-(with-signal (S #:combine +)
-  (check-equal?
-   (react!
-    (esterel
-     (emit S 1)
-     (emit S 2)))
-   (hash S 3)))
-
-(with-signal (S #:combine +)
+(printf "2\n")
+(with-signal (S #:value)
   (check-exn
-   #rx"signal has never been emitted"
+   #rx"emit: different signal values"
+   (λ ()
+     (react!
+      (esterel
+       (emit S 1)
+       (emit S 2))))))
+
+(with-signal (S #:value)
+  (check-exn
+   #rx"signal-value: signal is not emitted in this instant"
    (λ ()
      (react!
       (esterel
        (signal-value S))))))
 
-(with-signal (S1 #:combine + S2 #:combine +)
+(with-signal (S1 #:value S2 #:value)
   (define r
     (esterel
      (emit S1 11)
-     (pause)
      (emit S2 (+ 1 (signal-value S1)))))
-  (check-equal? (react! r) (hash S1 11))
-  (check-equal? (react! r) (hash S2 12)))
+  (check-equal? (react! r) (hash S1 11 S2 12)))
 
-(with-signal (S1 #:combine + S2 #:combine +)
-  (check-equal?
-   (react!
-    (esterel
-     (emit S1 1)
-     (emit S1 2)
-     (emit S2 (+ 2 (signal-value S1)))))
-   (hash S1 3 S2 5)))
-
-(with-signal (S1 #:combine + S2 #:combine +)
+(with-signal (S1 #:value S2 #:value)
   (check-equal?
    (react!
     (esterel
      (par (emit S1 1)
           (emit S2 (+ 1 (signal-value S1)))
-          (emit S1 2))))
-   (hash S1 3 S2 4)))
+          (emit S1 1))))
+   (hash S1 1 S2 2)))
 
-(with-signal (S1 #:combine + S2 #:combine +)
-  (check-exn
-   non-constructive-exn?
-   (λ ()
-     (react!
-      (esterel
-       (emit S1 1)
-       (signal-value S1)
-       (emit S1 2))))))
-
-(with-signal (S1 #:combine + S2 #:combine +)
-  (define r
-    (esterel
-     (emit S1 44)
-     (emit S2 55)
-     (pause)
-     (par (if (signal-value S1)
-              (void)
-              (emit S2 1))
-          (if (signal-value S2)
-              (void)
-              (void)))))
-  (react! r)
-  (check-equal? (react! r) (hash)))
-
-(with-signal (S1 #:combine + S2 #:combine +)
-  (define r
-    (esterel
-     (emit S1 #f)
-     (emit S2 55)
-     (pause)
-     (par (if (signal-value S1)
-              (void)
-              (emit S2 1))
-          (if (signal-value S2)
-              (void)
-              (void)))))
-  (react! r)
-  (check-equal? (react! r) (hash S2 1)))
-
-(with-signal (S #:combine +)
+(with-signal (S #:value)
   (define r
     (esterel
      (emit S 1)
@@ -101,7 +52,7 @@
   (check-equal? (react! r) (hash S 1))
   (check-equal? (react! r) (hash S 2)))
 
-(with-signal (S #:combine + O)
+(with-signal (S #:value O)
   (define r
     (esterel
      #:pre 2
@@ -112,7 +63,7 @@
   (check-equal? (react! r) (hash S 1))
   (check-equal? (react! r) (hash O #t)))
 
-(with-signal (O S #:combine +)
+(with-signal (O S #:value)
   (define r
     (esterel
      #:pre 2
@@ -128,13 +79,13 @@
   (check-equal? (react! r) (hash S 2 O #t))
   (check-equal? (react! r) (hash O #t)))
 
-(with-signal (S #:combine +)
+(with-signal (S #:value)
   (define r
     (esterel
      (present? S)))
   (check-equal? (react! r) (hash)))
 
-(with-signal (S #:combine +)
+(with-signal (S #:value)
   (define r
     (esterel
      (emit S 0)
@@ -142,7 +93,7 @@
   (check-equal? (react! r)
                 (hash S 0)))
 
-(with-signal (S #:combine +)
+(with-signal (S #:value)
   (define r
     (esterel
      (emit S 0)
@@ -151,14 +102,14 @@
   (check-equal? (react! r)
                 (hash S 0)))
 
-(with-signal (S #:combine +)
+(with-signal (S #:value)
   (define r
     (esterel
      (present? S)))
   (check-equal? (react! r #:emit (list (cons S 0)))
                 (hash S 0)))
 
-(with-signal (S #:combine + O1 O2)
+(with-signal (S #:value O1 O2)
   (define r
     (esterel
      (if (present? S)
@@ -167,7 +118,7 @@
   (check-equal? (react! r #:emit (list (cons S 2)))
                 (hash S 2 O1 #t)))
 
-(with-signal (S #:combine + O)
+(with-signal (S #:value O)
   (define r
     (esterel
      (let loop ()
@@ -179,7 +130,7 @@
   (check-equal? (react! r #:emit (list (cons S 1))) (hash S 1))
   (check-equal? (react! r #:emit (list (cons S 2))) (hash S 2 O #t)))
 
-(with-signal (S #:init 0 #:combine +)
+(with-signal (S #:init 0 #:value)
   (define r
     (esterel
      #:pre 1
@@ -192,7 +143,7 @@
   (check-equal? (react! r) (hash S 2))
   (check-equal? (react! r) (hash S 3)))
 
-(with-signal (S  #:init 0 #:combine +)
+(with-signal (S  #:init 0 #:value)
   (define r
     (esterel
      #:pre 1
@@ -204,32 +155,7 @@
   (check-equal? (react! r) (hash S 2))
   (check-equal? (react! r) (hash S 3)))
 
-(with-signal (S #:init 0 #:combine + T #:combine +)
-  (define r
-    (esterel
-     #:pre 1
-     (let loop ()
-       (emit T (signal-value S))
-       (pause)
-       (emit S (+ 1 (signal-value S #:pre 1)))
-       (loop))))
-  (check-equal? (react! r) (hash T 0))
-  (check-equal? (react! r) (hash T 1 S 1))
-  (check-equal? (react! r) (hash T 2 S 2)))
-
-(with-signal (S #:init (set) #:combine set-union)
-  (define r
-    (esterel
-     (let loop ([n 0])
-       (for ([i (in-range n)]) (emit S (set i)))
-       (pause)
-       (loop (+ n 1)))))
-  (check-equal? (react! r) (hash))
-  (check-equal? (react! r) (hash S (set 0)))
-  (check-equal? (react! r) (hash S (set 0 1))))
-
-
-(with-signal (S #:init 0 #:combine + T U)
+(with-signal (S #:init 0 #:value T U)
   (check-equal?
    (react!
     (esterel

@@ -22,8 +22,8 @@
   [esterel? (-> any/c boolean?)]
   [react! (->* (esterel?)
                (#:emit (listof
-                        (or/c (and/c signal? (not/c signal-combine))
-                              (cons/c (and/c signal? signal-combine)
+                        (or/c (and/c signal? (not/c signal-value?))
+                              (cons/c (and/c signal? signal-value?)
                                       any/c))))
                (hash/dc [s signal?]
                         ;; if a signal is not emitted
@@ -31,7 +31,7 @@
                         ;; then it just won't be in the map,
                         ;; so we won't be told that its absense
                         ;; mattered to the computation
-                        [v (s) (if (signal-combine s)
+                        [v (s) (if (signal-value? s)
                                    any/c
                                    boolean?)]
                         #:immutable #t #:kind 'flat))]
@@ -46,12 +46,8 @@
                   #:pre/desc (pre-cond-check)
                   boolean?))]
 
-  ;; when a signal is not emitted it will return the
-  ;; previous instant's value from signal-value, following
-  ;; _The ESTEREL synchronous programming language: design,
-  ;; semantics, implementation*_ by Berry and Gonthier
   [signal-value (values
-                 (->* ((and/c signal? signal-combine))
+                 (->* ((and/c signal? signal-value?))
                       ;; NB when we go "too far" with #:pre the values are just #f,
                       ;; even if the signal never had that value... is this okay?
                       (#:pre natural?)
@@ -60,7 +56,7 @@
   [signal? (-> any/c boolean?)]
   [signal-name (-> signal? (or/c #f string?))]
   [signal-index (-> signal? (or/c #f natural?))]
-  [signal-combine (-> signal? (or/c #f (-> any/c any/c any)))]
+  [signal-value? (-> signal? boolean?)]
   [emit (values (->* (signal?)
                      (any/c)
                      #:pre/desc (pre-cond-check)
