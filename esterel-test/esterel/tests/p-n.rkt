@@ -159,9 +159,9 @@
      #:emit (if I-present?
                 (list I)
                 (list))))
-  ;; this test case is failing but I don't get
-  ;; why the implementation is wrong; comment it out for now
-  #;
+  ;; this test case disagrees with the prose in the book,
+  ;; but Gérard says that this is the right behavior.
+  ;; (personal communication)
   (check-exn
    non-constructive-exn?
    (λ ()
