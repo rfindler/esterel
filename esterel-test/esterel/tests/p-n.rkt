@@ -162,10 +162,7 @@
   ;; this test case disagrees with the prose in the book,
   ;; but Gérard says that this is the right behavior.
   ;; (personal communication)
-  (check-exn
-   non-constructive-exn?
-   (λ ()
-     (run #t)))
+  (check-equal? (run #t) (hash I #t O #t))
   (check-exn
    non-constructive-exn?
    (λ ()
