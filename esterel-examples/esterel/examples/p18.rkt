@@ -25,28 +25,29 @@ The example can be extended to n signals, in which case the innermost signal has
 
 (define r
   (esterel
-   (let loop ()
-     (with-trap t1
-       (with-signal (s1)
-         (par
-          (begin (pause) (emit s1) (exit-trap t1))
-          (let loop ()
-            (with-trap t2
-              (with-signal (s2)
-                (par
-                 (begin (pause) (emit s2) (exit-trap t2))
-                 (let loop ()
-                   (if (present? s1)
-                       (if (present? s2)
-                           (emit s1_and_s2)
-                           (emit s1_and_not_s2))
-                       (if (present? s2)
-                           (emit not_s1_and_s2)
-                           (emit not_s1_and_not_s2)))
-                   (pause)
-                   (loop)))))
-            (loop)))))
-     (loop))))
+   (loop
+    (with-trap t1
+      (with-signal (s1)
+        (par
+         (begin (pause) (emit s1) (exit-trap t1))
+         (loop
+          (with-trap t2
+            (with-signal (s2)
+              (par
+               (begin (pause) (emit s2) (exit-trap t2))
+               (loop
+                (maybe-do-the-four-emissions s1 s2)
+                (pause))))))))))))
+
+(define (maybe-do-the-four-emissions s1 s2)
+  (if (present? s1)
+      (if (present? s2)
+          (emit s1_and_s2)
+          (emit s1_and_not_s2))
+      (if (present? s2)
+          (emit not_s1_and_s2)
+          (emit not_s1_and_not_s2))))
+
 
 (define (keep-only-underscores ht)
   (for/hash ([(k v) (in-hash ht)]
