@@ -17,6 +17,15 @@
      (emit S 2)))
    (hash S 3)))
 
+(with-signal (T #:combine (λ (x y) (string->symbol (string-append (symbol->string x) (symbol->string y))))
+              S #:combine (λ (x y) (string->symbol (string-append (symbol->string x) (symbol->string y)))))
+  (check-equal?
+   (react!
+    (esterel
+     (emit S 'suspended)
+     (emit T (signal-value S))))
+   (hash S 'suspended T 'suspended)))
+
 (with-signal (S #:combine +)
   (check-exn
    #rx"signal has never been emitted"

@@ -231,7 +231,7 @@ value for can explorations and subsequent must evaluation.
   (define resp-chan (make-channel))
   (channel-put (signal-table-emit-chan signal-table) (vector a-signal no-value-provided? value resp-chan))
   (match (channel-get resp-chan)
-    ['suspended
+    [(signal-suspended)
      (if (equal? value no-value-provided)
          (error 'emit "signal is suspended\n  signal: ~e" a-signal)
          (error 'emit "signal is suspended\n  signal: ~e\n  value: ~e" a-signal value))]
@@ -275,7 +275,7 @@ value for can explorations and subsequent must evaluation.
            (channel-put (checkpoint-request-resp-chan maybe-val) k)
            resp-chan)
          esterel-prompt-tag))]
-      ['suspended
+      [(signal-suspended)
        (error (if is-present? 'present? 'signal-value)
               "signal is suspended\n  signal: ~e" a-signal)]
       [(signal-never-before-emitted)
@@ -287,6 +287,7 @@ value for can explorations and subsequent must evaluation.
       [else maybe-val])))
 
 (struct signal-never-before-emitted ())
+(struct signal-suspended ())
 
 (define-syntax (par stx)
   (syntax-case stx ()
@@ -1679,7 +1680,7 @@ value for can explorations and subsequent must evaluation.
              [(= pre 0)
               (cond
                 [(equal? 'suspended (hash-ref signal-status a-signal #f))
-                 (channel-put resp-chan 'suspended)]
+                 (channel-put resp-chan (signal-suspended))]
                 [(if is-present?
                      (not (hash-has-key? signal-status a-signal))
                      (not (set-member? signal-ready a-signal)))
@@ -1808,7 +1809,7 @@ value for can explorations and subsequent must evaluation.
                  (loop)]
                 ['suspended
                  ;; the signal's suspended, so send back a message that triggers an error
-                 (channel-put resp-chan 'suspended)
+                 (channel-put resp-chan (signal-suspended))
                  (loop)]
 
                 [#t
