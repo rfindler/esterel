@@ -48,16 +48,17 @@ The example can be extended to n signals, in which case the innermost signal has
           (emit not_s1_and_s2)
           (emit not_s1_and_not_s2))))
 
-
 (define (keep-only-underscores ht)
   (for/hash ([(k v) (in-hash ht)]
              #:when (regexp-match #rx"_" (signal-name k)))
     (values k v)))
 (void (react! r))
 (for ([i (in-range 200)])
-  (unless (equal? (keep-only-underscores (react! r))
+  (define sigs (keep-only-underscores (react! r)))
+  (unless (equal? sigs
                   (hash not_s1_and_not_s2 #t
                         s1_and_s2 #t
                         s1_and_not_s2 #t))
-    (error 'p18 "wrong result: ~s"
-           (keep-only-underscores (react! r)))))
+    (error 'p18 "wrong result in reaction ~a: ~s"
+           (+ i 1)
+           sigs)))
