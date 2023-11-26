@@ -1,7 +1,8 @@
 #lang racket/base
 (require "private/kernel.rkt"
          racket/math
-         racket/contract)
+         racket/contract
+         racket/set)
 
 (define (pre-cond-check)
   (cond
@@ -54,7 +55,8 @@
                  (->* ((and/c signal? signal-combine))
                       ;; NB when we go "too far" with #:pre the values are just #f,
                       ;; even if the signal never had that value... is this okay?
-                      (#:pre natural?)
+                      (#:pre natural?
+                       #:can (set/c signal?))
                       #:pre/desc (pre-cond-check)
                       any/c))]
   [signal? (-> any/c boolean?)]

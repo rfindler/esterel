@@ -23,7 +23,7 @@
    (react!
     (esterel
      (emit S 'suspended)
-     (emit T (signal-value S))))
+     (emit T (signal-value S #:can (set)))))
    (hash S 'suspended T 'suspended)))
 
 (with-signal (S #:combine +)
@@ -32,14 +32,14 @@
    (λ ()
      (react!
       (esterel
-       (signal-value S))))))
+       (signal-value S #:can (set)))))))
 
 (with-signal (S1 #:combine + S2 #:combine +)
   (define r
     (esterel
      (emit S1 11)
      (pause)
-     (emit S2 (+ 1 (signal-value S1)))))
+     (emit S2 (+ 1 (signal-value S1 #:can (set))))))
   (check-equal? (react! r) (hash S1 11))
   (check-equal? (react! r) (hash S2 12)))
 
@@ -49,7 +49,7 @@
     (esterel
      (emit S1 1)
      (emit S1 2)
-     (emit S2 (+ 2 (signal-value S1)))))
+     (emit S2 (+ 2 (signal-value S1 #:can (set))))))
    (hash S1 3 S2 5)))
 
 (with-signal (S1 #:combine + S2 #:combine +)
@@ -57,7 +57,7 @@
    (react!
     (esterel
      (par (emit S1 1)
-          (emit S2 (+ 1 (signal-value S1)))
+          (emit S2 (+ 1 (signal-value S1 #:can (set))))
           (emit S1 2))))
    (hash S1 3 S2 4)))
 
@@ -68,7 +68,7 @@
      (react!
       (esterel
        (emit S1 1)
-       (signal-value S1)
+       (signal-value S1 #:can (set S1))
        (emit S1 2))))))
 
 (with-signal (S1 #:combine + S2 #:combine +)
@@ -77,10 +77,10 @@
      (emit S1 44)
      (emit S2 55)
      (pause)
-     (par (if (signal-value S1)
+     (par (if (signal-value S1 #:can (set S2))
               (void)
               (emit S2 1))
-          (if (signal-value S2)
+          (if (signal-value S2 #:can (set))
               (void)
               (void)))))
   (react! r)
@@ -92,10 +92,10 @@
      (emit S1 #f)
      (emit S2 55)
      (pause)
-     (par (if (signal-value S1)
+     (par (if (signal-value S1 #:can (set S2))
               (void)
               (emit S2 1))
-          (if (signal-value S2)
+          (if (signal-value S2 #:can (set))
               (void)
               (void)))))
   (react! r)
@@ -180,7 +180,7 @@
   (define r
     (esterel
      (let loop ()
-       (when (and (present? S) (= (signal-value S) 2))
+       (when (and (present? S) (= (signal-value S #:can (set O)) 2))
          (emit O))
        (pause)
        (loop))))
@@ -218,7 +218,7 @@
     (esterel
      #:pre 1
      (let loop ()
-       (emit T (signal-value S))
+       (emit T (signal-value S #:can (set)))
        (pause)
        (emit S (+ 1 (signal-value S #:pre 1)))
        (loop))))

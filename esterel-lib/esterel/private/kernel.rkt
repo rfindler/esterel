@@ -250,12 +250,19 @@ value for can explorations and subsequent must evaluation.
     [(? void?) (void)]))
   
 (define (present? a-signal #:pre [pre 0])
-  (signal-value/present? #t a-signal pre))
+  (signal-value/present? #t a-signal pre #f))
 
-(define (signal-value a-signal #:pre [pre 0])
-  (signal-value/present? #f a-signal pre))
+(define (signal-value a-signal #:pre [pre 0] #:can [can-result #f])
+  (when (and (zero? pre)
+             (not can-result))
+    (raise-arguments-error 'signal-value
+                           "#:can argument missing;\n when #:pre is 0 (the default),\n #:can cannot be #f (also the default)"
+                           "signal" a-signal
+                           "#:pre" pre
+                           "#:can" can-result))
+  (signal-value/present? #f a-signal pre can-result))
 
-(define (signal-value/present? is-present? a-signal pre)
+(define (signal-value/present? is-present? a-signal pre can-result)
   (define signal-table (current-signal-table))
   (define resp-chan (make-channel))
   (unless (<= pre (signal-table-pre-count signal-table))
@@ -269,12 +276,27 @@ value for can explorations and subsequent must evaluation.
     (define maybe-val (channel-get resp-chan))
     (match maybe-val
       [(? checkpoint-request?)
-       (loop
-        (call/cc
-         (λ (k)
-           (channel-put (checkpoint-request-resp-chan maybe-val) k)
-           resp-chan)
-         esterel-prompt-tag))]
+       (cond
+         [can-result
+          (channel-put (checkpoint-request-resp-chan maybe-val)
+                       (λ (resp-chan)
+                         (define bogus-value (channel-get resp-chan))
+                         (for ([a-signal (in-set can-result)])
+                           ;; we make up a value here to emit but that should
+                           ;; be okay as the values of valued signals are ignored
+                           ;; when we're in can mode
+                           (if (signal-combine a-signal)
+                               (emit a-signal 'bogus-signal-value-that-we-made-up)
+                               (emit a-signal)))
+                         (pause)))
+          (loop resp-chan)]
+         [else
+          (loop
+           (call/cc
+            (λ (k)
+              (channel-put (checkpoint-request-resp-chan maybe-val) k)
+              resp-chan)
+            esterel-prompt-tag))])]
       [(signal-suspended)
        (error (if is-present? 'present? 'signal-value)
               "signal is suspended\n  signal: ~e" a-signal)]
@@ -1206,7 +1228,15 @@ value for can explorations and subsequent must evaluation.
     (set! esterel-thread (rebuild-threads-from-rb-tree rb-tree)))
   (define (get-starting-point)
     (starting-point (build-rb-tree-from-current-state)
-                    new-signal-counter signal-status signal-ready signal-value dead-signals))
+                    new-signal-counter signal-status
+                    (set-union (list->set (hash-keys value-waiters)) signal-ready)
+                    (for/fold ([signal-value signal-value])
+                              ([a-signal (in-list (hash-keys value-waiters))])
+                      (cond
+                        [(hash-has-key? signal-value a-signal) signal-value]
+                        [else (hash-set signal-value a-signal
+                                        'dummy-value-that-shouldn’t-be-used-anywhere)]))
+                    dead-signals))
 
   (struct rb-tree () #:transparent)
 
@@ -1479,8 +1509,10 @@ value for can explorations and subsequent must evaluation.
              (define unemitted-signals (get-unemitted-signals mode))
              (cond
                [(set-empty? unemitted-signals)
-                (channel-put instant-complete-chan (cons 'non-constructive
-                                                         (list->set (can-ordered-signals mode))))
+                (channel-put instant-complete-chan
+                             (cons 'non-constructive
+                                   (set-union (list->set (can-ordered-signals mode))
+                                              (can-newly-ready mode))))
                 ;; when we send back 'non-constructive, then we will
                 ;; never come back to this thread again, so just let it expire
                 (void)]

@@ -174,9 +174,9 @@ provides additional functionality.
                  s2 #:init 11 #:combine +
                  s3 #:combine +
                  s4 #:init 22 #:combine *)
-     (emit s1 (signal-value s2))
+     (emit s1 (signal-value s2 #:can (set s3 s4)))
      (emit s4 33)
-     (emit s3 (signal-value s4)))))
+     (emit s3 (signal-value s4 #:can (set))))))
  ]
  
 }
@@ -287,7 +287,7 @@ provides additional functionality.
  ]
 }
 
-@defproc[(signal-value [s signal?] [#:pre n natural? 0]) any/c]{
+@defproc[(signal-value [s signal?] [#:pre n natural? 0] [#:can can (setof signal?)]) any/c]{
 Returns the value of @racket[s] in the current instant if @racket[n] is @racket[0],
  unless it hasn't been emitted, in which case it returns the value in the previous
  instant.
@@ -299,6 +299,13 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  emitted and the signals declaration did not have an @racket[#:init]
  clause, an error is raised.
 
+ The @racket[can] argument indicates which signals can be
+ emitted by the remaining computation and it must be supplied
+ if if @racket[n] is @racket[0]. That is, if it is possible
+ that some signal can be emitted in the current instant after
+ @racket[signal-value] returns, then that signal must be in
+ the set @racket[can].
+ 
  @examples[
  #:eval esterel-eval
  (define-signal
@@ -312,9 +319,9 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
     (emit S2 0)
     (pause)
     (emit S2 6)
-    (emit O1 (signal-value S1))
+    (emit O1 (signal-value S1 #:can (set O2 O3)))
     (emit O2 (signal-value S2 #:pre 1))
-    (emit O3 (signal-value S2))))
+    (emit O3 (signal-value S2 #:can (set)))))
  (eval:check (react! r) (hash S1 5 S2 0))
  (eval:check (react! r) (hash O1 5 O2 0 O3 6 S2 6))
  ]

@@ -105,7 +105,7 @@
     (esterel
      (with-signal (s #:init 0 #:combine +)
        (emit s 1)
-       (let ([x (signal-value s)])
+       (let ([x (signal-value s #:can (set s))])
          (emit s x)))))))
 
 (check-exn
@@ -167,7 +167,7 @@
     (esterel
      (emit S1 #f)
      (pause)
-     (if (signal-value S1)
+     (if (signal-value S1 #:can (set O1 O2))
          (emit O1)
          (emit O2))))
 
@@ -180,7 +180,7 @@
     (esterel
      (emit S1 #t)
      (pause)
-     (if (signal-value S1)
+     (if (signal-value S1 #:can (set O1 O2))
          (emit O1)
          (emit O2))))
 
@@ -192,7 +192,7 @@
   (define r
     (esterel
      (par (emit S1 3)
-          (if (signal-value S1)
+          (if (signal-value S1 #:can (set O1 O2))
               (emit O1)
               (emit O2)))))
 
@@ -204,7 +204,7 @@
     (esterel
      (par (emit S1 3)
           (emit S1 5)
-          (if (signal-value S1)
+          (if (signal-value S1 #:can (set O1 O2))
               (emit O1)
               (emit O2)))))
 
