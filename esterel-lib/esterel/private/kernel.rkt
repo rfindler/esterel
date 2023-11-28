@@ -1497,6 +1497,11 @@ value for can explorations and subsequent must evaluation.
                           (if (can? mode)
                               (format "finished a can exploration: ~a; emits ~s" (can-signal-states mode) (can-emits mode))
                               "instant has completed"))
+       (log-esterel-info (if (can? mode)
+                             (format "finishing can mode: ~a of 2^~a"
+                                     (can-signal-states mode)
+                                     (length (can-ordered-signals mode)))
+                             "finished instant"))
        (log-par-state)
        (cond
          [(can? mode)
@@ -1654,6 +1659,9 @@ value for can explorations and subsequent must evaluation.
                           (hash-keys presence-waiters)
                           (hash-keys value-waiters)
                           (and mode (can-emits mode)))
+       (log-esterel-info "entering can mode: ~s ~s"
+                         (length (hash-keys presence-waiters))
+                         (and mode (length (can-ordered-signals mode))))
        (when (and (= 0 (hash-count presence-waiters))
                   (= 0 (hash-count value-waiters)))
          (internal-error "expected some thread to be blocked on a signal"))
