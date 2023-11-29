@@ -2,6 +2,7 @@
 (require esterel/full
          pict
          racket/gui/base
+         (only-in slideshow para current-line-sep)
          (for-syntax racket/format
                      syntax/parse))
 (module+ test (require rackunit))
@@ -32,8 +33,8 @@
          (define-signal #,cannot-id #:init (set) #:combine set-union)
          (define x (cell i j #,must-id #,cannot-id)))]))
 
-(define size 4)
-(define-sudoku-signals cells 4)
+(define size 9)
+(define-sudoku-signals cells 9)
 #;
 (define sudoku-board #<<--
 .4.....8.
@@ -149,19 +150,23 @@
       (define y (* j h))
       (define s (hash-ref ht cannot-be set))
       (define cannot-be-p
-        (apply
-         hc-append
-         2
-         (for/list ([i (in-range 1 (+ size 1))])
-           (cellophane
-            (colorize
-             (text (~a i))
-             (if (set-member? s i)
-                 "red"
-                 "forestgreen"))
-            .4))))
+        (parameterize ([current-line-sep -20])
+          (apply
+           para
+           #:width 80
+           #:fill? #f
+           ;2
+           (for/list ([i (in-range 1 (+ size 1))])
+             (cellophane
+              (colorize
+               (text (~a i))
+               (if (set-member? s i)
+                   "red"
+                   "forestgreen"))
+              .4)))))
       (define cell-p
         (vc-append
+         -4
          (cond
            [(hash-ref ht must-be #f)
             =>
@@ -171,7 +176,9 @@
       (pin-over p x y
                 (cc-superimpose
                  (rectangle w h)
-                 (scale-to-fit cell-p w h))))))
+                 (scale-to-fit cell-p
+                               (* .9 w)
+                               (* .9 h)))))))
 
 (define (bits->number ht bits)
   (for/sum ([bit (in-list bits)]
@@ -214,48 +221,45 @@
    #:pre 1
    (par
     (sustain-initial-cells initial-cells)
-    (begin
-      (pause)
-      (par
-       (loop
-        (for/par size
-          (λ (x)
-            (for/par size
-              (λ (y)
-                (loop
-                 (define a-cell (get-cell-xy x y))
-                 (match-define (cell _1 _2 must-be cannot-be) a-cell)
-                 (define sv (signal-value cannot-be #:pre 1))
-                 (cond
-                   [(= (- size 1) (set-count sv))
-                    (define ans (set-first
-                                 (set-subtract
-                                  all-possible-values
-                                  sv)))
-                    (loop
-                     (emit must-be ans)
-                     (pause))]
-                   [else
-                    (pause)])))))))
+    (loop
+     (for/par size
+       (λ (x)
+         (for/par size
+           (λ (y)
+             (loop
+              (define a-cell (get-cell-xy x y))
+              (match-define (cell _1 _2 must-be cannot-be) a-cell)
+              (define sv (signal-value cannot-be #:pre 1))
+              (cond
+                [(= (- size 1) (set-count sv))
+                 (define ans (set-first
+                              (set-subtract
+                               all-possible-values
+                               sv)))
+                 (loop
+                  (emit must-be ans)
+                  (pause))]
+                [else
+                 (pause)])))))))
 
-       (loop
-        (for ([x (in-range size)])
-          (for ([y (in-range size)])
-            (define my-col (vector-ref cols x))
-            (define my-row (vector-ref rows y))
-            (define my-square (vector-ref squares (ij->square size x y)))
-            (match-define (cell _1 _2 must-be cannot-be) (get-cell-xy x y))
-            (define (cross-out row/col/square)
-              (for ([a-cell (in-vector row/col/square)])
-                (define N (signal-value (cell-must-be a-cell) #:can (set)))
-                (when (and N
-                           (not (and (= (cell-x a-cell) x)
-                                     (= (cell-y a-cell) y))))
-                  (emit cannot-be (set N)))))
-            (cross-out my-row)
-            (cross-out my-col)
-            (cross-out my-square)))
-        (pause)))))))
+    (loop
+     (for ([x (in-range size)])
+       (for ([y (in-range size)])
+         (define my-col (vector-ref cols x))
+         (define my-row (vector-ref rows y))
+         (define my-square (vector-ref squares (ij->square size x y)))
+         (match-define (cell _1 _2 must-be cannot-be) (get-cell-xy x y))
+         (define (cross-out row/col/square)
+           (for ([a-cell (in-vector row/col/square)])
+             (define N (signal-value (cell-must-be a-cell) #:can (set)))
+             (when (and N
+                        (not (and (= (cell-x a-cell) x)
+                                  (= (cell-y a-cell) y))))
+               (emit cannot-be (set N)))))
+         (cross-out my-row)
+         (cross-out my-col)
+         (cross-out my-square)))
+     (pause)))))
 
 (define the-ht (react! r))
 (define the-pict (ht->pict the-ht))
