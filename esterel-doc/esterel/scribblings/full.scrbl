@@ -10,8 +10,11 @@ in @racketmodname[esterel/kernel].
 
 @(require scribble/example
           (for-label racket/base
+                     racket/format
+                     racket/set
                      esterel/full))
-@(define esterel-eval (make-base-eval '(require esterel/full)))
+@(define esterel-eval
+   (make-base-eval '(require esterel/full racket/format racket/set)))
 
 @defproc[(halt) any/c]{
  Pauses in every instant, forever.
@@ -263,6 +266,39 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  (react! r2 #:emit (list S1))
  (react! r2 #:emit (list S1))
  ]
+}
+
+@defform[(for/par (for-clause ...) body-or-break ... body)]{
+ Just like @racket[for], but combines the iterations of the
+ loop with @racket[par].
+
+ Here is an example where we first create 10 signals with
+ names from 0 to 9. Then, in parallel, we emit a value on
+ each of the signals, where the value on signal n is one more
+ than the value on signal n+1, except signal 9 where we
+ simply emit a 0. Because all the emissions are happening in
+ parallel, we get the values propagating properly from signal
+ to signal.
+
+ @examples[
+ #:label #f
+ #:eval esterel-eval
+ (define signal-count 10)
+ (define-signals sigs mk-a-signal
+   (for/hash ([i (in-range signal-count)])
+     (values i (mk-a-signal (~a i) #:combine +))))
+ (react!
+  (esterel
+   (for/par ([(n sig) (in-hash sigs)])
+     (cond
+       [(= n (- signal-count 1))
+        (emit sig 0)]
+       [else
+        (define n+1-sig
+          (hash-ref sigs (+ n 1)))
+        (define n+1-value
+          (signal-value n+1-sig #:can (set sig)))
+        (emit sig (+ n+1-value 1))]))))]
 }
 
 @(close-eval esterel-eval)
