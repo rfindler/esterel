@@ -2,9 +2,43 @@
 (require esterel/full
          "private/sudoku-helpers.rkt")
 
+(define sudoku-board #<<--
+...3
+.4..
+..32
+....
+--
+  )
+#;
+(define sudoku-board #<<--
+..17..5.9
+573.241.6
+8..5.1..2
+7..295.18
+..94..3.5
+6528....7
+465.8..71
+...159..4
+9.8..7.53
+--
+  )
+#;
+(define sudoku-board #<<--
+.4.....8.
+..7....6.
+....1....
+41....2..
+.....5...
+.3.......
+..6..7..3
+..58.6...
+........1
+--
+  )
+
 (struct cell (x y must-be cannot-be) #:transparent)
 
-(define size 4)
+(define size (string-length (car (regexp-split #rx"\n" sudoku-board))))
 
 (define-signals cells mk-signal
   (for/vector ([x (in-range size)])
@@ -20,42 +54,6 @@
 
 (define-values (cols rows squares)
   (compute-blocks cells size))
-
-(define sudoku-board #<<--
-...3
-.4..
-..32
-....
---
-  )
-
-#;
-(define sudoku-board #<<--
-..17..5.9
-573.241.6
-8..5.1..2
-7..295.18
-..94..3.5
-6528....7
-465.8..71
-...159..4
-9.8..7.53
---
-  )
-
-#;
-(define sudoku-board #<<--
-.4.....8.
-..7....6.
-....1....
-41....2..
-.....5...
-.3.......
-..6..7..3
-..58.6...
-........1
---
-  )
 
 (define (sustain-initial-cells)
   (loop
@@ -88,6 +86,25 @@
     (cross-out my-col)
     (cross-out my-square)))
 
+(define (last-remaining row/col/square)
+  (for/par ([n (in-range 1 (+ size 1))])
+    (let loop ()
+      (define candidates
+        (filter
+         values
+         (for/list ([a-cell (in-vector row/col/square)])
+           (match-define (cell _ _ must-be cannot-be) a-cell)
+           (and (not (signal-value must-be #:pre 1))
+                (not (set-member? (signal-value cannot-be #:pre 1) n))
+                a-cell))))
+      (cond
+        [(= 1 (length candidates))
+         (match-define (cell _ _ must-be cannot-be) (car candidates))
+         (sustain must-be n)]
+        [else
+         (pause)
+         (loop)]))))
+
 (define r
   (esterel
    #:pre 1
@@ -97,6 +114,13 @@
     (loop
      (cannot-be)
      (pause))
+
+    (for/par ([row/col/square (in-vector cols)])
+      (last-remaining row/col/square))
+    (for/par ([row/col/square (in-vector rows)])
+      (last-remaining row/col/square))
+    (for/par ([row/col/square (in-vector squares)])
+      (last-remaining row/col/square))
 
     (for*/par ([x (in-range size)]
                [y (in-range size)])

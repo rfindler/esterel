@@ -145,8 +145,10 @@
                               (* (- 1 margin margin) w)
                               (* (- 1 margin margin) h))))))
 
-(define (sudoku-gui size next)
-  (define the-pict (ht->pict size (next)))
+(define (sudoku-gui size step)
+  (define ht (step))
+  (define the-pict (ht->pict size ht))
+  (define steps 0)
 
   (define (draw c dc)
     (define-values (cw ch) (send c get-client-size))
@@ -156,13 +158,39 @@
                (- (/ cw 2) (/ (pict-width sp) 2))
                (- (/ ch 2) (/ (pict-height sp) 2))))
 
+  (define (solved)
+    (for/sum ([(k v) (in-hash ht)])
+      (if (car v) 1 0)))
+  (define (calc-msg)
+    (~a
+     (solved)
+     " cell"
+     (if (= (solved) 1) "" "s")
+     " solved in "
+     steps
+     " step"
+     (if (= steps 1) "" "s")))
+
   (define (button-callback _1 _2)
-    (set! the-pict (ht->pict size (next)))
+    (set! steps (+ steps 1))
+    (define next-ht (step))
+    (define nothing-changed? (equal? next-ht ht))
+    (set! ht next-ht)
+    (define msg (calc-msg))
+    (when nothing-changed?
+      (set! msg (string-append msg " (but nothing changed)")))
+    (send m set-label msg)
+    (set! ht next-ht)
+    (set! the-pict (ht->pict size ht))
+    (when (= (solved) (* size size))
+      (send b enable #f))
     (send c refresh))
 
   (define f (new frame% [label ""] [width 400] [height 400]))
   (define c (new canvas% [parent f] [paint-callback draw]))
-  (define b (new button% [label "next"] [callback button-callback] [parent f]))
+  (define hp (new horizontal-panel% [parent f] [stretchable-height #f]))
+  (define b (new button% [label "step"] [callback button-callback] [parent hp]))
+  (define m (new message% [parent hp] [label (calc-msg)] [stretchable-width #t]))
   (send f show #t))
 
 (module+ main
