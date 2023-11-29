@@ -13,8 +13,9 @@ provides additional functionality.
 @(require scribble/example
           (for-label racket/base
                      racket/set
+                     racket/format
                      esterel/full))
-@(define esterel-eval (make-base-eval '(require racket/set esterel/full)))
+@(define esterel-eval (make-base-eval '(require racket/set esterel/full racket/format)))
 
 @section{Running Esterel Code}
 
@@ -191,6 +192,30 @@ provides additional functionality.
  but @racket[define-signal] can be
  used only at the module top-level or at the interactive
  top-level.
+}
+
+@defform[(define-signals id mk-signal-id expr ...+)]{
+ Evaluates @racket[expr]s and binds the results of the final
+ one to @racket[id]. Binds @racket[mk-signal-id] to a
+ function that creates a signal, but makes it available only
+ in @racket[expr]s.
+
+ Like @racket[define-signal], the signals that
+ @racket[define-signal] creates have indefinite extent, but
+ @racket[define-signal] can be used only at the module
+ top-level or at the interactive top-level.
+
+ Use @racket[define-signals] when the number of signals is not
+ known ahead of time or it is not convenient to write a
+ sequence of @racket[define-signal] definitions.
+
+ @examples[
+ #:eval esterel-eval
+ (define-signals sigs mk-a-signal
+   (for/hash ([i (in-range 10)])
+     (values i (mk-a-signal (~a i)))))
+ sigs
+ ]
 }
 
 @defproc[(signal? [v any/c]) boolean?]{

@@ -9,33 +9,16 @@
 
 (struct cell (x y must-be cannot-be) #:transparent)
 
-(define-syntax (define-sudoku-signals stx)
-  (syntax-parse stx
-    [(_ x:id n:integer)
-     #`(begin
-         #,@(for*/list ([i (in-range (syntax-e #'n))]
-                        [j (in-range (syntax-e #'n))])
-              (define id (string->symbol (~a "x" i "-" j)))
-              #`(define-cell-signals #,id n #,i #,j))
-         (define x
-           (vector
-            #,@(for/list ([i (in-range (syntax-e #'n))])
-                 #`(vector #,@(for/list ([j (in-range (syntax-e #'n))])
-                                (string->symbol (~a "x" i "-" j))))))))]))
-                  
-(define-syntax (define-cell-signals stx)
-  (syntax-parse stx
-    [(_ x:id n:integer i:integer j:integer)
-     (define must-id (string->symbol (~a (syntax-e #'x) "-must")))
-     (define cannot-id (string->symbol (~a (syntax-e #'x) "-cannot")))
-     #`(begin
-         (define-signal #,must-id #:init #f #:combine (λ (x y) y))
-         (define-signal #,cannot-id #:init (set) #:combine set-union)
-         (define x (cell i j #,must-id #,cannot-id)))]))
-
 (define size 9)
-(define-sudoku-signals cells 9)
-#;
+(define-signals cells mk-signal
+  (for/vector ([x (in-range size)])
+    (for/vector ([y (in-range size)])
+      (cell x y
+            (mk-signal (~a "(" x "," y ") must")
+                       #:init #f #:combine (λ (x y) y))
+            (mk-signal (~a "(" x "," y ") cannot")
+                       #:init (set) #:combine set-union)))))
+
 (define sudoku-board #<<--
 .4.....8.
 ..7....6.
@@ -48,7 +31,7 @@
 ........1
 --
   )
-
+#;
 (define sudoku-board #<<--
 ..17..5.9
 573.241.6
@@ -72,11 +55,11 @@
 
 (define (get-cell-xy x y) (vector-ref (vector-ref cells x) y))
 
-(define (transpose l)
-  (define ls (for/list ([x (in-vector l)])
-               (for/list ([y (in-vector x)])
-                 y)))
-  (apply vector (map (λ (x) (apply vector x)) (apply map list ls))))
+(define (transpose v)
+  (define w (vector-length (vector-ref v 0)))
+  (for/vector ([i (in-range (vector-length v))])
+    (for/vector ([j (in-range w)])
+      (vector-ref (vector-ref v j) i))))
 (module+ test
   (check-equal? (transpose #(#(1 2 3 4)
                              #(a b c d)
@@ -99,11 +82,9 @@
     (define sy (* (sqrt size) (quotient i (sqrt size))))
     (cons sx sy)))
 (module+ test
-  (check-equal? (get-square-corners 4)
-                (list (cons 0 0)
-                      (cons 2 0)
-                      (cons 0 2)
-                      (cons 2 2))))
+  (check-equal?
+   (get-square-corners 4)
+   (list (cons 0 0) (cons 2 0) (cons 0 2) (cons 2 2))))
 (define (get-square-index-offsets size)
   (for*/list ([i (in-range (sqrt size))]
               [j (in-range (sqrt size))])
@@ -117,7 +98,6 @@
     (for/vector ([offset (in-list (get-square-index-offsets size))])
       (vector-ref (vector-ref cells (+ (car corner) (car offset)))
                   (+ (cdr corner) (cdr offset))))))
-
 
 (define (ij->square size i j)
   (+ (* (quotient j (sqrt size)) (sqrt size))

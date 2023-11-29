@@ -14,6 +14,7 @@
  esterel
  with-signal
  define-signal
+ define-signals
  par
  suspend
  with-trap
