@@ -93,11 +93,11 @@
    (body-thunk)
    #:each (test-thunk)))
 
-(define (sustain s)
-  (let loop ()
-    (emit s)
-    (pause)
-    (loop)))
+(define (sustain a-signal [value no-value-provided])
+  (emit-check-and-error 'sustain a-signal value)
+  (loop
+   (emit a-signal value)
+   (pause)))
 
 (define-syntax (abort stx)
   (syntax-parse stx

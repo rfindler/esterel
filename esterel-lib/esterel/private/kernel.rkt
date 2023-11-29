@@ -36,6 +36,8 @@
  exn:fail:not-constructive?
  esterel?
 
+ no-value-provided emit-check-and-error
+
  ;; private bindings provided for rhombus layer
  mk-signal.args
  esterel/proc
@@ -228,21 +230,7 @@ value for can explorations and subsequent must evaluation.
 (define (emit a-signal [value no-value-provided])
   (define signal-table (current-signal-table))
   (define no-value-provided? (equal? value no-value-provided))
-  (if no-value-provided?
-      (when (signal-combine a-signal)
-        (error 'emit
-               (string-append
-                "signal emitted with no value but has a combination function\n"
-                "  signal: ~e\n"
-                "  value: ~e")
-               a-signal value))
-      (unless (signal-combine a-signal)
-        (error 'emit
-               (string-append
-                "signal emitted with a value but has no combination function\n"
-                "  signal: ~e\n"
-                "  value: ~e")
-               a-signal value)))
+  (emit-check-and-error 'emit a-signal value)
   (define resp-chan (make-channel))
   (channel-put (signal-table-emit-chan signal-table) (vector a-signal no-value-provided? value resp-chan))
   (match (channel-get resp-chan)
@@ -263,6 +251,23 @@ value for can explorations and subsequent must evaluation.
                 a-signal
                 value))]
     [(? void?) (void)]))
+(define (emit-check-and-error name a-signal value)
+  (define no-value-provided? (equal? value no-value-provided))
+  (if no-value-provided?
+      (when (signal-combine a-signal)
+        (error name
+               (string-append
+                "signal emitted with no value but has a combination function\n"
+                "  signal: ~e\n"
+                "  value: ~e")
+               a-signal value))
+      (unless (signal-combine a-signal)
+        (error name
+               (string-append
+                "signal emitted with a value but has no combination function\n"
+                "  signal: ~e\n"
+                "  value: ~e")
+               a-signal value))))
   
 (define (present? a-signal #:pre [pre 0])
   (signal-value/present? #t a-signal pre #f))

@@ -20,18 +20,23 @@ in @racketmodname[esterel/kernel].
  Pauses in every instant, forever.
 }
 
-@defproc[(sustain [s signal?]) any/c]{
- Emits @racket[S] an pauses in every instant, forever.
+@defproc[(sustain [s signal?][v any/c]) any/c]{
+ Emits @racket[s] and pauses in every instant, forever.
+
+ As with @racket[emit], if @racket[s] is a valued signal,
+ two arguments must be supplied and if @racket[s] is not a
+ valued signal, two arguments may not be supplied.
 
  @examples[
  #:eval esterel-eval
- (define-signal S)
+ (define-signal S T #:combine +)
  (define r
    (esterel
-    (sustain S)))
- (eval:check (react! r) (hash S #t))
- (eval:check (react! r) (hash S #t))
- (eval:check (react! r) (hash S #t))
+    (par (sustain S)
+         (sustain T 8))))
+ (eval:check (react! r) (hash T 8 S #t))
+ (eval:check (react! r) (hash T 8 S #t))
+ (eval:check (react! r) (hash T 8 S #t))
  ]
 }
 
