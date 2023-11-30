@@ -2,6 +2,7 @@
 (require esterel/full
          "private/sudoku-helpers.rkt")
 
+#;
 (define sudoku-board #<<--
 ...3
 .4..
@@ -22,7 +23,7 @@
 9.8..7.53
 --
   )
-#;
+
 (define sudoku-board #<<--
 .4.....8.
 ..7....6.
@@ -57,38 +58,43 @@
 
 (define (sustain-initial-cells)
   (loop
-   (for ([l (in-lines (open-input-string sudoku-board))]
-         [y (in-naturals)])
-     (for ([c (in-string l)]
-           [x (in-naturals)])
-       (unless (equal? c #\.)
-         (match-define (cell _ _ must-be cannot-be) (get-cell-xy x y))
-         (emit must-be (- (char->integer c) (char->integer #\0))))))
+   (parse-sudoku-board
+    (λ (x y n)
+      (match-define (cell _ _ must-be cannot-be) (get-cell-xy x y))
+      (emit must-be n)))
    (pause)))
 
+(define (parse-sudoku-board f)
+  (for ([l (in-lines (open-input-string sudoku-board))]
+        [y (in-naturals)])
+    (for ([c (in-string l)]
+          [x (in-naturals)])
+      (unless (equal? c #\.)
+        (f x y (- (char->integer c) (char->integer #\0)))))))
+
 (define (cannot-be)
-  (for* ([my-x (in-range size)]
-         [my-y (in-range size)])
-    (define my-col (vector-ref cols my-x))
-    (define my-row (vector-ref rows my-y))
-    (define my-square (vector-ref squares (ij->square size my-x my-y)))
-    (match-define (cell _ _ must-be cannot-be) (get-cell-xy my-x my-y))
-    (define (cross-out row/col/square)
-      (for ([sibling-cell (in-vector row/col/square)])
-        (match-define (cell sibling-x sibling-y sibling-must-be _)
-          sibling-cell)
-        (define N (signal-value sibling-must-be #:can (set cannot-be)))
-        (when N
-          (unless (and (= sibling-x my-x)
-                       (= sibling-y my-y))
-            (emit cannot-be (set N))))))
-    (cross-out my-row)
-    (cross-out my-col)
-    (cross-out my-square)))
+  (for ([my-x (in-range size)])
+    (for ([my-y (in-range size)])
+      (define my-col (vector-ref cols my-x))
+      (define my-row (vector-ref rows my-y))
+      (define my-square (vector-ref squares (ij->square size my-x my-y)))
+      (match-define (cell _ _ must-be cannot-be) (get-cell-xy my-x my-y))
+      (define (cross-out row/col/square)
+        (for ([sibling-cell (in-vector row/col/square)])
+          (match-define (cell sibling-x sibling-y sibling-must-be _)
+            sibling-cell)
+          (define N (signal-value sibling-must-be #:can (set cannot-be)))
+          (when N
+            (unless (and (= sibling-x my-x)
+                         (= sibling-y my-y))
+              (emit cannot-be (set N))))))
+      (cross-out my-row)
+      (cross-out my-col)
+      (cross-out my-square))))
 
 (define (last-remaining row/col/square)
   (for/par ([n (in-range 1 (+ size 1))])
-    (let loop ()
+    (define (loop)
       (define candidates
         (filter
          values
@@ -103,7 +109,8 @@
          (sustain must-be n)]
         [else
          (pause)
-         (loop)]))))
+         (loop)]))
+    (loop)))
 
 (define r
   (esterel
@@ -122,22 +129,22 @@
     (for/par ([row/col/square (in-vector squares)])
       (last-remaining row/col/square))
 
-    (for*/par ([x (in-range size)]
-               [y (in-range size)])
-      (loop
-       (define a-cell (get-cell-xy x y))
-       (match-define (cell _1 _2 must-be cannot-be) a-cell)
-       (define sv (signal-value cannot-be #:pre 1))
-       (cond
-         [(= (- size 1) (set-count sv))
-          (define must-n
-            (set-first
-             (set-subtract
-              (for/set ([i (in-range size)]) (+ i 1))
-              sv)))
-          (sustain must-be must-n)]
-         [else
-          (pause)]))))))
+    (for/par ([x (in-range size)])
+      (for/par ([y (in-range size)])
+        (loop
+         (define a-cell (get-cell-xy x y))
+         (match-define (cell _1 _2 must-be cannot-be) a-cell)
+         (define sv (signal-value cannot-be #:pre 1))
+         (cond
+           [(= (- size 1) (set-count sv))
+            (define must-n
+              (set-first
+               (set-subtract
+                (for/set ([i (in-range size)]) (+ i 1))
+                sv)))
+            (sustain must-be must-n)]
+           [else
+            (pause)])))))))
 
 (define (cell-information ht)
   (for*/hash ([x (in-range size)]
