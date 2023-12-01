@@ -8,17 +8,19 @@
 (define (compute-blocks cells size)
   (define cols
     (for/vector ([i (in-range size)])
-      (vector-ref cells i)))
+      (for/vector ([j (in-range size)])
+        (hash-ref cells (cons i j)))))
   (define rows
-    (let ([t (transpose cells)])
+    (for/vector ([j (in-range size)])
       (for/vector ([i (in-range size)])
-        (vector-ref t i))))
+        (hash-ref cells (cons i j)))))
 
   (define squares
     (for/vector ([corner (in-list (get-square-corners size))])
       (for/vector ([offset (in-list (get-square-index-offsets size))])
-        (vector-ref (vector-ref cells (+ (car corner) (car offset)))
-                    (+ (cdr corner) (cdr offset))))))
+        (hash-ref cells
+                  (cons (+ (car corner) (car offset))
+                        (+ (cdr corner) (cdr offset)))))))
   (values cols rows squares))
 
 (define (get-square-index-offsets size)
