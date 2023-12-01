@@ -289,9 +289,9 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  #:label #f
  #:eval esterel-eval
  (define signal-count 10)
- (define-signals sigs mk-a-signal
+ (define sigs
    (for/hash ([i (in-range signal-count)])
-     (values i (mk-a-signal (~a i) #:combine +))))
+     (values i (make-global-signal (~a i) #:combine +))))
  (react!
   (esterel
    (for/par ([(n sig) (in-hash sigs)])

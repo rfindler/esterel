@@ -17,7 +17,7 @@
  (rename-out [-esterel esterel])
  with-signal
  define-signal
- define-signals
+ make-global-signal
  par
  suspend
  with-trap
@@ -181,20 +181,9 @@ value for can explorations and subsequent must evaluation.
                            (cons 'signal.name srcloc)
                            )) ...)]))
 
-(define-syntax (define-signals stx)
-  (syntax-parse stx
-    [(_ sigs:id creator:id e:expr ...+)
-     (assert-top-level stx)
-     #`(begin
-         (define srcloc (quote-srcloc #,stx))
-         (define sigs
-           (let ([creator
-                  (λ (name #:init [init #f] #:combine [combine #f])
-                    (mk-signal.define-signals name init combine srcloc))])
-             e ...)))]))
+(define (make-global-signal name #:init [init no-init] #:combine [combine #f])
+  (mk-signal.args (string->symbol name) init combine #f))
 
-(define (mk-signal.define-signals name init combine src)
-  (mk-signal.args (string->symbol name) init combine src))
 (define (mk-signal.args name init combine src)
   (signal (symbol->immutable-string name)
           ;; the identity of a signal, when we're in an instant,

@@ -10,11 +10,16 @@
     [else
      "must be run from within the dynamic extent of `esterel`"]))
 
+(define (pre-cond-check-outside-esterel)
+  (cond
+    [(in-esterel?)
+     "must be run from outside the dynamic extent of `esterel`"]
+    [else #t]))
+
 (provide
  esterel
  with-signal
  define-signal
- define-signals
  par
  suspend
  with-trap
@@ -48,6 +53,11 @@
                   #:pre/desc (pre-cond-check)
                   boolean?))]
 
+  [make-global-signal (->* (string?)
+                           (#:init any/c #:combine any/c)
+                           #:pre/desc (pre-cond-check-outside-esterel)
+                           signal?)]
+  
   ;; when a signal is not emitted it will return the
   ;; previous instant's value from signal-value, following
   ;; _The ESTEREL synchronous programming language: design,

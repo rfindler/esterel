@@ -194,26 +194,24 @@ provides additional functionality.
  top-level.
 }
 
-@defform[(define-signals id mk-signal-id expr ...+)]{
- Evaluates @racket[expr]s and binds the results of the final
- one to @racket[id]. Binds @racket[mk-signal-id] to a
- function that creates a signal, but makes it available only
- in @racket[expr]s.
+@defproc[(make-global-signal [name string?]
+                             [#:combine combine #f (or/c #f (procedure-arity-includes/c 2))]
+                             [#:init init any/c])
+         signal?]{
 
- Like @racket[define-signal], the signals that
- @racket[define-signal] creates have indefinite extent, but
- @racket[define-signal] can be used only at the module
- top-level or at the interactive top-level.
-
- Use @racket[define-signals] when the number of signals is not
- known ahead of time or it is not convenient to write a
- sequence of @racket[define-signal] definitions.
+ Creates a global signal named @racket[name]. If @racket[combine] is not @racket[#f],
+ creates a valued signal. The @racket[init] argument is not required. If it is not
+ supplied, then the signal has no initial value, otherwise the initial value is @racket[init].
+                                                                                            
+ Use @racket[make-global-signal] when the number of signals
+ is not known ahead of time or it is not convenient to write
+ a sequence of @racket[define-signal] definitions.
 
  @examples[
  #:eval esterel-eval
- (define-signals sigs mk-a-signal
+ (define sigs
    (for/hash ([i (in-range 10)])
-     (values i (mk-a-signal (~a i)))))
+     (values i (make-global-signal (~a i)))))
  sigs
  ]
 }
