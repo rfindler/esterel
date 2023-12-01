@@ -100,21 +100,24 @@
 (define (emit-cannot-be)
   (loop
    (for ([(_ a-cell) (in-hash cells)])
-     (match-define (cell my-x my-y must-be cannot-be) a-cell)
-     (cross-out my-x my-y cannot-be (vector-ref cols my-x))
-     (cross-out my-x my-y cannot-be (vector-ref rows my-y))
-     (cross-out my-x my-y cannot-be (vector-ref squares (ij->square size my-x my-y))))
+     (match-define (cell my-x my-y my-must-be my-cannot-be) a-cell)
+     (cross-out my-x my-y my-cannot-be (vector-ref cols my-x))
+     (cross-out my-x my-y my-cannot-be (vector-ref rows my-y))
+     (cross-out my-x my-y my-cannot-be (vector-ref squares (ij->square size my-x my-y)))
+     (define my-n (signal-value my-must-be #:can (set my-cannot-be)))
+     (when my-n
+       (emit my-cannot-be (set-remove all-possible-ns my-n))))
    (pause)))
 
-(define (cross-out my-x my-y cannot-be block)
+(define (cross-out my-x my-y my-cannot-be block)
   (for ([sibling-cell (in-vector block)])
     (match-define (cell sibling-x sibling-y sibling-must-be _)
       sibling-cell)
-    (define N (signal-value sibling-must-be #:can (set cannot-be)))
-    (when N
+    (define sibling-n (signal-value sibling-must-be #:can (set my-cannot-be)))
+    (when sibling-n
       (unless (and (= sibling-x my-x)
                    (= sibling-y my-y))
-        (emit cannot-be (set N))))))
+        (emit my-cannot-be (set sibling-n))))))
 
 (define (cell-with-only-one-option)
   (for/par ([x (in-range size)])
@@ -151,16 +154,10 @@
   (for/par ([n (in-inclusive-range 1 size)])
     (loop
      (define the-remaining
-       (filter
-        values
-        (for/list ([a-cell (in-vector block)])
-          (match-define (cell _ _ must-be cannot-be) a-cell)
-          (cond
-            [(set-member? (signal-value cannot-be #:pre 1) n)
-             #f]
-            [(signal-value must-be #:pre 1)
-             #f]
-            [else a-cell]))))
+       (for/list ([a-cell (in-vector block)]
+                  #:unless (set-member? (signal-value (cell-cannot-be a-cell) #:pre 1)
+                                        n))
+         a-cell))
      (cond
        [(= (length the-remaining) 1)
         (match-define (cell _ _ must-be cannot-be) (car the-remaining))
