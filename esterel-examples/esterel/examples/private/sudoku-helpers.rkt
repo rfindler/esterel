@@ -1,7 +1,6 @@
 #lang racket
 (module+ test (require rackunit))
-(require esterel/kernel pict racket/gui/base
-         (only-in slideshow para current-line-sep))
+(require esterel/kernel pict racket/gui/base)
 
 (provide compute-blocks ij->square sudoku-gui)
 
@@ -117,22 +116,17 @@
       (define y (* j h))
       (define s (cdr ht-info))
       (define cannot-be-p
-        (parameterize ([current-line-sep -20])
-          (apply
-           para
-           #:width 80
-           #:fill? #f
-           (for/list ([i (in-range 1 (+ size 1))])
-             (cellophane
-              (colorize
-               (text (~a i))
-               (if (set-member? s i)
-                   "red"
-                   "forestgreen"))
-              .4)))))
+        (cannot-picts->pict
+         (for/list ([i (in-inclusive-range 1 size)])
+           (cellophane
+            (colorize
+             (text (~a i))
+             (if (set-member? s i)
+                 "red"
+                 "forestgreen"))
+            .4))))
       (define cell-p
         (vc-append
-         -4
          (cond
            [(car ht-info)
             =>
@@ -140,12 +134,21 @@
            [else (ghost (text "0"))])
          (scale cannot-be-p 1/2)))
       (define margin .05)
+      (define fit-to-cell
+        (scale-to-fit cell-p
+                      (* (- 1 margin margin) w)
+                      (* (- 1 margin margin) h)))
       (pin-over p
-                (+ x (* margin w))
-                (+ y (* margin h))
-                (scale-to-fit cell-p
-                              (* (- 1 margin margin) w)
-                              (* (- 1 margin margin) h))))))
+                (+ x (/ w 2) (- (/ (pict-width fit-to-cell) 2)))
+                (+ y (/ h 2) (- (/ (pict-height fit-to-cell) 2)))
+                fit-to-cell))))
+
+(define (cannot-picts->pict l)
+  (let loop ([l l])
+    (cond
+      [(< (length l) 5) (apply hbl-append l)]
+      [else (vc-append (apply hbl-append (take l 5))
+                       (loop (drop l 5)))])))
 
 (define (sudoku-gui size step)
   (define ht (step))
