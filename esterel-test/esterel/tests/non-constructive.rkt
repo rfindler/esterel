@@ -139,6 +139,23 @@
                 (begin (emit A) (emit B))
                 (void))))))))
 
+;; a second test case from Dumitru Potop-Butucaru
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (U V S)
+       (if (present? S)
+           (par (emit V)
+                (if (present? U)
+                    (emit S)
+                    (void)))
+           (par (emit U)
+                (if (present? V)
+                    (emit S)
+                    (void)))))))))
+
 (with-signal (S1 S2 O)
   (define r
     (esterel
