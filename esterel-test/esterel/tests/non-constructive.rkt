@@ -122,37 +122,50 @@
             (void)
             (emit s1))))))))
 
-;; test case from Dumitru Potop-Butucaru
-(check-exn
- non-constructive-exn?
- (λ ()
-   (react!
-    (esterel
-     (with-signal (A B C)
-       (par (if (present? A)
-                (begin (emit C) (emit B))
-                (emit C))
-            (if (present? B)
-                (begin (emit C) (emit A))
-                (emit C))
-            (if (present? C)
-                (begin (emit A) (emit B))
-                (void))))))))
+;; the test cases in this begin are all from Dumitru Potop-Butucaru
+(begin
+  (check-exn
+   non-constructive-exn?
+   (λ ()
+     (react!
+      (esterel
+       (with-signal (A B C)
+         (par (if (present? A)
+                  (begin (emit C) (emit B))
+                  (emit C))
+              (if (present? B)
+                  (begin (emit C) (emit A))
+                  (emit C))
+              (if (present? C)
+                  (begin (emit A) (emit B))
+                  (void))))))))
 
-;; a second test case from Dumitru Potop-Butucaru
-(check-exn
- non-constructive-exn?
- (λ ()
-   (react!
-    (esterel
-     (with-signal (U V S)
-       (if (present? S)
-           (par (emit V)
+  (check-exn
+   non-constructive-exn?
+   (λ ()
+     (react!
+      (esterel
+       (with-signal (U V S)
+         (if (present? S)
+             (par (emit V)
+                  (if (present? U)
+                      (emit S)
+                      (void)))
+             (par (emit U)
+                  (if (present? V)
+                      (emit S)
+                      (void)))))))))
+
+  (check-exn
+   non-constructive-exn?
+   (λ ()
+     (react!
+      (with-signal (S U)
+        (esterel
+         (begin (if (present? S)
+                    (emit U)
+                    (emit U))
                 (if (present? U)
-                    (emit S)
-                    (void)))
-           (par (emit U)
-                (if (present? V)
                     (emit S)
                     (void)))))))))
 
