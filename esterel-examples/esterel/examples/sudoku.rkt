@@ -4,50 +4,60 @@
 
 #;
 (define sudoku-board #<<--
-...3
-.4..
-..32
-....
---
-  )
-#;
-(define sudoku-board #<<--
-..17..5.9
-573.241.6
-8..5.1..2
-7..295.18
-..94..3.5
-6528....7
-465.8..71
-...159..4
-9.8..7.53
+1..2
+..3.
+.1..
+4..3
 --
   )
 
-(define sudoku-board #<<--
-.4.....8.
-..7....6.
-....1....
-41....2..
-.....5...
-.3.......
-..6..7..3
-..58.6...
-........1
---
-  )
+;; these three 9x9 boards here are courtesy of the Sudoku Exchange
+;; Puzzle Bank, https://github.com/grantm/sudoku-exchange-puzzle-bank
+
 #;
+;; can be solved without `last-remaining`
 (define sudoku-board #<<--
-1...9...4
-.8.37.1..
-..9..73.5
-.........
-2.35..4..
-9..7.....
-..1.58.2.
-6...1...7
+.5.7.3.6.
+..7...8..
+...816...
+....3....
+..5...1..
+73..4..86
+9.6...2.4
+84.572.93
+...4.9...
 --
   )
+
+;; cannot be solved without `last-remaining`
+(define sudoku-board #<<--
+1......2.
+2..73..4.
+8..1..6..
+..13.....
+.........
+.....58..
+..6..4..5
+.1..52..9
+.9......7
+--
+  )
+
+#;
+;; cannot be solved by code here
+(define sudoku-board #<<--
+.........
+7...6...3
+..41.89..
+...4.1...
+.6..2..9.
+.........
+..15.48..
+97.....26
+.........
+--
+  )
+
 
 ;; x : Natural
 ;; y : Natural
