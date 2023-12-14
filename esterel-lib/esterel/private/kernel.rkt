@@ -227,6 +227,12 @@ value for can explorations and subsequent must evaluation.
      (if (equal? value no-value-provided)
          (error 'emit "signal is suspended\n  signal: ~e" a-signal)
          (error 'emit "signal is suspended\n  signal: ~e\n  value: ~e" a-signal value))]
+    
+    [(signal-ready-and-emitted ready-value)
+     (error 'signal-value "emission of a ready signal\n  signal: ~s\n  ready value: ~e\n  emitted value: ~e"
+            a-signal
+            ready-value
+            value)]
     ['dead
      (if (equal? value no-value-provided)
          (error 'emit (string-append "signal dead;\n"
@@ -319,6 +325,7 @@ value for can explorations and subsequent must evaluation.
 
 (struct signal-never-before-emitted ())
 (struct signal-suspended ())
+(struct signal-ready-and-emitted (the-value))
 
 (define-syntax (par stx)
   (syntax-case stx ()
@@ -1812,73 +1819,70 @@ value for can explorations and subsequent must evaluation.
               (when (can? mode)
                 ;; we're in can mode, so record that this signal can be emitted
                 (set! mode (add-emitted-signal mode a-signal)))
-              (when value-provided?
-                (unless (can? mode)
-                  ;; don't update the signal's value in can mode for fear
-                  ;; of race conditions; when the emission happens, we'll
-                  ;; definitely not set this signal to be ready, anyway.
-                  (define new-value
-                    (if (hash-has-key? signal-value a-signal)
-                        ((signal-combine a-signal) (hash-ref signal-value a-signal) a-value)
-                        a-value))
-                  (set! signal-value (hash-set signal-value a-signal new-value))
-                  (when (set-member? signal-ready a-signal)
-                    (internal-error "emission of a ready signal\n  signal: ~s\n  value: ~e"
-                                    a-signal
-                                    a-value))))
-              (match (hash-ref signal-status a-signal 'unknown)
-                ['unknown
-                 ;; the signal's not dead, so send back a message that doesn't trigger
-                 ;; an error and continue, updating the instant state for the emit
-                 (channel-put resp-chan (void))
-                 (unless (can? mode)
-                   ;; when in can mode we should ignore emission so we
-                   ;; don't cut off branches that have potential emitters
-                   (set! signal-status (hash-set signal-status a-signal #t))
-                   (define still-blocked-threads '())
-                   (for ([a-blocked-thread (in-list (hash-ref presence-waiters a-signal '()))])
-                     (match-define (blocked-thread thread resp-chan) a-blocked-thread)
-                     (channel-put resp-chan #t) ;; it was emitted
-                     (define parent-thread (hash-ref par-parents thread #f))
-                     (when parent-thread
-                       (define old-par-state (hash-ref parent->par-state parent-thread))
-                       (define new-par-state
-                         (struct-copy
-                          par-state old-par-state
-                          [presence-waiting (if value-provided?
-                                                (par-state-presence-waiting old-par-state)
-                                                (set-remove (par-state-presence-waiting old-par-state) thread))]
-                          [value-waiting (if value-provided?
-                                             (set-remove (par-state-value-waiting old-par-state) thread)
-                                             (par-state-value-waiting old-par-state))]
-                          [active (set-add (par-state-active old-par-state) thread)]))
-                       (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
-                     (add-running-thread thread))
-                   (set! presence-waiters (hash-remove presence-waiters a-signal)))
-                 (loop)]
-                ['suspended
-                 ;; the signal's suspended, so send back a message that triggers an error
-                 (channel-put resp-chan (signal-suspended))
-                 (loop)]
+              (let/ec done
+                (when value-provided?
+                  (unless (can? mode)
+                    ;; don't update the signal's value in can mode for fear
+                    ;; of race conditions; when the emission happens, we'll
+                    ;; definitely not set this signal to be ready, anyway.
+                    (define new-value
+                      (if (hash-has-key? signal-value a-signal)
+                          ((signal-combine a-signal) (hash-ref signal-value a-signal) a-value)
+                          a-value))
+                    (set! signal-value (hash-set signal-value a-signal new-value))
+                    (when (set-member? signal-ready a-signal)
+                      (channel-put resp-chan (signal-ready-and-emitted a-value))
+                      (done))))
+                (match (hash-ref signal-status a-signal 'unknown)
+                  ['unknown
+                   ;; the signal's not dead, so send back a message that doesn't trigger
+                   ;; an error and continue, updating the instant state for the emit
+                   (channel-put resp-chan (void))
+                   (unless (can? mode)
+                     ;; when in can mode we should ignore emission so we
+                     ;; don't cut off branches that have potential emitters
+                     (set! signal-status (hash-set signal-status a-signal #t))
+                     (define still-blocked-threads '())
+                     (for ([a-blocked-thread (in-list (hash-ref presence-waiters a-signal '()))])
+                       (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+                       (channel-put resp-chan #t) ;; it was emitted
+                       (define parent-thread (hash-ref par-parents thread #f))
+                       (when parent-thread
+                         (define old-par-state (hash-ref parent->par-state parent-thread))
+                         (define new-par-state
+                           (struct-copy
+                            par-state old-par-state
+                            [presence-waiting (if value-provided?
+                                                  (par-state-presence-waiting old-par-state)
+                                                  (set-remove (par-state-presence-waiting old-par-state) thread))]
+                            [value-waiting (if value-provided?
+                                               (set-remove (par-state-value-waiting old-par-state) thread)
+                                               (par-state-value-waiting old-par-state))]
+                            [active (set-add (par-state-active old-par-state) thread)]))
+                         (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
+                       (add-running-thread thread))
+                     (set! presence-waiters (hash-remove presence-waiters a-signal)))]
+                  ['suspended
+                   ;; the signal's suspended, so send back a message that triggers an error
+                   (channel-put resp-chan (signal-suspended))]
 
-                [#t
-                 ;; the signal's not dead, so send back a message that doesn't trigger
-                 ;; an error and continue, updating the instant state for the emit
-                 (channel-put resp-chan (void))
+                  [#t
+                   ;; the signal's not dead, so send back a message that doesn't trigger
+                   ;; an error and continue, updating the instant state for the emit
+                   (channel-put resp-chan (void))
+                   ;; the signal has been emitted before; nothing else to do
+                   ]
+                  [#f
+                   ;; the signal's not dead, so send back a message that doesn't trigger
+                   ;; an error and continue, updating the instant state for the emit
+                   (channel-put resp-chan (void))
 
-                 ;; the signal has been emitted before; nothing else to do
-                 (loop)]
-                [#f
-                 ;; the signal's not dead, so send back a message that doesn't trigger
-                 ;; an error and continue, updating the instant state for the emit
-                 (channel-put resp-chan (void))
-
-                 (unless (can? mode)
-                   ;; if the signal isn't present but it got emitted (and we aren't in can mode)
-                   ;; then something has gone wrong; let's crash.
-                   (internal-error "emission of an absent signal\n  signal: ~s"
-                                   a-signal))
-                 (loop)])])))
+                   (unless (can? mode)
+                     ;; if the signal isn't present but it got emitted (and we aren't in can mode)
+                     ;; then something has gone wrong; let's crash.
+                     (internal-error "emission of an absent signal\n  signal: ~s"
+                                     a-signal))]))
+              (loop)])))
         (handle-evt
          par-start-chan
          (λ (checkpoint/result-chan+parent+children-threads)
