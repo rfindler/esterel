@@ -273,9 +273,10 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  ]
 }
 
-@defform[(for/par (for-clause ...) body-or-break ... body)]{
- Just like @racket[for], but combines the iterations of the
- loop with @racket[par].
+@deftogether[(@defform[(for/par (for-clause ...) body-or-break ... body)]
+              @defform[(for*/par (for-clause ...) body-or-break ... body)])]{
+ Like @racket[for] and @racket[for*], but combines the
+ iterations of the loop with @racket[par].
 
  Here is an example where we first create 10 signals with
  names from 0 to 9. Then, in parallel, we emit a value on
