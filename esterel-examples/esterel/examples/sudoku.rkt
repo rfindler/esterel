@@ -75,12 +75,12 @@
 
 (define (solve-sudoku board size cells)
   (par
-   (sustain-initial-cells board cells)
+   (sustain-givens board cells)
    (emit-cannot-be size cells)
    (cell-with-only-one-option size cells)
    (last-remaining size cells)))
 
-(define (sustain-initial-cells board cells)
+(define (sustain-givens board cells)
   (loop
    (parse-sudoku-board
     board
@@ -98,14 +98,14 @@
         (f x y (- (char->integer c) (char->integer #\0)))))))
 
 (define (emit-cannot-be size cells)
-  (define-values (cols rows squares)
-    (compute-blocks cells size))
+  (define-values (cols rows boxes)
+    (compute-cols/rows/boxes cells size))
   (loop
    (for ([(_ a-cell) (in-hash cells)])
      (match-define (cell my-x my-y my-must-be my-cannot-be) a-cell)
      (cross-out my-x my-y my-cannot-be (vector-ref cols my-x))
      (cross-out my-x my-y my-cannot-be (vector-ref rows my-y))
-     (cross-out my-x my-y my-cannot-be (vector-ref squares (ij->square size my-x my-y)))
+     (cross-out my-x my-y my-cannot-be (vector-ref boxes (ij->square size my-x my-y)))
      (define my-n (signal-value my-must-be #:can (set my-cannot-be)))
      (when my-n
        (emit my-cannot-be (set-remove (all-possible-ns size) my-n))))
@@ -145,14 +145,8 @@
     i))
 
 (define (last-remaining size cells)
-  (define-values (cols rows squares)
-    (compute-blocks cells size))
-  (for/par ([block (in-vector squares)])
-    (last-remaining-in-block size block))
-  (for/par ([block (in-vector cols)])
-    (last-remaining-in-block size block))
-  (for/par ([block (in-vector rows)])
-    (last-remaining-in-block size block)))
+  (for/par ([house (in-vector (compute-houses cells size))])
+    (last-remaining-in-block size house)))
 
 (define (last-remaining-in-block size block)
   (for/par ([n (in-inclusive-range 1 size)])

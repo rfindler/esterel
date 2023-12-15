@@ -2,9 +2,17 @@
 (module+ test (require rackunit))
 (require esterel/kernel pict racket/gui/base)
 
-(provide compute-blocks ij->square sudoku-gui)
+(provide compute-cols/rows/boxes
+         compute-houses
+         ij->square
+         sudoku-gui)
 
-(define (compute-blocks cells size)
+(define (compute-houses cells size)
+  (define-values (cols rows boxes)
+    (compute-cols/rows/boxes cells size))
+  (vector-append cols rows boxes))
+
+(define (compute-cols/rows/boxes cells size)
   (define cols
     (for/vector ([i (in-range size)])
       (for/vector ([j (in-range size)])
@@ -14,13 +22,13 @@
       (for/vector ([i (in-range size)])
         (hash-ref cells (cons i j)))))
 
-  (define squares
+  (define boxes
     (for/vector ([corner (in-list (get-square-corners size))])
       (for/vector ([offset (in-list (get-square-index-offsets size))])
         (hash-ref cells
                   (cons (+ (car corner) (car offset))
                         (+ (cdr corner) (cdr offset)))))))
-  (values cols rows squares))
+  (values cols rows boxes))
 
 (define (get-square-index-offsets size)
   (for*/list ([i (in-range (sqrt size))]
