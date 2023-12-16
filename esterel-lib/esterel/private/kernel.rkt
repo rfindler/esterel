@@ -129,6 +129,10 @@ value for can explorations and subsequent must evaluation.
               #:name "the #:combine argument")
       #:attr combine-proc #'combine.c)
     (pattern
+      (~seq name:id #:single)
+      #:attr init #'no-init
+      #:attr combine-proc #''single)
+    (pattern
       name:id
       #:attr init #'no-init
       #:attr combine-proc #'#f)))
@@ -233,6 +237,11 @@ value for can explorations and subsequent must evaluation.
             a-signal
             ready-value
             value)]
+    [(signal-single-emitted-twice previous-value)
+     (error 'signal-value "multiple emission of a single signal\n  signal: ~s\n  value: ~e\n  value: ~e"
+            a-signal
+            previous-value
+            value)]
     ['dead
      (if (equal? value no-value-provided)
          (error 'emit (string-append "signal dead;\n"
@@ -326,6 +335,7 @@ value for can explorations and subsequent must evaluation.
 (struct signal-never-before-emitted ())
 (struct signal-suspended ())
 (struct signal-ready-and-emitted (the-value))
+(struct signal-single-emitted-twice (other-value))
 
 (define-syntax (par stx)
   (syntax-case stx ()
@@ -1826,9 +1836,15 @@ value for can explorations and subsequent must evaluation.
                     ;; of race conditions; when the emission happens, we'll
                     ;; definitely not set this signal to be ready, anyway.
                     (define new-value
-                      (if (hash-has-key? signal-value a-signal)
-                          ((signal-combine a-signal) (hash-ref signal-value a-signal) a-value)
-                          a-value))
+                      (cond
+                        [(hash-has-key? signal-value a-signal)
+                         (define comb (signal-combine a-signal))
+                         (define prev (hash-ref signal-value a-signal))
+                         (when (equal? comb 'single)
+                           (channel-put resp-chan (signal-single-emitted-twice prev))
+                           (done))
+                         (comb prev a-value)]
+                        [else a-value]))
                     (set! signal-value (hash-set signal-value a-signal new-value))
                     (when (set-member? signal-ready a-signal)
                       (channel-put resp-chan (signal-ready-and-emitted a-value))

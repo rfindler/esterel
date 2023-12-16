@@ -253,3 +253,21 @@
               (void)))))
    (hash T #f S 1 U #t)))
 
+(with-signal (S #:single)
+  (define r
+    (esterel
+     (emit S 1)
+     (pause)
+     (emit S 2)))
+  (check-equal? (react! r) (hash S 1))
+  (check-equal? (react! r) (hash S 2)))
+
+(with-signal (S #:single)
+  (define r
+    (esterel
+     (emit S 1)
+     (emit S 2)))
+  (check-exn
+   #rx"signal-value: multiple emission of a single signal\n  signal: #<signal: S>\n  value: 1\n  value: 2"
+   (λ ()
+     (react! r))))

@@ -17,6 +17,11 @@
        (display ">" port)]))
   write-proc)
 
+;; combine :
+;; (or/c #f         -- not a valued signal
+;;      'single     -- a valued signal that can only be emitted once per instant
+;;      (α α -> α)) -- a (hopefully) associative, commutative operation
+
 ;; identity controls the equivalence relation on signals
 ;; if it is #f, then the comparison is just like a regular
 ;; opaque struct, namely based on each allocation being different

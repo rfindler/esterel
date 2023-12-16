@@ -131,7 +131,8 @@ provides additional functionality.
                     [maybe-combine
                      (code:line)
                      (code:line #:combine combine-expr)
-                     (code:line #:init init-expr #:combine combine-expr)])]{
+                     (code:line #:init init-expr #:combine combine-expr)
+                     #:single])]{
  Creates new signals and binds them to the the @racket[signal-id]s.
 
  Each signal suffixed with @racket[#:combine] is a value-carrying
@@ -142,6 +143,10 @@ provides additional functionality.
  if it is never emitted is the value of @racket[init-expr]. Once
  the signal is emitted, however, the value of @racket[init-expr]
  is discarded.
+
+ If the signal is followed by @racket[#:single], it is also
+ a valued signal, but it may be emitted at most once in each
+ instant and it takes that value.
 
  If @racket[with-signal] is invoked from within
  @racket[esterel], then the signals may not be emitted
