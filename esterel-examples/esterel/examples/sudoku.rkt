@@ -76,7 +76,7 @@
 (define (solve-sudoku board size cells)
   (par
    (sustain-givens board cells)
-   (emit-cannot-be size cells)
+   (pencil-marks size cells)
    (cell-with-only-one-option size cells)
    (last-remaining size cells)))
 
@@ -97,7 +97,7 @@
       (unless (equal? c #\.)
         (f x y (- (char->integer c) (char->integer #\0)))))))
 
-(define (emit-cannot-be size cells)
+(define (pencil-marks size cells)
   (define-values (cols rows boxes)
     (compute-cols/rows/boxes cells size))
   (loop

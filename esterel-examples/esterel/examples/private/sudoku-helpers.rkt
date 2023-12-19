@@ -5,7 +5,8 @@
 (provide compute-cols/rows/boxes
          compute-houses
          ij->square
-         sudoku-gui)
+         sudoku-gui
+         ht->pict)
 
 (define (compute-houses cells size)
   (define-values (cols rows boxes)
@@ -117,30 +118,31 @@
             ([i (in-range size)])
     (for/fold ([p p])
               ([j (in-range size)])
-      (define ht-info (hash-ref ht (cons i j)))
+      (define-values (must-be cannot-be pre-cannot-be)
+        (match (hash-ref ht (cons i j))
+          [(list must-be cannot-be pre-cannot-be)
+           (values must-be cannot-be pre-cannot-be)]
+          [(cons must-be cannot-be) (values must-be cannot-be #f)]))
       (define w (/ (pict-width p) size))
       (define h (/ (pict-height p) size))
       (define x (* i w))
       (define y (* j h))
-      (define s (cdr ht-info))
       (define cannot-be-p
         (cannot-picts->pict
-         (for/list ([i (in-inclusive-range 1 size)])
-           (cellophane
-            (colorize
-             (text (~a i))
-             (if (set-member? s i)
-                 "red"
-                 "forestgreen"))
-            .4))))
+         (cannots->cannot-picts size cannot-be)))
+      (define pre-cannot-be-p
+        (and pre-cannot-be
+             (cannot-picts->pict
+              (cannots->cannot-picts size pre-cannot-be))))
       (define cell-p
         (vc-append
          (cond
-           [(car ht-info)
+           [must-be
             =>
             (λ (n) (text (~a n)))]
            [else (ghost (text "0"))])
-         (scale cannot-be-p 1/2)))
+         (scale cannot-be-p 1/2)
+         (if pre-cannot-be-p (scale pre-cannot-be-p 1/2) (blank))))
       (define margin .05)
       (define fit-to-cell
         (scale-to-fit cell-p
@@ -150,6 +152,16 @@
                 (+ x (/ w 2) (- (/ (pict-width fit-to-cell) 2)))
                 (+ y (/ h 2) (- (/ (pict-height fit-to-cell) 2)))
                 fit-to-cell))))
+
+(define (cannots->cannot-picts size cannots)
+  (for/list ([i (in-inclusive-range 1 size)])
+    (cellophane
+     (colorize
+      (text (~a i))
+      (if (set-member? cannots i)
+          "red"
+          "forestgreen"))
+     .4)))
 
 (define (cannot-picts->pict l)
   (let loop ([l l])
