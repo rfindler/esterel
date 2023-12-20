@@ -287,3 +287,21 @@
   (check-equal? (react! r) (hash S 1 O2 #t))
   (check-equal? (react! r) (hash O1 #t))
   (check-equal? (react! r) (hash S 2 O2 #t)))
+
+
+(let ()
+  (define O1 (make-global-signal "O1"))
+  (define O2 (make-global-signal "O2"))
+  (define S (make-global-signal "S" #:memoryless? #t #:init 0 #:combine +))
+  (define r
+    (esterel
+     (emit S 1)
+     (if (= (signal-value S #:can (set O1 O2)) 0) (emit O1) (emit O2))
+     (pause)
+     (if (= (signal-value S #:can (set O1 O2)) 0) (emit O1) (emit O2))
+     (pause)
+     (emit S 2)
+     (if (= (signal-value S #:can (set O1 O2)) 0) (emit O1) (emit O2))))
+  (check-equal? (react! r) (hash S 1 O2 #t))
+  (check-equal? (react! r) (hash O1 #t))
+  (check-equal? (react! r) (hash S 2 O2 #t)))

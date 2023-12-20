@@ -54,7 +54,7 @@
                   boolean?))]
 
   [make-global-signal (->* (string?)
-                           (#:init any/c #:combine any/c)
+                           (#:init any/c #:combine any/c #:memoryless? any/c)
                            #:pre/desc (pre-cond-check-outside-esterel)
                            signal?)]
   
