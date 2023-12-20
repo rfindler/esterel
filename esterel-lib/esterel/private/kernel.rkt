@@ -39,7 +39,7 @@
  no-value-provided emit-check-and-error
 
  ;; private bindings provided for rhombus layer
- mk-signal.args
+ mk-signal/args
  esterel/proc
  par/proc
  with-trap/proc
@@ -151,7 +151,7 @@ value for can explorations and subsequent must evaluation.
      "duplicate variable name"
      #`(let ([srcloc #,(syntax/loc stx (quote-srcloc))])
          (let ([signal.name
-                (mk-signal.args 'signal.name
+                (mk-signal/args 'signal.name
                                 signal.init
                                 signal.combine-proc
                                 (cons 'signal.name srcloc)
@@ -179,16 +179,16 @@ value for can explorations and subsequent must evaluation.
      #`(begin
          (define srcloc (quote-srcloc #,stx))
          (define signal.name
-           (mk-signal.args 'signal.name
+           (mk-signal/args 'signal.name
                            signal.init
                            signal.combine-proc
                            (cons 'signal.name srcloc)
                            )) ...)]))
 
 (define (make-global-signal name #:init [init no-init] #:combine [combine #f])
-  (mk-signal.args (string->symbol name) init combine #f))
+  (mk-signal/args (string->symbol name) init combine #f))
 
-(define (mk-signal.args name init combine src)
+(define (mk-signal/args name init combine src)
   (signal (symbol->immutable-string name)
           ;; the identity of a signal, when we're in an instant,
           ;; is eq-like in that we increment a counter for each
@@ -1685,9 +1685,14 @@ value for can explorations and subsequent must evaluation.
                           (hash-keys presence-waiters)
                           (hash-keys value-waiters)
                           (and mode (can-emits mode)))
-       (log-esterel-info "entering can mode: ~s ~s"
+       (log-esterel-info "entering can mode: ~s ~s ~s"
                          (length (hash-keys presence-waiters))
-                         (and mode (length (can-ordered-signals mode))))
+                         (and mode (length (can-ordered-signals mode)))
+                         (sort (remove-duplicates (append (hash-keys presence-waiters)
+                                                          (hash-keys value-waiters)
+                                                          (if mode (can-ordered-signals mode) '())))
+                               string<?
+                               #:key (λ (x) (format "~s" x))))
        (when (and (= 0 (hash-count presence-waiters))
                   (= 0 (hash-count value-waiters)))
          (internal-error "expected some thread to be blocked on a signal"))

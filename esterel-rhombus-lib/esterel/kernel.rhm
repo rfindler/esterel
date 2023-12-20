@@ -3,7 +3,7 @@ import:
   lib("esterel/kernel.rkt"):
     expose #{present?}
   lib("esterel/private/kernel.rkt") as pkernel:
-    expose #{mk-signal.args}
+    expose #{mk-signal/args}
     expose #{esterel/proc}
     expose #{par/proc}
     expose #{with-trap/proc}
