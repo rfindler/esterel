@@ -28,7 +28,7 @@
 ;; from all the others. This works fine when we're not in a
 ;; reaction, but when we are, we might create a signal during
 ;; a can exploration. In that case, we should create the same
-;; signal during a later must run. See `mk-signal.args` for
+;; signal during a later must run. See `mk-signal/args` for
 ;; how that is done
 ;; If the identity is not #t, it is expected to be a pair
 ;; whose car component is might be useful as debugging
