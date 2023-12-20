@@ -132,6 +132,7 @@ provides additional functionality.
                      (code:line)
                      (code:line #:combine combine-expr)
                      (code:line #:init init-expr #:combine combine-expr)
+                     (code:line #:memoryless #:init init-expr #:combine combine-expr)
                      #:single])]{
  Creates new signals and binds them to the the @racket[signal-id]s.
 
@@ -143,6 +144,13 @@ provides additional functionality.
  if it is never emitted is the value of @racket[init-expr]. Once
  the signal is emitted, however, the value of @racket[init-expr]
  is discarded.
+
+ If @racket[#:memoryless] is supplied, the signal's value is
+ not carried forward from previous instants, but instead
+ restarts with the value of @racket[init-expr]. If
+ @racket[#:memoryless] is not supplied, and the signal is not
+ emitted in the current instant, then its value is the value
+ it had in the previous instant (if it had one).
 
  If the signal is followed by @racket[#:single], it is also
  a valued signal, but it may be emitted at most once in each
@@ -201,13 +209,16 @@ provides additional functionality.
 
 @defproc[(make-global-signal [name string?]
                              [#:combine combine #f (or/c #f (procedure-arity-includes/c 2))]
-                             [#:init init any/c])
+                             [#:init init any/c]
+                             [#:memoryless memoryless #f boolean?])
          signal?]{
 
  Creates a global signal named @racket[name]. If @racket[combine] is not @racket[#f],
  creates a valued signal. The @racket[init] argument is not required. If it is not
  supplied, then the signal has no initial value, otherwise the initial value is @racket[init].
-                                                                                            
+ If @racket[memoryless] is @racket[#t], the signal is memoryless; see @racket[with-signal]
+ for more information about memoryless signals.
+
  Use @racket[make-global-signal] when the number of signals
  is not known ahead of time or it is not convenient to write
  a sequence of @racket[define-signal] definitions.

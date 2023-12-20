@@ -28,7 +28,7 @@ export:
 
 defn.macro 'def_signal: $id ...':
   def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
-  'def $id : #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs)
+  'def $id : #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
    ...'
 
 expr.macro 'esterel:
@@ -63,7 +63,7 @@ expr.macro 'with_signals {$id, ...}:
               $body':
   def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
   'block:
-     def $id: #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs)
+     def $id: #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
      ...
      #{run-and-kill-signals!}([$id,...],fun (): $body)'
 

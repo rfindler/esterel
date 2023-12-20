@@ -114,28 +114,39 @@ value for can explorations and subsequent must evaluation.
 
 (begin-for-syntax
   (define-splicing-syntax-class signal-name
-    #:attributes (name init combine-proc)
+    #:attributes (name init combine-proc memoryless)
     (pattern
       (~seq name:id #:combine combine)
       #:declare combine
       (expr/c #'(-> any/c any/c any/c)
               #:name "the #:combine argument")
       #:attr combine-proc #'combine.c
-      #:attr init #'no-init)
+      #:attr init #'no-init
+      #:attr memoryless #'#f)
     (pattern
       (~seq name:id #:init init:expr #:combine combine)
       #:declare combine
       (expr/c #'(-> any/c any/c any/c)
               #:name "the #:combine argument")
-      #:attr combine-proc #'combine.c)
+      #:attr combine-proc #'combine.c
+      #:attr memoryless #'#f)
+    (pattern
+      (~seq name:id #:memoryless #:init init:expr #:combine combine)
+      #:declare combine
+      (expr/c #'(-> any/c any/c any/c)
+              #:name "the #:combine argument")
+      #:attr combine-proc #'combine.c
+      #:attr memoryless #'#t)
     (pattern
       (~seq name:id #:single)
       #:attr init #'no-init
-      #:attr combine-proc #''single)
+      #:attr combine-proc #''single
+      #:attr memoryless #'#f)
     (pattern
       name:id
       #:attr init #'no-init
-      #:attr combine-proc #'#f)))
+      #:attr combine-proc #'#f
+      #:attr memoryless #'#f)))
 
 (define-values (no-init no-init?)
   (let ()
@@ -155,6 +166,7 @@ value for can explorations and subsequent must evaluation.
                                 signal.init
                                 signal.combine-proc
                                 (cons 'signal.name srcloc)
+                                signal.memoryless
                                 )] ...)
            (run-and-kill-signals! (set signal.name ...) (λ () body ...))))]))
 
@@ -183,30 +195,33 @@ value for can explorations and subsequent must evaluation.
                            signal.init
                            signal.combine-proc
                            (cons 'signal.name srcloc)
+                           signal.memoryless
                            )) ...)]))
 
-(define (make-global-signal name #:init [init no-init] #:combine [combine #f])
-  (mk-signal/args (string->symbol name) init combine #f))
+(define (make-global-signal name #:init [init no-init] #:combine [combine #f] #:memoryless? [memoryless? #f])
+  (mk-signal/args (string->symbol name) init combine #f memoryless?))
 
-(define (mk-signal/args name init combine src)
-  (signal (symbol->immutable-string name)
-          ;; the identity of a signal, when we're in an instant,
-          ;; is eq-like in that we increment a counter for each
-          ;; one, but we arrange to make sure that subsequent
-          ;; runs in must mode get the same signal as an earlier
-          ;; can run got by including the thread identities and
-          ;; the state of the signals during that can run
-          (cond
-            [(current-signal-table)
-             =>
-             (λ (signal-table)
-               (define new-signal-chan (signal-table-new-signal-chan signal-table))
-               (define resp (make-channel))
-               (channel-put new-signal-chan resp)
-               (cons (channel-get resp) src))]
-            [else #f])
-          init
-          combine))
+(define (mk-signal/args name init combine src memoryless?)
+  (define n (symbol->immutable-string name))
+  (define id
+    ;; the identity of a signal, when we're in an instant,
+    ;; is eq-like in that we increment a counter for each
+    ;; one, but we arrange to make sure that subsequent
+    ;; runs in must mode get the same signal as an earlier
+    ;; can run got by including the thread identities and
+    ;; the state of the signals during that can run
+    (cond
+      [(current-signal-table)
+       =>
+       (λ (signal-table)
+         (define new-signal-chan (signal-table-new-signal-chan signal-table))
+         (define resp (make-channel))
+         (channel-put new-signal-chan resp)
+         (cons (channel-get resp) src))]
+      [else #f]))
+  (if memoryless?
+      (memoryless-signal n id init combine)
+      (signal n id init combine)))
 
 (define (run-and-kill-signals! s bodies)
   (define signal-table (current-signal-table))
@@ -1127,12 +1142,16 @@ value for can explorations and subsequent must evaluation.
     ;;     value as separate components. This cannot happen in must mode.
     (hash-ref signal-value a-signal
               (λ ()
-                (if (pair? signal-values-pre)
-                    (hash-ref (car signal-values-pre)
-                              a-signal
-                              (λ ()
-                                (signal-never-before-emitted)))
-                    (signal-never-before-emitted)))))
+                (cond
+                  [(memoryless-signal? a-signal)
+                   (signal-init a-signal)]
+                  [else
+                   (if (pair? signal-values-pre)
+                       (hash-ref (car signal-values-pre)
+                                 a-signal
+                                 (λ ()
+                                   (signal-never-before-emitted)))
+                       (signal-never-before-emitted))]))))
 
   (define (signal-has-a-value? a-signal)
     (or (hash-has-key? signal-value a-signal)

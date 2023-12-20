@@ -271,3 +271,19 @@
    #rx"signal-value: multiple emission of a single signal\n  signal: #<signal: S>\n  value: 1\n  value: 2"
    (λ ()
      (react! r))))
+
+(with-signal (O1
+              O2
+              S #:memoryless #:init 0 #:combine +)
+  (define r
+    (esterel
+     (emit S 1)
+     (if (= (signal-value S #:can (set O1 O2)) 0) (emit O1) (emit O2))
+     (pause)
+     (if (= (signal-value S #:can (set O1 O2)) 0) (emit O1) (emit O2))
+     (pause)
+     (emit S 2)
+     (if (= (signal-value S #:can (set O1 O2)) 0) (emit O1) (emit O2))))
+  (check-equal? (react! r) (hash S 1 O2 #t))
+  (check-equal? (react! r) (hash O1 #t))
+  (check-equal? (react! r) (hash S 2 O2 #t)))

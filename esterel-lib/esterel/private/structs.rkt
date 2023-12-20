@@ -66,6 +66,8 @@
   (define id (signal-identity s))
   (and id (car id)))
 
+(struct memoryless-signal signal ())
+
 (struct trap (name counter escape)
   #:methods gen:custom-write
   [(define write-proc (mk-write-proc (λ (x) (trap-name x)) "trap"))])
@@ -77,6 +79,7 @@
 (struct trap+vals (trap vals) #:transparent)
 
 (provide (struct-out signal)
+         (struct-out memoryless-signal)
          signal-index
          (struct-out trap)
          (struct-out trap+vals))
