@@ -1635,7 +1635,7 @@ value for can explorations and subsequent must evaluation.
                  pre-count))
           (set! signal-values-pre (keep-count
                                    (if (pair? signal-values-pre)
-                                       (hash-union-prefer-left signal-value (car signal-values-pre))
+                                       (carry-pre-forward signal-value (car signal-values-pre))
                                        signal-value)
                                    signal-values-pre
                                    ;; make sure we keep at least 1 for signal value so
@@ -2024,7 +2024,9 @@ value for can explorations and subsequent must evaluation.
    (string-append "kernel-esterel.rkt: internal error: " (apply format fmt args))
    (current-continuation-marks))))
 
-(define (hash-union-prefer-left h-left h-right)
-  (for/hash ([k (in-set (set-union (list->set (hash-keys h-left))
-                                   (list->set (hash-keys h-right))))])
-    (values k (hash-ref h-left k (λ () (hash-ref h-right k))))))
+(define (carry-pre-forward signal-value signal-values-pre)
+  (for/hash ([k (in-set (set-union (list->set (hash-keys signal-value))
+                                     (list->set (hash-keys signal-values-pre))))]
+               #:unless (and (memoryless-signal? k)
+                             (not (hash-has-key? signal-value k))))
+    (values k (hash-ref signal-value k (λ () (hash-ref signal-values-pre k))))))

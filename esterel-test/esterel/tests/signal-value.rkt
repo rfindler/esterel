@@ -305,3 +305,57 @@
   (check-equal? (react! r) (hash S 1 O2 #t))
   (check-equal? (react! r) (hash O1 #t))
   (check-equal? (react! r) (hash S 2 O2 #t)))
+
+(let ()
+  (define S1
+    (make-global-signal
+     "S1"
+     #:init (set) #:combine set-union
+     #:memoryless? #t))
+  (define S2
+    (make-global-signal
+     "S2"
+     #:init (set) #:combine set-union
+     #:memoryless? #t))
+  (define r
+    (esterel
+     #:pre 1
+     (emit S1 (set 1))
+     (pause)
+     (emit S2 (signal-value S1 #:can (set) #:pre 1))
+     (pause)
+     (emit S2 (signal-value S1 #:can (set) #:pre 1))
+     (pause)
+     (pause)
+     (emit S1 (set 1))
+     (pause)
+     (emit S2 (signal-value S1 #:can (set) #:pre 1))
+     (pause)
+     (pause)
+     (emit S1 (set 2))
+     (emit S2 (signal-value S1 #:can (set) #:pre 1))
+     (pause)
+     (emit S1 (set 3))
+     (emit S2 (signal-value S1 #:can (set) #:pre 1))
+     (pause)
+     (pause)
+     (emit S1 (set 4))
+     (emit S2 (signal-value S1 #:can (set) #:pre 1))
+     (pause)
+     (emit S2 (signal-value S1 #:can (set) #:pre 1))
+     (pause)
+     (emit S2 (signal-value S1 #:can (set) #:pre 1))))
+
+  (check-equal? (react! r) (hash S1 (set 1)))
+  (check-equal? (react! r) (hash S2 (set 1)))
+  (check-equal? (react! r) (hash S2 (set)))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash S1 (set 1)))
+  (check-equal? (react! r) (hash S2 (set 1)))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash S1 (set 2) S2 (set)))
+  (check-equal? (react! r) (hash S1 (set 3) S2 (set 2)))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash S1 (set 4) S2 (set)))
+  (check-equal? (react! r) (hash S2 (set 4)))
+  (check-equal? (react! r) (hash S2 (set))))
