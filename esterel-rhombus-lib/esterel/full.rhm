@@ -16,6 +16,11 @@ export:
   loop
   await
   every
+  sustain
+
+fun
+| sustain(s): full.sustain(s)
+| sustain(s, v): full.sustain(s, v) // this still needs to be tested
   
 expr.macro
 | 'loop:
