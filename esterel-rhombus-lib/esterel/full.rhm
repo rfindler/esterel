@@ -17,6 +17,10 @@ export:
   await
   every
   sustain
+  def_strl
+
+defn.macro 'def_strl $id: $body':
+    'def $id: esterel: $body'
 
 fun
 | sustain(s): full.sustain(s)
