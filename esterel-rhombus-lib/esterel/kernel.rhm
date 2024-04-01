@@ -25,6 +25,7 @@ export:
   with_signals
   pause
   signal_name
+  signal_index
 
 defn.macro 'def_signal: $id ...':
   def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
@@ -81,3 +82,6 @@ fun exit_trap(t):
 
 fun signal_name(s):
   kernel.#{signal-name}(s)
+
+fun signal_index(s):
+  kernel.#{signal-index}(s) // i again can't test this bc `with_signals` doesn't work yet

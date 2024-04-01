@@ -24,7 +24,7 @@ defn.macro 'def_strl $id: $body':
 
 fun
 | sustain(s): full.sustain(s)
-| sustain(s, v): full.sustain(s, v) // this still needs to be tested
+| sustain(s, v): full.sustain(s, v) // so, i can't test if this works because i don't think i can add values to signals
   
 expr.macro
 | 'loop:
