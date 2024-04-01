@@ -22,15 +22,20 @@ export:
   react
   with_trap
   exit_trap
-  with_signals
+  with_signal
   pause
   signal_name
   signal_index
 
-defn.macro 'def_signal: $id ...':
-  def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
-  'def $id : #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
-   ...'
+defn.macro
+| 'def_signal {[$id, $combine] , ...}':
+    def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
+    'def $id : #{mk-signal/args}(#'$id, #{no-init}, $combine, $srclocs, #false)
+     ...'
+| 'def_signal {$id , ...}':
+    def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
+    'def $id : #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
+     ...'
 
 expr.macro 'esterel:
               $body':
@@ -51,9 +56,9 @@ fun react(r, ~emit: signals = []):
   // the for loop here converts an equal
   // hash into an equal-always hash in
   // order to cooperate better with Rhombus
-  def rkt_signal = PairList(&signals)
+  def rkt_signals = PairList(&signals)
   for Map:
-    each (k,v): kernel.#{react!}(r, ~emit: rkt_signal) :~ Map
+    each (k,v): kernel.#{react!}(r, ~emit: rkt_signals) :~ Map
     values(k,v)
 
 expr.macro 'with_trap $t:
@@ -61,13 +66,21 @@ expr.macro 'with_trap $t:
   '#{with-trap/proc}(#'$t,fun ($t):
                             $body)'
 
-expr.macro 'with_signals {$id, ...}:
+expr.macro
+| 'with_signal {[$id, $combine] , ...}:
               $body':
-  def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
-  'block:
-     def $id: #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
-     ...
-     #{run-and-kill-signals!}([$id,...],fun (): $body)'
+    def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
+    'block:
+       def $id: #{mk-signal/args}(#'$id, #{no-init}, $combine, $srclocs, #false)
+       ...
+       #{run-and-kill-signals!}([$id,...][0],fun (): $body)'
+| 'with_signal {$id, ...}:
+              $body':
+    def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
+    'block:
+       def $id: #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
+       ...
+       #{run-and-kill-signals!}([$id,...][0],fun (): $body)'
 
 expr.macro 'par
             | $body
@@ -84,4 +97,4 @@ fun signal_name(s):
   kernel.#{signal-name}(s)
 
 fun signal_index(s):
-  kernel.#{signal-index}(s) // i again can't test this bc `with_signals` doesn't work yet
+  kernel.#{signal-index}(s)
