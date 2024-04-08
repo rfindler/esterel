@@ -27,15 +27,37 @@ export:
   signal_name
   signal_index
 
-defn.macro
-| 'def_signal {[$id, $combine] , ...}':
-    def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
-    'def $id : #{mk-signal/args}(#'$id, #{no-init}, $combine, $srclocs, #false)
-     ...'
-| 'def_signal {$id , ...}':
-    def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
-    'def $id : #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
-     ...'
+meta syntax_class SignalDefinition
+| '[$id_expr, ~memoryless, ~init $init_expr, ~combine $combine_expr]':
+    field id = id_expr
+    field init = init_expr
+    field combine = combine_expr
+    field memoryless = #true
+| '[$id_expr, ~init $init_expr, ~combine $combine_expr]':
+    field id = id_expr
+    field init = init_expr
+    field combine = combine_expr
+    field memoryless = #false
+| '[$id_expr, ~combine $combine_expr]':
+    field id = id_expr
+    field init =' #{no-init}'
+    field combine = combine_expr
+    field memoryless = #false
+| '[$id_expr, ~single]':
+    field id = id_expr
+    field init = '#{no-init}'
+    field combine = '#'single'
+    field memoryless = #false
+| '$id_expr':
+    field id = id_expr
+    field init = '#{no-init}'
+    field combine = #false
+    field memoryless = #false
+
+defn.macro 'def_signal {$(signal_definition :: SignalDefinition), ...}':
+  def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}', signal_definition.id]), ...]
+  'def $signal_definition.id : #{mk-signal/args}(#'$signal_definition.id, $signal_definition.init, $signal_definition.combine, $srclocs, $signal_definition.memoryless)
+   ...'
 
 expr.macro 'esterel:
               $body':
@@ -65,22 +87,14 @@ expr.macro 'with_trap $t:
               $body':
   '#{with-trap/proc}(#'$t,fun ($t):
                             $body)'
-
-expr.macro
-| 'with_signal {[$id, $combine] , ...}:
+  
+expr.macro 'with_signal {$(signal_definition :: SignalDefinition), ...}:
               $body':
-    def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
-    'block:
-       def $id: #{mk-signal/args}(#'$id, #{no-init}, $combine, $srclocs, #false)
-       ...
-       #{run-and-kill-signals!}([$id,...][0],fun (): $body)'
-| 'with_signal {$id, ...}:
-              $body':
-    def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
-    'block:
-       def $id: #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
-       ...
-       #{run-and-kill-signals!}([$id,...][0],fun (): $body)'
+  def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}', signal_definition.id]), ...]
+  'block:
+     def $signal_definition.id : #{mk-signal/args}(#'$signal_definition.id, $signal_definition.init, $signal_definition.combine, $srclocs, $signal_definition.memoryless)
+     ...
+     #{run-and-kill-signals!}([$signal_definition.id,...],fun (): $body)'
 
 expr.macro 'par
             | $body
