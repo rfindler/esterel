@@ -4,7 +4,8 @@
 (provide halt loop abort sustain await every
          loop-each/proc loop/proc
          await/proc await-n/proc await-immediate/proc
-         every-n/proc every/proc every-immediate/proc)
+         every-n/proc every/proc every-immediate/proc
+         abort-when/proc weak-abort/proc weak-abort-immediate/proc)
 
 (define (halt)
   (let loop ()

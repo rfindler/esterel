@@ -10,6 +10,11 @@ import:
     expose #{every/proc}
     expose #{every-n/proc}
     expose #{every-immediate/proc}
+    expose #{abort-when/proc}
+    expose #{weak-abort/proc}
+    expose #{weak-abort-immediate/proc}
+    expose halt as full_halt
+    expose sustain as full_sustain
 
 export:
   all_from(esterel/kernel)
@@ -19,13 +24,14 @@ export:
   sustain
   def_strl
   halt
+  abort
 
 defn.macro 'def_strl $id: $body':
     'def $id: esterel: $body'
 
 fun
-| sustain(s): full.sustain(s)
-| sustain(s, v): full.sustain(s, v)
+| sustain(s): full_sustain(s)
+| sustain(s, v): full_sustain(s, v)
   
 expr.macro
 | 'loop:
@@ -65,4 +71,18 @@ expr.macro
                    fun (): $body)'
 
 fun halt():
-  full.halt()
+  full_halt()
+
+expr.macro
+| 'abort:
+     $body_expr ...
+     ~when $when_expr ...':
+   '#{abort-when/proc}(fun (): $body_expr ..., fun (): $when_expr ...)'
+| 'abort ~weak:
+     $body_expr ...
+     ~when $when_expr ...':
+   '#{weak-abort/proc}(fun (): $body_expr ..., fun (): $when_expr ...)'
+| 'abort ~weak:
+     $body_expr ...
+     ~when_immediate $when_expr ...':
+   '#{weak-abort-immediate/proc}(fun (): $body_expr ..., fun (): $when_expr ...)'

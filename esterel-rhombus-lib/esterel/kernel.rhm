@@ -2,6 +2,19 @@
 import:
   lib("esterel/kernel.rkt"):
     expose #{present?}
+    expose #{react!}
+    expose #{exit-trap}
+    expose #{signal-name}
+    expose #{signal-index}
+    expose #{esterel?}
+    expose #{in-esterel?}
+    expose #{signal?}
+    expose #{signal-value}
+    expose #{debug-when-must}
+    expose #{signal-combine}
+    expose #{trap?}
+    expose emit as kernel_emit
+    expose pause as kernel_pause
   lib("esterel/private/kernel.rkt") as pkernel:
     expose #{mk-signal/args}
     expose #{esterel/proc}
@@ -31,6 +44,8 @@ export:
   is_esterel
   in_esterel
   signal_value
+  suspend
+  is_trap
 
 meta syntax_class SignalOptions
 | '~memoryless ~init $init_expr ~combine $combine_expr':
@@ -103,8 +118,8 @@ expr.macro '$left ||| $right':
    '#{par/proc}(PairList(fun (): $left, fun(): $right))'
 
 fun
-| emit(s): kernel.emit(s)
-| emit(s,v): kernel.emit(s,v)
+| emit(s): kernel_emit(s)
+| emit(s,v): kernel_emit(s,v)
 
 fun react(r, ~emit: signals = []):
   // the for loop here converts an equal
@@ -113,7 +128,7 @@ fun react(r, ~emit: signals = []):
   def rkt_signals = PairList(&signals).map(fun | ([signal, val]): Pair.cons(signal, val)
                                                | (signal): signal)
   for Map:
-    each (k,v): kernel.#{react!}(r, ~emit: rkt_signals) :~ Map
+    each (k,v): #{react!}(r, ~emit: rkt_signals) :~ Map
     values(k,v)
 
 expr.macro 'with_trap $t:
@@ -127,34 +142,42 @@ expr.macro 'par
   '#{par/proc}(PairList(&[fun (): $body, ...]))'
 
 expr.macro 'pause':
-  'kernel.pause()'
+  'kernel_pause()'
 
 fun exit_trap(t):
-  kernel.#{exit-trap}(t)
+  #{exit-trap}(t)
 
 fun signal_name(s):
-  kernel.#{signal-name}(s)
+  #{signal-name}(s)
 
 fun signal_index(s):
-  kernel.#{signal-index}(s)
+  #{signal-index}(s)
 
 fun is_esterel(v):
-  kernel.#{esterel?}(v)
+  #{esterel?}(v)
 
 fun in_esterel():
-  kernel.#{in-esterel?}()
+  #{in-esterel?}()
 
 fun is_signal(v):
-  kernel.#{signal?}(v)
+  #{signal?}(v)
 
 fun is_present(s, ~pre: pre = 0):
   #{present?}(s, pre)
 
 fun signal_value(s, ~pre: n = 0, ~can: can = Set()):
-  kernel.#{signal-value}(s, ~pre: n, ~can: racketset.#{list->set}(PairList(&Set.to_list(can))))
+  #{signal-value}(s, ~pre: n, ~can: racketset.#{list->set}(PairList(&Set.to_list(can))))
 
 fun debug_when_must(stx):
-  kernel.#{debug-when-must}(stx)
+  #{debug-when-must}(stx)
 
 fun signal_combine(s):
-  kernel.#{signal-combine}(s)
+  #{signal-combine}(s)
+
+expr.macro 'suspend:
+              $body_expr
+              ~when $when_expr':
+    'pkernel.suspend($body_expr, $when_expr)'
+    
+fun is_trap(v):
+  #{trap?}(v)

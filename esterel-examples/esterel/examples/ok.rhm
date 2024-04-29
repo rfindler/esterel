@@ -7,7 +7,7 @@ fun Aux(I, O):
     pause
     emit(O)
 
-def_signal: S1 S2
+def_signal [S1, S2]
 
 def r:
   esterel:

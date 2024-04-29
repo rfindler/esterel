@@ -7,7 +7,7 @@ import:
 // _Compiling Esterel_; the test cases are as
 // given in figure 1.2 (plus a few more)
 
-def_signal: A B R O
+def_signal [A, B, R, O]
 
 def abro:
   esterel:

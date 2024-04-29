@@ -10,20 +10,20 @@ see p18.rkt for a quote about the program.
 
 */
 
-def_signal: s1_and_s2 s1_and_not_s2 not_s1_and_s2 not_s1_and_not_s2
+def_signal [s1_and_s2, s1_and_not_s2, not_s1_and_s2, not_s1_and_not_s2]
 
 def r:
   esterel:
     loop:
       with_trap t1:
-        with_signals {s1}:
+        with_signal [s1]:
           par
           | pause
             emit(s1)
             exit_trap(t1)
           | loop:
               with_trap t2:
-                with_signals {s2}:
+                with_signal [s2]:
                   par
                   | pause
                     emit(s2)
