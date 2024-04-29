@@ -12,6 +12,7 @@ import:
   lib("syntax/location.rkt"):
     expose #{quote-srcloc}
   lib("racket/set.rkt") as racketset
+  lib("racket/base.rkt") meta
 
 export:
   def_signal
@@ -29,6 +30,7 @@ export:
   signal_index
   is_esterel
   in_esterel
+  signal_value
 
 meta syntax_class SignalOptions
 | '~memoryless ~init $init_expr ~combine $combine_expr':
@@ -40,7 +42,7 @@ meta syntax_class SignalOptions
     field combine = combine_expr
     field memoryless = #false
 | '~combine $combine_expr':
-    field init =' #{no-init}'
+    field init = '#{no-init}'
     field combine = combine_expr
     field memoryless = #false
 | '~single':
@@ -50,31 +52,43 @@ meta syntax_class SignalOptions
 
 meta syntax_class SignalDefinition
 | '{$id_exprs, ...} $(options::SignalOptions)':
+    def init_name_we_made_up = base.gensym()
+    def combine_name_we_made_up = base.gensym()
     field [id, ...] = [id_exprs, ...]
-    field [init, ...] = [id_exprs, ...].map(fun (_): options.init)
-    field [combine, ...] = [id_exprs, ...].map(fun(_): options.combine)
+    field init_def = 'def $init_name_we_made_up = $options.init'
+    field combine_def = 'def $combine_name_we_made_up = $options.combine'
+    field [init, ...] = [id_exprs, ...].map(fun (_): init_name_we_made_up)
+    field [combine, ...] = [id_exprs, ...].map(fun(_): combine_name_we_made_up)
     field [memoryless, ...] = [id_exprs, ...].map(fun(_): options.memoryless)
 | '$id_expr $(options::SignalOptions)':
     field [id, ...] = [id_expr]
+    field init_def = '#false'
+    field combine_def = '#false'
     field [init, ...] = [options.init]
     field [combine, ...] = [options.combine]
     field [memoryless, ...] = [options.memoryless]
 | '$id_expr':
     field [id, ...] = [id_expr]
+    field init_def = '#false'
+    field combine_def = '#false'
     field [init, ...] = ['#{no-init}']
     field [combine, ...] = [#false]
     field [memoryless, ...] = [#false]
 
 defn.macro 'def_signal [$(signal_definition :: SignalDefinition), ...]':
   def [[srclocs, ...], ...] = [[expr_meta.pack_s_exp(['#{quote-srcloc}', signal_definition.id]), ...], ...]
-  'def [[$signal_definition.id, ...], ...] = [[#{mk-signal/args}(#'$signal_definition.id, $signal_definition.init, $signal_definition.combine, $srclocs, $signal_definition.memoryless), ...], ...]'
+  'def [[$signal_definition.id, ...], ...] = \
+   block:
+        $signal_definition.init_def; ...
+        $signal_definition.combine_def; ...
+        [[#{mk-signal/args}(#'$signal_definition.id, $signal_definition.init, $signal_definition.combine, $srclocs, $signal_definition.memoryless), ...], ...]'
 
 
 expr.macro 'with_signal [$(signal_definition :: SignalDefinition), ...]:
               $body':
   def [[srclocs, ...], ...] = [[expr_meta.pack_s_exp(['#{quote-srcloc}', signal_definition.id]), ...], ...]
   'block:
-     def [[$signal_definition.id, ...], ...] = [[#{mk-signal/args}(#'$signal_definition.id, $signal_definition.init, $signal_definition.combine, $srclocs, $signal_definition.memoryless), ...], ...]
+     def_signal [$signal_definition, ...]
      #{run-and-kill-signals!}(racketset.set($signal_definition.id,...,...),fun (): $body)'
   
 expr.macro 'esterel:
@@ -96,7 +110,8 @@ fun react(r, ~emit: signals = []):
   // the for loop here converts an equal
   // hash into an equal-always hash in
   // order to cooperate better with Rhombus
-  def rkt_signals = PairList(&signals)
+  def rkt_signals = PairList(&signals).map(fun | ([signal, val]): Pair.cons(signal, val)
+                                               | (signal): signal)
   for Map:
     each (k,v): kernel.#{react!}(r, ~emit: rkt_signals) :~ Map
     values(k,v)
@@ -136,7 +151,7 @@ fun is_present(s, ~pre: pre = 0):
   #{present?}(s, pre)
 
 fun signal_value(s, ~pre: n = 0, ~can: can = Set()):
-  kernel.#{signal-value}(s, n, can)
+  kernel.#{signal-value}(s, ~pre: n, ~can: racketset.#{list->set}(PairList(&Set.to_list(can))))
 
 fun debug_when_must(stx):
   kernel.#{debug-when-must}(stx)

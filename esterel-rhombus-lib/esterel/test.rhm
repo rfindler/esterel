@@ -1,0 +1,57 @@
+#lang rhombus
+
+import esterel/kernel open
+
+check:
+  def mutable eval_count = 0
+  fun a():
+      eval_count := eval_count + 1
+      fun (x, y) : x + y
+
+  def strl1:
+      esterel:
+        with_signal [{x, y} ~combine (a())]:
+          emit(x, 5)
+          emit(x, 10)
+
+  [Map.values(react(strl1)), eval_count]
+  ~matches [[15, ...], 1]
+
+check:
+  def mutable eval_count = 0
+  fun a():
+      eval_count := eval_count + 1
+      fun (x, y) : x + y
+  def_signal [z, w ~combine (fun (x, y): x*y)]
+  def strl1:
+      esterel:
+        emit(w, 3)
+        emit(w, 5)
+  [Map.values(react(strl1)), eval_count]
+  ~matches [[15, ...], 0]
+
+check:
+  def_signal [z, w ~combine (fun (x, y): x*y)]
+  def strl1:
+      esterel:
+        emit(z)
+  Map.values(react(strl1))
+  ~matches [#true]
+
+check:
+  def mutable eval_count = 0
+  fun a():
+      eval_count := eval_count + 1
+      fun (x, y) : x + y
+  def_signal [{x, y} ~combine (a()), z, w ~combine (fun (x, y): x*y)]
+  def strl1:
+      esterel:
+        emit(x, 5)
+        emit(x, 10)
+        emit(y, 14)
+        emit(y, 1)
+        emit(w, 3)
+        emit(w, 5)
+  [Map.values(react(strl1)), eval_count]
+  ~matches [[15, ...], 1]
+
