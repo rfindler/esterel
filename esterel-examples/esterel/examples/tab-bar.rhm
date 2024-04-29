@@ -1,0 +1,92 @@
+#lang rhombus
+
+import:
+  esterel/full open
+  gui open
+  draw as rhombusdraw
+  lib("racket/base.rkt") as racket
+
+fun TabBar():
+  def tabs = []
+  def refresh = Obs(0)
+
+  fun on_event(evt, canvas_ctx):
+    react(r, ~emit: event_to_signals(canvas_ctx.client_size.width,
+                                     canvas_ctx.client_size.height,
+                                     evt))
+    refresh <~ fun (x): x + 1
+
+  fun draw(dc, _):
+    def signals = react(r)
+    dc.clear()
+    def cw = dc.width
+    def ch = dc.height
+    def rect_size = [cw / 2, ch / 2]
+    dc.brush := rhombusdraw.Brush(~color: current_ul_draw_color(signals))
+    dc.rectangle([[0, 0], rect_size])
+    dc.brush := rhombusdraw.Brush(~color: current_ur_draw_color(signals))
+    dc.rectangle([[cw / 2, 0], rect_size])
+    dc.brush := rhombusdraw.Brush(~color: current_ll_draw_color(signals))
+    dc.rectangle([[0, ch / 2], rect_size])
+    dc.brush := rhombusdraw.Brush(~color: current_lr_draw_color(signals))
+    dc.rectangle([[cw / 2, ch / 2], rect_size])
+
+  Canvas(refresh,
+         draw,
+         ~mouse: on_event,
+         ~key: on_event)
+
+fun event_to_signals(cw, ch, evt):
+  (match evt.kind \
+    | #'enter: [enter_event] \
+    | #'leave: [leave_event] \
+    | #'motion: [move_event] \
+    | _: []) \
+  ++ \
+  [[client_w, cw], \
+   [client_h, ch], \
+   [event_x, evt.x], \
+   [event_y, evt.y]]
+
+def_signal [move_event,
+            enter_event,
+            leave_event,
+            {event_x, event_y, client_w, client_h} ~init 1 ~combine (math.max)]
+
+fun region_loop(l, r, t, b, s):
+  loop:
+    def mid1 = (signal_value(event_x) / signal_value(client_w))
+    def mid2 = (signal_value(event_y) / signal_value(client_h))
+    when l <= mid1 && mid1 <= r \
+       && \
+       t <= mid2 && mid2 <= b
+    | emit(s)
+    pause
+
+def_signal [ul_draw, lr_draw, ur_draw, ll_draw]
+
+fun draw_color_picker(c1, c2):
+  fun (s):
+    fun (emitted):
+       if emitted.get(s, #false)
+       | c1
+       | c2
+
+def green_draw_color = draw_color_picker("forestgreen", "palegreen")
+def blue_draw_color = draw_color_picker("navy", "lightblue")
+
+def current_ul_draw_color = green_draw_color(ul_draw)
+def current_ur_draw_color = blue_draw_color(ur_draw)
+def current_ll_draw_color = blue_draw_color(ll_draw)
+def current_lr_draw_color = green_draw_color(lr_draw)
+
+def_strl r:
+  region_loop(0, 1/2, 0, 1/2, ul_draw) \
+  ||| \
+  region_loop(0, 1/2, 1/2, 1, ll_draw) \
+  ||| \
+  region_loop(1/2, 1, 1/2, 1, lr_draw) \
+  ||| \
+  region_loop(1/2, 1, 0, 1/2, ur_draw)
+
+render(Window(TabBar()))

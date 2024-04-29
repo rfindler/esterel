@@ -1,16 +1,27 @@
 #lang racket/gui
+
 (require esterel/full)
 
 (define tab-bar%
   (class canvas%
     (inherit get-client-size)
-    (define tabs '())
     (define/override (on-event evt)
       (define-values (cw ch) (get-client-size))
-      (react! r #:emit (event->signals cw ch evt)))
+      (react! r #:emit (event->signals cw ch evt))
+      (send this refresh))
     (define/override (on-paint)
-      '(for ([(signal val) (in-hash (react! r #:emit (list S-paint)))])
-        (interpret-drawing-commands....?)))
+      (define signals (react! r))
+      (define dc (send this get-dc))
+      (send dc clear)
+      (define-values (cw ch) (get-client-size))
+      (send dc set-brush (current-ul-draw-color signals) 'solid)
+      (send dc draw-rectangle 0 0 (/ cw 2) (/ ch 2))
+      (send dc set-brush (current-ur-draw-color signals) 'solid)
+      (send dc draw-rectangle (/ cw 2) 0 (/ cw 2) (/ ch 2))
+      (send dc set-brush (current-ll-draw-color signals) 'solid)
+      (send dc draw-rectangle 0 (/ ch 2) (/ cw 2) (/ ch 2))
+      (send dc set-brush (current-lr-draw-color signals) 'solid)
+      (send dc draw-rectangle (/ cw 2) (/ ch 2) (/ cw 2) (/ ch 2)))
     (super-new)))
 
 (define (event->signals cw ch evt)
@@ -31,19 +42,16 @@
   move-event
   enter-event
   leave-event
-  event-x
-  event-y
-  client-w
-  client-h)
+  event-x #:init 1 #:combine max
+  event-y #:init 1 #:combine max
+  client-w #:init 1 #:combine max
+  client-h #:init 1 #:combine max)
 
-(define-signal draw-rectangles #:combine set-union)
-
-(define (region-loop in-color out-color l t r b s)
+(define (region-loop l r t b s)
   (let loop ()
-    (if (and (<= l (/ (signal-value event-x) (signal-value client-w)) r)
-             (<= t (/ (signal-value event-y) (signal-value client-h)) b))
-        (emit s in-color)
-        (emit s out-color))
+    (when (and (<= l (/ (signal-value event-x #:can (set)) (signal-value client-w #:can (set))) r)
+               (<= t (/ (signal-value event-y #:can (set)) (signal-value client-h #:can (set))) b))
+      (emit s))
     (pause)
     (loop)))
 
@@ -53,10 +61,24 @@
   ur-draw
   ll-draw)
 
+(define ((green-draw-color s) emitted)
+  (if (hash-ref emitted s #f) "forestgreen" "palegreen"))
+(define ((blue-draw-color s) emitted)
+  (if (hash-ref emitted s #f) "navy" "lightblue"))
+(define current-ul-draw-color (green-draw-color ul-draw))
+(define current-ur-draw-color (blue-draw-color ur-draw))
+(define current-ll-draw-color (blue-draw-color ll-draw))
+(define current-lr-draw-color (green-draw-color lr-draw))
+
 (define r
   (esterel
    (par
-    (region-loop "forestgreen" "palegreen" 0 0 1/2 1/2 ul-draw)
-    (region-loop "forestgreen" "palegreen" 1/2 1/2 1 1 lr-draw)
-    (region-loop "lightblue" "navy" 0 1/2 1/2 1 ur-draw)
-    (region-loop "lightblue" "navy" 1/2 0 1 1/2 ll-draw))))
+    (region-loop 0 1/2 0 1/2 ul-draw)
+    (region-loop 0 1/2 1/2 1 ll-draw)
+    (region-loop 1/2 1 1/2 1 lr-draw)
+    (region-loop 1/2 1 0 1/2 ur-draw))))
+
+(define win (new frame% [label "test"]))
+(define canvas (new tab-bar% [parent win]))
+(send win show #t)
+
