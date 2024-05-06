@@ -522,43 +522,52 @@ value for can explorations and subsequent must evaluation.
     [(exn? val) (raise val)]
     [(trap+vals? val) (exit-trap/internal val)]
     [else
-     (define suspend? (handle-suspension signal-table))
+     (define suspend? (handle-suspension signal-table val))
      (cond
        [suspend?
         (pause)]
        [else
         (void)])]))
 
-(define (handle-suspension signal-table)
-  (define iter
-    (continuation-mark-set->iterator
-     (current-continuation-marks)
-     (list suspend-mark)))
-  (define-values (suspend? suspended-signals)
+(struct suspend-info (suspend? suspended-signals) #:transparent)
+
+
+;; get-suspend-info : marks -> suspend-info
+(define (get-suspend-info thds)
+  (for/fold ([suspend? #f]
+             [suspended-signals (set)])
+            ([thd (in-list thds)])
+    (define iter
+      (continuation-mark-set->iterator
+       (continuation-marks thd)
+       (list suspend-mark)))
     (let loop ([iter iter]
-             [suspend? #f]
-             [suspended-signals (set)]
-             [pending-signals (set)])
-    (define-values (next-val next-iter) (iter))
-    (match next-val
-      [(vector (? procedure? suspend-proc))
-       (cond
-         [(suspend-proc)
-          (loop next-iter
-                #t
-                (set-union pending-signals suspended-signals)
-                (set))]
-         [else
-          (loop next-iter
-                suspend?
-                suspended-signals
-                pending-signals)])]
-      [(vector (? set? signals))
-       (loop next-iter
-             suspend?
-             suspended-signals
-             (set-union signals pending-signals))]
-      [#f (values suspend? suspended-signals)])))
+               [suspend? suspend?]
+               [suspended-signals suspended-signals]
+               [pending-signals (set)])
+      (define-values (next-val next-iter) (iter))
+      (match next-val
+        [(vector (? procedure? suspend-proc))
+         (cond
+           [(suspend-proc)
+            (loop next-iter
+                  #t
+                  (set-union pending-signals suspended-signals)
+                  (set))]
+           [else
+            (loop next-iter
+                  suspend?
+                  suspended-signals
+                  pending-signals)])]
+        [(vector (? set? signals))
+         (loop next-iter
+               suspend?
+               suspended-signals
+               (set-union signals pending-signals))]
+        [#f (values suspend? suspended-signals)]))))
+
+(define (handle-suspension signal-table thds)
+  (define-values (suspend? suspended-signals) (get-suspend-info thds))
   (unless (set-empty? suspended-signals)
     (define resp-chan (make-channel))
     (channel-put (signal-table-suspended-signals-chan signal-table)
@@ -689,7 +698,7 @@ value for can explorations and subsequent must evaluation.
            (unless finished? (when (in-must-mode? signal-table) (kill-thunk)))
            (exit-trap/internal val)]
           [else
-           (define suspend? (handle-suspension signal-table))
+           (define suspend? (handle-suspension signal-table val))
            (cond
              [(in-must-mode? signal-table)
               (unless finished?
@@ -1507,7 +1516,7 @@ value for can explorations and subsequent must evaluation.
                                  presence-waiting value-waiting
                                  (set) (set-union paused active)
                                  the-trap-of-this-par)))))
-  
+
   (let loop ()
 
     ;; this is a kind of abuse of the logging system; we skip these checks unless
@@ -1675,7 +1684,13 @@ value for can explorations and subsequent must evaluation.
              (set! first-instant-sema #f))
            (set! instant-complete-chan _instant-complete-chan)
            (for ([(paused-thread resp-chan) (in-hash paused-threads)])
-             (channel-put resp-chan (void))
+             (define thd-and-parent-thds
+               (let loop ([thd paused-thread])
+                 (cons thd
+                       (cond
+                         [(hash-ref par-parents thd #f) => (λ (v) (loop v))]
+                         [else '()]))))
+             (channel-put resp-chan thd-and-parent-thds)
              (add-running-thread paused-thread))
            (set! paused-threads (hash))
            (set! parent->par-state

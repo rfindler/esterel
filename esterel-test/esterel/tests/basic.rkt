@@ -1,5 +1,5 @@
 #lang racket
-(require esterel/kernel rackunit "private/util.rkt")
+(require esterel/kernel rackunit "private/util.rkt" esterel/full)
 
 (check-equal? (with-signal (S) (signal-name S)) "S")
 (check-equal? (with-signal (S) (signal-index S)) #f)
@@ -387,3 +387,32 @@
   (react! r)
   (semaphore-wait s)
   (check-equal? (reverse actions) '(kill)))
+
+(check-equal?
+ (let ()
+   (with-signal (S1)
+     (define r1
+       (esterel
+        (suspend (par
+                  (begin
+                    (pause)
+                    (emit S1)))
+                 #t)))
+     (void (react! r1))
+     (hash-ref (react! r1) S1 #f)))
+ #f)
+
+
+(with-signal (S1 S2 S3)
+  (define r2
+    (esterel
+     (abort (par (let loop ()
+                   (emit S1)
+                   (pause)
+                   (loop)))
+            #:when (present? S2))
+     (emit S3)))
+  (check-equal? (react! r2) (hash S1 #t))
+  (check-equal? (react! r2) (hash S1 #t S2 #f))
+  (check-equal? (react! r2) (hash S1 #t S2 #f))
+  (check-equal? (react! r2 #:emit (list S2)) (hash S2 #t S3 #t)))
