@@ -1,0 +1,110 @@
+#lang rhombus
+
+// todo: port the racket/pict stuff to rhombus pict
+
+import:
+  esterel/full open
+  gui open
+  draw as rhombusdraw
+  lib("racket/base.rkt") as racket
+  lib("pict/main.rkt") as pict
+
+def_signal [second]
+
+class TS(green, orange, red)
+
+fun light(TS(this_green, this_orange, this_red),
+          TS(that_green, _, that_red)):
+  loop:
+    unless ¿ that_green
+    | traffic_light_stage(this_green, 90);
+      traffic_light_stage(this_orange, 4)
+    with_signal [restart]:
+      (abort:
+         sustain(this_red)
+         ~when (¿ restart)) \
+      ||| \
+      block:
+        await (¿ that_red)
+        await (¿ second) ~n 2
+        emit(restart)
+
+fun traffic_light_stage(color, seconds):
+  with_signal [next_stage]:
+    (abort:
+       sustain(color)
+       ~when (¿ next_stage)) \
+    ||| \
+    block:
+      await (¿ second) ~n seconds
+      emit(next_stage)
+
+def_signal [ns_green, ns_orange, ns_red,
+            ew_green, ew_orange, ew_red]
+
+def ns = TS(ns_green, ns_orange, ns_red)
+def ew = TS(ew_green, ew_orange, ew_red)
+
+def r = esterel:
+  emit(ns.green)
+  light(ns, ew) ||| light(ew, ns)
+
+fun one_second():
+  react(r, ~emit: [second])
+
+fun traffic_signal_pict(TS(green, orange, red), bindings):
+  def circle_size = 40
+  def off_color = "gray"
+  fun circ(signal, color):
+    pict.colorize(pict.#{filled-ellipse}(circle_size, circle_size),
+                  (if bindings.get(signal, #false)
+                   | color
+                   | off_color))
+  pict.#{vc-append}(circle_size/10,
+                    circ(red, "firebrick"),
+                    circ(orange, "orange"),
+                    circ(green, "forestgreen"))
+
+fun traffic_signals_pict(bindings):
+  pict.inset(pict.#{hc-append}(10,
+                               traffic_signal_pict(ns, bindings),
+                               traffic_signal_pict(ew, bindings)),
+             20)
+
+
+fun the_gui():
+  def total_seconds_elapsed = Obs(0)
+  fun n_instants(n):
+    total_seconds_elapsed.update(fun(x): x+n)
+    for values(_ = #false) (i: 0..n):
+      one_second()
+
+  def p = Obs(traffic_signals_pict(one_second()))
+  fun draw(dc, _):
+    def racket_bitmap = pict.#{pict->bitmap}(p.peek(), #'aligned)
+    def racket_bitmap_bytes = pict.#{pict->argb-pixels}(p.peek(), #'aligned)
+    //def [w, h] = [racketclass.send(racket_bitmap, #{get-width}),
+    //              racketclass.send(racket_bitmap, #{get-height})]
+    def bitmap = rhombusdraw.Bitmap(pict.#{pict-width}(p.peek()),
+                                    pict.#{pict-height}(p.peek()))
+    bitmap.set_argb_pixels(racket_bitmap_bytes)
+    dc.bitmap(bitmap)
+              // dc.width/2 - p.width/2,
+              // dc.height/2 - p.height/2)
+  def c = Canvas(p, draw,
+                 ~min_size: [pict.#{pict-width}(p.peek()),
+                             pict.#{pict-height}(p.peek())])
+  def time_label = Label(total_seconds_elapsed ~> fun(n): (n div 60) +& ":" +& (n mod 60) +& " elapsed")
+  fun make_tick_button(n):
+    Button(n +& " second" +& (if n > 1 | "" | "s"),
+           ~action: fun (): p <~ fun(_): traffic_signals_pict(n_instants(n)))
+  def bp = HPanel(~stretch: [#true, #false],
+                  make_tick_button(1),
+                  make_tick_button(10),
+                  make_tick_button(30))
+  Window(c, time_label, bp)
+
+render(the_gui())
+  
+  
+  
