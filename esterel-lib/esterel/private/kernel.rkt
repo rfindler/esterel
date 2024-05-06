@@ -529,9 +529,6 @@ value for can explorations and subsequent must evaluation.
        [else
         (void)])]))
 
-(struct suspend-info (suspend? suspended-signals) #:transparent)
-
-
 ;; get-suspend-info : marks -> suspend-info
 (define (get-suspend-info thds)
   (for/fold ([suspend? #f]
