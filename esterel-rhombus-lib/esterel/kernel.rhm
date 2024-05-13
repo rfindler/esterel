@@ -46,6 +46,7 @@ export:
   signal_value
   suspend
   is_trap
+  is_present
 
 meta syntax_class SignalOptions
 | '~memoryless ~init $init_expr ~combine $combine_expr':
@@ -163,7 +164,7 @@ fun is_signal(v):
   #{signal?}(v)
 
 fun is_present(s, ~pre: pre = 0):
-  #{present?}(s, pre)
+  #{present?}(s, ~pre: pre)
 
 fun signal_value(s, ~pre: n = 0, ~can: can = Set()):
   #{signal-value}(s, ~pre: n, ~can: racketset.#{list->set}(PairList(&Set.to_list(can))))
