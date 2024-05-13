@@ -1,13 +1,12 @@
 #lang rhombus
 
-// todo: port the racket/pict stuff to rhombus pict
-
 import:
   esterel/full open
   gui open
   draw as rhombusdraw
   lib("racket/base.rkt") as racket
-  lib("pict/main.rkt") as pict
+  pict
+  lib("pict/main.rkt") as racketpict
 
 def_signal [second]
 
@@ -56,20 +55,19 @@ fun traffic_signal_pict(TS(green, orange, red), bindings):
   def circle_size = 40
   def off_color = "gray"
   fun circ(signal, color):
-    pict.colorize(pict.#{filled-ellipse}(circle_size, circle_size),
-                  (if bindings.get(signal, #false)
-                   | color
-                   | off_color))
-  pict.#{vc-append}(circle_size/10,
-                    circ(red, "firebrick"),
-                    circ(orange, "orange"),
-                    circ(green, "forestgreen"))
+    pict.circle(~size: circle_size, ~fill: (if bindings.get(signal, #false) \
+                                            | color \
+                                            | off_color))
+  pict.stack(~sep: circle_size/10,
+             circ(red, "firebrick"),
+             circ(orange, "orange"),
+             circ(green, "forestgreen"))
 
 fun traffic_signals_pict(bindings):
-  pict.inset(pict.#{hc-append}(10,
-                               traffic_signal_pict(ns, bindings),
-                               traffic_signal_pict(ew, bindings)),
-             20)
+  pict.beside(~sep: 10,
+              traffic_signal_pict(ns, bindings),
+              traffic_signal_pict(ew, bindings))\
+      .pad(~left: 20)
 
 
 fun the_gui():
@@ -81,19 +79,17 @@ fun the_gui():
 
   def p = Obs(traffic_signals_pict(one_second()))
   fun draw(dc, _):
-    def racket_bitmap = pict.#{pict->bitmap}(p.peek(), #'aligned)
-    def racket_bitmap_bytes = pict.#{pict->argb-pixels}(p.peek(), #'aligned)
-    //def [w, h] = [racketclass.send(racket_bitmap, #{get-width}),
-    //              racketclass.send(racket_bitmap, #{get-height})]
-    def bitmap = rhombusdraw.Bitmap(pict.#{pict-width}(p.peek()),
-                                    pict.#{pict-height}(p.peek()))
+    // rhombus gui and rhombus pict don't work together, booo :(
+    def racket_bitmap = racketpict.#{pict->bitmap}(p.peek(), #'aligned)
+    def racket_bitmap_bytes = racketpict.#{pict->argb-pixels}(p.peek(), #'aligned)
+    def bitmap = rhombusdraw.Bitmap(p.peek().width,
+                                    p.peek().height)
     bitmap.set_argb_pixels(racket_bitmap_bytes)
     dc.bitmap(bitmap)
               // dc.width/2 - p.width/2,
               // dc.height/2 - p.height/2)
   def c = Canvas(p, draw,
-                 ~min_size: [pict.#{pict-width}(p.peek()),
-                             pict.#{pict-height}(p.peek())])
+                 ~min_size: [p.peek().width, p.peek().height])
   def time_label = Label(total_seconds_elapsed ~> fun(n): (n div 60) +& ":" +& (n mod 60) +& " elapsed")
   fun make_tick_button(n):
     Button(n +& " second" +& (if n > 1 | "" | "s"),
