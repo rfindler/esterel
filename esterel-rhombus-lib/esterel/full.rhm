@@ -27,7 +27,7 @@ export:
   def_strl
   halt
   abort
-  into_par
+  |||
 
 defn.macro 'def_strl $id: $body':
     'def $id: esterel: $body'
@@ -91,7 +91,7 @@ expr.macro
    '#{weak-abort-immediate/proc}(fun (): $body_expr ..., fun (): $when_expr ...)'
 
 
-reducer.macro 'into_par':
+reducer.macro '|||':
   reducer_meta.pack(
     'par_return',
     '(accum = PairList())',

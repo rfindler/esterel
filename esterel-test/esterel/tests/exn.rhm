@@ -1,0 +1,72 @@
+#lang rhombus
+import:
+  esterel/full open
+
+check:
+  react(esterel:
+          Pair(#false))
+  ~throws "Pair: wrong number of arguments in function call"
+
+check:
+  react(esterel:
+          par
+          | Pair(#false))
+  ~throws "Pair: wrong number of arguments in function call"
+
+check:
+  react(esterel:
+          par
+          | pause
+          | Pair(#false))
+  ~throws "Pair: wrong number of arguments in function call"
+
+check:
+  react(
+    esterel:
+      with_trap T:
+        exit_trap(T) ||| Pair(#false))
+  ~throws "Pair: wrong number of arguments in function call"
+
+check:
+  react(
+    esterel:
+      with_trap T:
+        par
+        | exit_trap(T) ||| Pair(#false))
+  ~throws "Pair: wrong number of arguments in function call"
+
+with_signal [S]:
+  def strl:
+    esterel:
+      with_trap T:
+        par
+        | pause ||| emit(S)
+        | par
+          | Pair(#false)
+  check:
+    react(strl)
+    ~throws "Pair: wrong number of arguments in function call"
+  check:
+    react(strl)
+    ~throws "Pair: wrong number of arguments in function call"
+
+check:
+  with_signal [S1, S2]:
+    react(esterel:
+            par
+            | if is_present(S1)
+              | #void
+              | Pair(#false)
+            | if is_present(S2)
+              | #void
+              | Pair(#false))
+  ~throws "Pair: wrong number of arguments in function call"
+
+with_signal [S]:
+  check:
+    react(esterel:
+            if is_present(S)
+            | Pair(#false)
+            | #void)
+    ~is {S: #false}
+    
