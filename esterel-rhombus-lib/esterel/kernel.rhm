@@ -29,6 +29,7 @@ import:
 
 export:
   def_signal
+  with_signal
   esterel
   ¿
   |||
@@ -37,7 +38,6 @@ export:
   react
   with_trap
   exit_trap
-  with_signal
   pause
   signal_name
   signal_index
@@ -47,6 +47,9 @@ export:
   suspend
   is_trap
   is_present
+  signal_combine
+  debug_when_must
+  is_signal
 
 meta syntax_class SignalOptions
 | '~memoryless ~init $init_expr ~combine $combine_expr':
@@ -68,13 +71,13 @@ meta syntax_class SignalOptions
 
 meta syntax_class SignalDefinition
 | '{$id_exprs, ...} $(options::SignalOptions)':
-    def init_name_we_made_up = base.gensym()
-    def combine_name_we_made_up = base.gensym()
+    def init_symbol = base.gensym()
+    def combine_symbol = base.gensym()
     field [id, ...] = [id_exprs, ...]
-    field init_def = 'def $init_name_we_made_up = $options.init'
-    field combine_def = 'def $combine_name_we_made_up = $options.combine'
-    field [init, ...] = [id_exprs, ...].map(fun (_): init_name_we_made_up)
-    field [combine, ...] = [id_exprs, ...].map(fun(_): combine_name_we_made_up)
+    field init_def = 'def $init_symbol = $options.init'
+    field combine_def = 'def $combine_symbol = $options.combine'
+    field [init, ...] = [id_exprs, ...].map(fun (_): init_symbol)
+    field [combine, ...] = [id_exprs, ...].map(fun(_): combine_symbol)
     field [memoryless, ...] = [id_exprs, ...].map(fun(_): options.memoryless)
 | '$id_expr $(options::SignalOptions)':
     field [id, ...] = [id_expr]
@@ -107,9 +110,13 @@ expr.macro 'with_signal [$(signal_definition :: SignalDefinition), ...]:
      def_signal [$signal_definition, ...]
      #{run-and-kill-signals!}(racketset.set($signal_definition.id,...,...),fun (): $body)'
   
-expr.macro 'esterel:
-              $body':
-  '#{esterel/proc}(0, fun (): $body)'
+expr.macro
+| 'esterel:
+     $body':
+    '#{esterel/proc}(0, fun (): $body)'
+| 'esterel ~pre $pre:
+     $body':
+    '#{esterel/proc}($pre, fun (): $body)'
 
 operator ¿ x:
   ~stronger_than |||

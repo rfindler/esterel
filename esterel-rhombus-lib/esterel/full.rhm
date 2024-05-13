@@ -24,13 +24,9 @@ export:
   await
   every
   sustain
-  def_strl
   halt
   abort
   |||
-
-defn.macro 'def_strl $id: $body':
-    'def $id: esterel: $body'
 
 fun
 | sustain(s): full_sustain(s)

@@ -16,15 +16,14 @@ fun light(TS(this_green, this_orange, this_red),
           TS(that_green, _, that_red)):
   loop:
     unless ¿ that_green
-    | traffic_light_stage(this_green, 90);
+    | traffic_light_stage(this_green, 90)
       traffic_light_stage(this_orange, 4)
     with_signal [restart]:
-      (abort:
-         sustain(this_red)
-         ~when (¿ restart)) \
-      ||| \
-      block:
-        await (¿ that_red)
+      par
+      | abort:
+          sustain(this_red)
+          ~when (¿ restart)
+      | await (¿ that_red)
         await (¿ second) ~n 2
         emit(restart)
 

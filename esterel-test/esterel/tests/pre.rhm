@@ -1,0 +1,99 @@
+#lang rhombus
+import:
+  esterel/full open
+
+with_signal [S, O]:
+  def strl:
+    esterel ~pre 2:
+      emit(S)
+      pause
+      when is_present(S, ~pre: 1)
+      | emit(O)
+  check:
+    react(strl)
+    ~is {S: #true}
+  check:
+    react(strl)
+    ~is {O: #true}
+
+with_signal [S, O1, O2]:
+  def strl:
+    esterel ~pre 2:
+      if is_present(S, ~pre: 1)
+      | emit(O1)
+      | emit(O2)
+  check:
+    react(strl)
+    ~is {O2: #true}
+
+with_signal [O]:
+  def strl:
+    esterel ~pre 1:
+      pause
+      pause
+      is_present(O, ~pre: 2)
+  react(strl)
+  react(strl)
+  check:
+    react(strl)
+    ~throws: "exception present?: #:pre argument too large"; "maximum: 1"; "given: 2"
+
+with_signal [S, O]:
+  def strl:
+    esterel ~pre 1:
+      pause
+      par
+      | loop:
+          emit(S)
+          pause
+          pause
+      | loop:
+          when is_present(S, ~pre: 1)
+          | emit(O)
+          pause
+  check:
+    react(strl)
+    ~is {}
+  check:
+    react(strl)
+    ~is {S: #true}
+  check:
+    react(strl)
+    ~is {O: #true}
+  check:
+    react(strl)
+    ~is {S: #true}
+  check:
+    react(strl)
+    ~is {O: #true}
+  check:
+    react(strl)
+    ~is {S: #true}
+  check:
+    react(strl)
+    ~is {O: #true}
+
+
+/*
+block:
+  fun g(): f()
+  block:
+    fun f(): 1
+    g()
+
+throws:
+  f: undefined;
+    cannot reference an identifier before its definition
+
+Block splicing in Rhombus does NOT appear to work the same way begin splicing works in Racket. Therefore, this test has been omitted.
+
+;; test that with-signal doesn't break up
+;; its but keeps everything in a single scope
+(check-equal? (with-signal (S)
+                (define (g) (f))
+                (begin
+                  (define (f) 1)
+                  (g)))
+              1)
+
+*/

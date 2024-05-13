@@ -80,7 +80,7 @@ def current_ur_draw_color = blue_draw_color(ur_draw)
 def current_ll_draw_color = blue_draw_color(ll_draw)
 def current_lr_draw_color = green_draw_color(lr_draw)
 
-def_strl r:
+def r: esterel:
   region_loop(0, 1/2, 0, 1/2, ul_draw) \
   ||| \
   region_loop(0, 1/2, 1/2, 1, ll_draw) \
