@@ -15,6 +15,8 @@ import:
     expose #{weak-abort-immediate/proc}
     expose halt as full_halt
     expose sustain as full_sustain
+  lib("esterel/private/kernel.rkt"):
+    expose #{par/proc}
 
 export:
   all_from(esterel/kernel)
@@ -25,6 +27,7 @@ export:
   def_strl
   halt
   abort
+  into_par
 
 defn.macro 'def_strl $id: $body':
     'def $id: esterel: $body'
@@ -86,3 +89,27 @@ expr.macro
      $body_expr ...
      ~when_immediate $when_expr ...':
    '#{weak-abort-immediate/proc}(fun (): $body_expr ..., fun (): $when_expr ...)'
+
+
+reducer.macro 'into_par':
+  reducer_meta.pack(
+    'par_return',
+    '(accum = PairList())',
+    #false,
+    'par_step_defs',
+    #false,
+    #false,
+    'par_step_result',
+    '()',
+    '[new_accum, accum]'
+  )
+
+expr.macro 'par_return [$_, $_] $e':
+  '#{par/proc}($e)'
+
+defn.macro 'par_step_defs [$new_accum, $accum] $e':
+  'def $new_accum:
+     PairList.cons(fun (): $e, $accum)'
+
+expr.macro 'par_step_result [$new_accum, $_]':
+  '$new_accum'

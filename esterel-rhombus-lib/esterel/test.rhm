@@ -1,6 +1,6 @@
 #lang rhombus
 
-import esterel/kernel open
+import esterel/full open
 
 check:
   def mutable eval_count = 0
@@ -55,3 +55,13 @@ check:
   [Map.values(react(strl1)), eval_count]
   ~matches [[15, ...], 1]
 
+check:
+  def_signal [x, y, z]
+  def signals: [x, y, z]
+  def strl1:
+    esterel:
+      for into_par (i: 0..3):
+        emit(signals[i])
+
+  Map.values(react(strl1))
+  ~is [#true, #true, #true]
