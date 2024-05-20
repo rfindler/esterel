@@ -143,7 +143,16 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
 
 @defform*[[(await when-expr)
            (await when-expr #:n n-expr)
-           (await #:immediate when-expr)]]{
+           (await #:immediate when-expr)
+           (await #:cases case-spec ...+)]
+           #:grammar
+           ([case-spec
+             (code:line [maybe-immediate when-expr])
+             (code:line [maybe-immediate when-expr do-expr])]
+            [maybe-immediate
+             (code:line)
+             (code:line #:immediate)])
+           ]{
 
  In the first form, @racket[pause]s until @racket[when-expr]
  returns a true value, but at least one instant. In the
@@ -151,6 +160,13 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  a true value @racket[n-expr] times. In the third form,
  the value of @racket[when-expr] is tested in the first instant,
  and thus the @racket[await] might terminate immediately.
+ In the fourth form, @racket[pause]s until the
+ @racket[when-expr] of any one of the @racket[case-spec]s
+ returns a true value. The @racket[case-spec]s are tested in
+ order, and once a @racket[when-expr] returns a true value, the
+ @racket[when-expr]s that occur in @racket[case-spec]s after
+ it are not evaluated. Only @racket[case-spec]s marked as
+ @racket[#:immediate] are tested in the first instant.
 
  For example, this program waits two instants before
  emitting @racket[S1]. When that happens, the @racket[await]
@@ -202,6 +218,29 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
             (await #:immediate (not (present? S)))
             (emit O)))
  (eval:check (react! r) (hash S #f O #t))
+ ]
+
+ As an example of the fourth form, this program checks for the
+ presence of @racket[C] in the first instant and checks for the
+ presence of @racket[A], @racket[B], and @racket[C] in the
+ second and third instant. In the fourth instant, the program
+ checks for the presence of @racket[A], and since @racket[A]
+ is present, it emits @racket[a] and terminates the @racket[await].
+
+ @examples[
+ #:label #f
+ #:eval esterel-eval
+ (define-signal A B C a b c done)
+ (define r (esterel
+            (await #:cases
+                   [(present? A) (emit a)]
+                   [(present? B) (emit b)]
+                   [#:immediate (present? C) (emit c)])
+            (emit done)))
+ (eval:check (react! r) (hash C #f))
+ (eval:check (react! r) (hash A #f B #f C #f))
+ (eval:check (react! r) (hash A #f B #f C #f))
+ (eval:check (react! r #:emit (list A B)) (hash A #t B #t a #t done #t))
  ]
 
 }
