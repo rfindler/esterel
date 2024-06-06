@@ -1,5 +1,14 @@
 #lang racket/base
 
+#|
+
+Implements the watch specified in Gérard Berry's
+"Programming a digital watch in Esterel v3",
+minus the Stopwatch and Alarm functionality.
+https://inria.hal.science/inria-00075526/PDF/RR-1032.pdf
+
+|#
+
 ; IMPORTS & EXPORTS
 (require racket/gui/base
          racket/class
