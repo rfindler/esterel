@@ -11,6 +11,7 @@ import:
     expose #{no-init}
   lib("syntax/location.rkt"):
     expose #{quote-srcloc}
+  lib("racket/set.rkt") as rset
 
 export:
   def_signal
@@ -22,13 +23,41 @@ export:
   react
   with_trap
   exit_trap
-  with_signals
+  with_signal
   pause
   signal_name
+  signal_index
 
-defn.macro 'def_signal: $id ...':
-  def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
-  'def $id : #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
+meta syntax_class SignalDefinition
+| '[$id_expr, ~memoryless, ~init $init_expr, ~combine $combine_expr]':
+    field id = id_expr
+    field init = init_expr
+    field combine = combine_expr
+    field memoryless = #true
+| '[$id_expr, ~init $init_expr, ~combine $combine_expr]':
+    field id = id_expr
+    field init = init_expr
+    field combine = combine_expr
+    field memoryless = #false
+| '[$id_expr, ~combine $combine_expr]':
+    field id = id_expr
+    field init =' #{no-init}'
+    field combine = combine_expr
+    field memoryless = #false
+| '[$id_expr, ~single]':
+    field id = id_expr
+    field init = '#{no-init}'
+    field combine = '#'single'
+    field memoryless = #false
+| '$id_expr':
+    field id = id_expr
+    field init = '#{no-init}'
+    field combine = #false
+    field memoryless = #false
+
+defn.macro 'def_signal {$(signal_definition :: SignalDefinition), ...}':
+  def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}', signal_definition.id]), ...]
+  'def $signal_definition.id : #{mk-signal/args}(#'$signal_definition.id, $signal_definition.init, $signal_definition.combine, $srclocs, $signal_definition.memoryless)
    ...'
 
 expr.macro 'esterel:
@@ -40,7 +69,7 @@ operator ¿ x:
   #{present?}(x)
 
 expr.macro '$left ||| $right':
-   '#{par/proc}([fun (): $left, fun(): $right])'
+   '#{par/proc}(PairList(fun (): $left, fun(): $right))'
 
 fun
 | emit(s): kernel.emit(s)
@@ -50,27 +79,28 @@ fun react(r, ~emit: signals = []):
   // the for loop here converts an equal
   // hash into an equal-always hash in
   // order to cooperate better with Rhombus
+  def rkt_signals = PairList(&signals)
   for Map:
-    each (k,v): kernel.#{react!}(r, ~emit: signals) :~ Map
+    each (k,v): kernel.#{react!}(r, ~emit: rkt_signals) :~ Map
     values(k,v)
 
 expr.macro 'with_trap $t:
               $body':
   '#{with-trap/proc}(#'$t,fun ($t):
                             $body)'
-
-expr.macro 'with_signals {$id, ...}:
+  
+expr.macro 'with_signal {$(signal_definition :: SignalDefinition), ...}:
               $body':
-  def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}',id]), ...]
+  def [srclocs, ...] = [expr_meta.pack_s_exp(['#{quote-srcloc}', signal_definition.id]), ...]
   'block:
-     def $id: #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
+     def $signal_definition.id : #{mk-signal/args}(#'$signal_definition.id, $signal_definition.init, $signal_definition.combine, $srclocs, $signal_definition.memoryless)
      ...
-     #{run-and-kill-signals!}([$id,...],fun (): $body)'
+     #{run-and-kill-signals!}(rset.set($signal_definition.id,...),fun (): $body)'
 
 expr.macro 'par
             | $body
             | ...':
-  '#{par/proc}([fun (): $body, ...])'
+  '#{par/proc}(PairList(&[fun (): $body, ...]))'
 
 expr.macro 'pause':
   'kernel.pause()'
@@ -80,3 +110,6 @@ fun exit_trap(t):
 
 fun signal_name(s):
   kernel.#{signal-name}(s)
+
+fun signal_index(s):
+  kernel.#{signal-index}(s)
