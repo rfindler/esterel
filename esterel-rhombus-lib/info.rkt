@@ -2,7 +2,7 @@
 
 (define collection 'multi)
 
-(define deps '("base" "rhombus-prototype" "esterel-lib"))
+(define deps '("base" "rhombus" "esterel-lib"))
 
 (define pkg-desc "Esterel implementation in Rhombus")
 

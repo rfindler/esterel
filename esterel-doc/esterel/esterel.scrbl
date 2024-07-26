@@ -20,6 +20,8 @@ mixed with Esterel code and run from within a reaction.
 @include-section["scribblings/eir-for-esterel.scrbl"]
 @include-section["scribblings/kernel.scrbl"]
 @include-section["scribblings/full.scrbl"]
+@include-section["scribblings/rhombus-kernel.scrbl"]
+@include-section["scribblings/rhombus-full.scrbl"]
 
 @generate-bibliography[]
 

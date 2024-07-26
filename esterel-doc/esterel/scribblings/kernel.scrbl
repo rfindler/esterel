@@ -134,7 +134,7 @@ provides additional functionality.
                      (code:line #:init init-expr #:combine combine-expr)
                      (code:line #:memoryless #:init init-expr #:combine combine-expr)
                      #:single])]{
- Creates new signals and binds them to the the @racket[signal-id]s.
+ Creates new signals and binds them to the @racket[signal-id]s.
 
  Each signal suffixed with @racket[#:combine] is a value-carrying
  signal, and those without are not. Multiple emissions of the signal are
@@ -305,7 +305,7 @@ provides additional functionality.
  Determines if @racket[s] is present in the current instant when @racket[pre] is @racket[0].
 
  If @racket[pre] is larger than zero, returns whether or not
- @racket[s] was present in previous instants. If @racket[pre]
+ @racket[s] was present in the @racket[pre]th previous instant. If @racket[pre]
  is larger than the value of the @racket[_pre-count-expr]
  passed to @racket[esterel], an error is raised.
 
@@ -332,15 +332,15 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  instant.
 
  If @racket[n] is larger than zero, then @racket[signal-value] returns the value
- of @racket[s] is the @racket[n]th previous instant. If @racket[n] is
+ of @racket[s] in the @racket[n]th previous instant. If @racket[n] is
  larger than the value of the @racket[_pre-count-expr] passed to
  @racket[esterel], an error is raised. If the value has never been
- emitted and the signals declaration did not have an @racket[#:init]
+ emitted and the signal's declaration did not have an @racket[#:init]
  clause, an error is raised.
 
  The @racket[can] argument indicates which signals can be
- emitted by the remaining computation and it must be supplied
- if if @racket[n] is @racket[0]. That is, if it is possible
+ emitted by the remaining computation and must be supplied
+ if @racket[n] is @racket[0]. That is, if it is possible
  that some signal can be emitted in the current instant after
  @racket[signal-value] returns, then that signal must be in
  the set @racket[can].
@@ -390,7 +390,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
 @defproc[(pause) void?]{
 
  Pauses the current thread; when all of the threads are
- paused (or they are canceled via @racket[exit-trap], the
+ paused (or they are canceled via @racket[exit-trap]), the
  instant is over. During the next instant, control picks up
  wherever the pause was.
 

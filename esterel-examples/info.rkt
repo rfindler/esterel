@@ -4,7 +4,8 @@
 
 (define deps '("base"
                "esterel-lib"
-               "esterel-rhombus-lib" "rhombus-prototype"
+               "esterel-rhombus-lib" "rhombus"
+               "rhombus-gui" "rhombus-pict"
                "rackunit" "gui-lib" "pict-lib"))
 
 (define pkg-desc "Some Esterel examples")

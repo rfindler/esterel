@@ -4,7 +4,8 @@
 
 (define deps '("base"
                "esterel-lib" "esterel-doc"
-               "esterel-rhombus-lib" "rhombus-prototype"
+               "esterel-rhombus-lib" "rhombus"
+               "rhombus-gui" "rhombus-pict"
                "rackunit-lib"
                "parser-tools-lib"
                "html-parsing" "html-lib"
