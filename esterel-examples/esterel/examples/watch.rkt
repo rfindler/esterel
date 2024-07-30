@@ -1,5 +1,5 @@
 #lang racket/base
-
+(module test racket/base) ;; don't run the watch in raco test
 #|
 
 Implements the watch specified in Gérard Berry's
