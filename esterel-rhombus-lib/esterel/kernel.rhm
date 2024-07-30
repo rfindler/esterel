@@ -40,7 +40,7 @@ operator ¿ x:
   #{present?}(x)
 
 expr.macro '$left ||| $right':
-   '#{par/proc}([fun (): $left, fun(): $right])'
+   '#{par/proc}(PairList(fun (): $left, fun(): $right))'
 
 fun
 | emit(s): kernel.emit(s)
@@ -50,8 +50,9 @@ fun react(r, ~emit: signals = []):
   // the for loop here converts an equal
   // hash into an equal-always hash in
   // order to cooperate better with Rhombus
+  def rkt_signals = PairList(&signals)
   for Map:
-    each (k,v): kernel.#{react!}(r, ~emit: signals) :~ Map
+    each (k,v): kernel.#{react!}(r, ~emit: rkt_signals) :~ Map
     values(k,v)
 
 expr.macro 'with_trap $t:
@@ -70,7 +71,7 @@ expr.macro 'with_signals {$id, ...}:
 expr.macro 'par
             | $body
             | ...':
-  '#{par/proc}([fun (): $body, ...])'
+  '#{par/proc}(PairList(fun (): $body, ...))'
 
 expr.macro 'pause':
   'kernel.pause()'
