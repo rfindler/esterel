@@ -14,12 +14,12 @@
       [(equal? current-position 'seconds) 'hours])))
 
 (define (increment-time cur-time mode)
-  (case mode
+  (match mode
     ('set-hours (set-mode-increment-time cur-time 'hours))
     ('set-minutes (set-mode-increment-time cur-time 'minutes))
     ('set-seconds (set-mode-increment-time cur-time 'seconds))
     ('view (view-mode-increment-time cur-time))
-    (else (raise-argument-error 'increment-time "'set-hour, 'set-minute, 'set-second, or 'view" mode))))
+    (_ (raise-argument-error 'increment-time "'set-hour, 'set-minute, 'set-second, or 'view" mode))))
 
 (define (view-mode-increment-time cur-time)
   (if (= 59 (time-seconds cur-time))
@@ -31,7 +31,7 @@
       (time (time-hours cur-time) (time-minutes cur-time) (+ 1 (time-seconds cur-time)))))
 
 (define (set-mode-increment-time cur-time position)
-  (case position
+  (match position
     ('seconds cur-time)
     ('minutes (time (time-hours cur-time) (time-minutes cur-time) (modulo (+ 1 (time-seconds cur-time)) 60)))
     ('hours (if (= 59 (time-seconds cur-time))
@@ -39,14 +39,14 @@
                 (time (time-hours cur-time) (time-minutes cur-time) (+ 1 (time-seconds cur-time)))))))
 
 (define (get-mode-from-watch-position position)
-  (case position
+  (match position
     ('hours 'set-hours)
     ('minutes 'set-minutes)
     ('seconds 'set-seconds)
-    (else (raise-argument-error 'get-mode-from-watch-position "'hours, 'minutes, or 'seconds" position))))
+    (_ (raise-argument-error 'get-mode-from-watch-position "'hours, 'minutes, or 'seconds" position))))
 
 (define (increment-position cur-time position)
-  (case position
+  (match position
     ('hours (time (modulo (+ 1 (time-hours cur-time)) 24) (time-minutes cur-time) (time-seconds cur-time)))
     ('minutes (time (time-hours cur-time) (modulo (+ 1 (time-minutes cur-time)) 60) (time-seconds cur-time)))
     ('seconds (time (time-hours cur-time) (time-minutes cur-time) (modulo (+ 1 (time-seconds cur-time)) 60)))))
