@@ -11,6 +11,8 @@ import:
     expose #{no-init}
   lib("syntax/location.rkt"):
     expose #{quote-srcloc}
+  lib("racket/set.rkt"):
+    expose set
 
 export:
   def_signal
@@ -66,7 +68,7 @@ expr.macro 'with_signals {$id, ...}:
   'block:
      def $id: #{mk-signal/args}(#'$id, #{no-init}, #false, $srclocs, #false)
      ...
-     #{run-and-kill-signals!}([$id,...],fun (): $body)'
+     #{run-and-kill-signals!}(set($id,...),fun (): $body)'
 
 expr.macro 'par
             | $body
