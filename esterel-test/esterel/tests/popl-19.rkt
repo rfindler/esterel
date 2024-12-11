@@ -85,6 +85,29 @@
    (react! r)
    (hash sl1 #t sl2 #t sl3 #f so1 #t)))
 
+;; variation of figure 7 with signal values instead of present tests
+(with-signal (sl1 #:init #f #:combine (λ (x y) (or x y))
+              sl2 #:init #f #:combine (λ (x y) (or x y))
+              sl3 #:init #f #:combine (λ (x y) (or x y))
+              so1 so2)
+  (define r
+    (esterel
+     (par
+      (if (signal-value sl1 #:can (set so1 so2 sl3))
+          (if (signal-value sl2 #:can (set so1 sl3))
+              (emit so1)
+              (emit sl3 #t))
+          (if (signal-value sl2 #:can (set so2 sl3))
+              (emit so2)
+              (emit sl3 #t)))
+      (begin
+        (emit sl2 #t)
+        (when (present? sl3) (pause))
+        (emit sl1 #t)))))
+  (check-exn
+   non-constructive-exn?
+   (λ () (react! r))))
+
 ;; figure 8
 (check-exn
  non-constructive-exn?
