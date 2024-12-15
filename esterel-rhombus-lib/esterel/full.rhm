@@ -21,7 +21,7 @@ expr.macro
 | 'loop:
      $body
      ...
-     ~each $restart':
+     ~each $(restart :: Sequence)':
     '#{loop-each/proc}(fun ():
                          $body
                          ...,
