@@ -219,8 +219,8 @@
            (void))
        (if (present? S2)
            (emit S1)
-           (void))))))
-  (hash S1 #f S2 #f))
+           (void)))))
+   (hash S1 #f S2 #f)))
 
 (with-signal (S1 #:combine + O1 O2)
   (define r
