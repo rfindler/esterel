@@ -209,6 +209,19 @@
   (check-equal? (react! r)
                 (hash S1 #f S2 #f S3 #f S4 #f S4 #f S5 #f)))
 
+(with-signal (S1 S2)
+  (check-equal?
+   (react!
+    (esterel
+     (begin
+       (if (present? S1)
+           (void)
+           (void))
+       (if (present? S2)
+           (emit S1)
+           (void))))))
+  (hash S1 #f S2 #f))
+
 (with-signal (S1 #:combine + O1 O2)
   (define r
     (esterel
