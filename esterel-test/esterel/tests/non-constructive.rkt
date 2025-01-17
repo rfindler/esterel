@@ -222,6 +222,42 @@
            (void)))))
    (hash S1 #f S2 #f)))
 
+(with-signal (I O1 O2 tmp)
+  (check-equal?
+   (react!
+    (esterel
+     (if (present? tmp)
+         (emit O1)
+         (emit O2))
+     (if (present? I)
+         (emit tmp)
+         (void))))
+   (hash O2 #t tmp #f I #f)))
+
+(with-signal (I O1 O2 tmp)
+  (check-equal?
+   (react!
+    (esterel
+     (if (present? I)
+         (emit tmp)
+         (void))
+     (if (present? tmp)
+         (emit O1)
+         (emit O2))))
+   (hash O2 #t tmp #f I #f)))
+
+(with-signal (V_S_C V_S_i)
+  (check-equal?
+   (react!
+    (esterel
+     (if (present? V_S_C)
+         (void)
+         (void))
+     (when (present? V_S_i)
+       (emit V_S_C)
+       (pause))))
+   (hash V_S_C #f V_S_i #f)))
+
 (with-signal (S1 #:combine + O1 O2)
   (define r
     (esterel
