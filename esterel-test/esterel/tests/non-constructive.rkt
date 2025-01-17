@@ -235,6 +235,22 @@
    (hash O2 #t tmp #f I #f)))
 
 (with-signal (I O1 O2 tmp)
+  (check-exn
+   non-constructive-exn?
+   (λ ()
+     (react!
+      (esterel
+       (par
+        (emit I)
+        (begin
+          (if (present? tmp)
+              (emit O1)
+              (emit O2))
+          (if (present? I)
+              (emit tmp)
+              (void)))))))))
+
+(with-signal (I O1 O2 tmp)
   (check-equal?
    (react!
     (esterel
