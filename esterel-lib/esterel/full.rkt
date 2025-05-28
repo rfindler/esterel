@@ -1,10 +1,13 @@
 #lang racket/base
 (require "private/full.rkt" "kernel.rkt"
-         (only-in "private/kernel.rkt" par/proc)
+         racket/contract
+         (only-in "private/kernel.rkt" par/proc exn:fail:instantaneous-loop?)
          (for-syntax racket/base syntax/parse syntax/for-body))
 (provide (all-from-out "kernel.rkt")
          halt loop abort sustain await every
-         for/par for*/par)
+         for/par for*/par
+         (contract-out
+          [exn:fail:instantaneous-loop? (-> any/c boolean?)]))
 
 (begin-for-syntax
   (define (mk-for/par for_/fold/derived original-stx)

@@ -34,7 +34,9 @@
  exit-trap
  trap?
  exn:fail:not-constructive?
+ (struct-out exn:fail:instantaneous-loop)
  esterel?
+ get-instant-number
 
  no-value-provided emit-check-and-error
 
@@ -719,6 +721,13 @@ value for can explorations and subsequent must evaluation.
       (λ (_)
         (loop suspended? #t resp-chan))))))
 
+;; returns #f if we are in can mode and an
+;; natural number if we're in must mode
+(define (get-instant-number)
+  (define c (make-channel))
+  (channel-put (signal-table-instant-number-chan (current-signal-table)) c)
+  (channel-get c))
+
 (struct signal-table (new-signal-chan
                       signal-presence/value-chan
                       signal-dead-chan
@@ -728,6 +737,7 @@ value for can explorations and subsequent must evaluation.
                       react-thread-done-chan
                       suspended-signals-chan
                       when-must-chan
+                      instant-number-chan
                       pre-count
                       [the-esterel #:mutable]))
   
@@ -742,7 +752,8 @@ value for can explorations and subsequent must evaluation.
   (define the-signal-table
     (signal-table (make-channel) (make-channel) (make-channel) (make-channel)
                   (make-channel) (make-channel) (make-channel) (make-channel)
-                  (make-channel) (make-channel) (make-channel) pre-count #f))
+                  (make-channel) (make-channel) (make-channel) (make-channel)
+                  pre-count #f))
   (thread (λ () (run-esterel-thread pre-count thunk the-signal-table)))
   (define me (esterel the-signal-table))
   (set-signal-table-the-esterel! the-signal-table me)
@@ -796,6 +807,7 @@ value for can explorations and subsequent must evaluation.
     [_ maybe-signals]))
 
 (struct exn:fail:not-constructive exn:fail ())
+(struct exn:fail:instantaneous-loop exn:fail ())
 
 (define (run-esterel-thread pre-count thunk the-signal-table)
   (define first-instant-sema (make-semaphore 0))
@@ -828,6 +840,7 @@ value for can explorations and subsequent must evaluation.
                               react-thread-done-chan
                               suspended-signals-chan
                               when-must-chan
+                              instant-number-chan
                               pre-count
                               _)
     the-signal-table)
@@ -931,6 +944,9 @@ value for can explorations and subsequent must evaluation.
                       par-parents
                       parent->par-state
                       esterel-thread))
+
+  (define instant-number 0)
+
   ;; saved-must-state : (or/c #f must-state?)
   ;; #f when we're in must mode and must-state? when we're in can mode
   (define saved-must-state #f)
@@ -1652,6 +1668,7 @@ value for can explorations and subsequent must evaluation.
           (set! signal-ready (set))
           (set! signal-value (hash))
           (set! raised-exns '()) ;; TODO: is this right?
+          (set! instant-number (+ instant-number 1))
           (loop)])]
 
       ;; an instant is not runnning, wait for one to start (but don't wait for other stuff)
@@ -2026,6 +2043,11 @@ value for can explorations and subsequent must evaluation.
          when-must-chan
          (λ (resp)
            (channel-put resp (not (can? mode)))
+           (loop)))
+        (handle-evt
+         instant-number-chan
+         (λ (resp-chan)
+           (channel-put resp-chan instant-number)
            (loop)))
         )])))
 

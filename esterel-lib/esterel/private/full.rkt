@@ -49,7 +49,12 @@
     (loop)))
 (define (loop/proc thunk)
   (let loop ()
+    (define before (get-instant-number))
     (thunk)
+    (when (equal? before (get-instant-number))
+      (raise (exn:fail:instantaneous-loop
+              "loop: instantaneous"
+              (current-continuation-marks))))
     (loop)))
 
 (define-syntax (await stx)

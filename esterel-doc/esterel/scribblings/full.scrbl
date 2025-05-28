@@ -43,8 +43,11 @@ in @racketmodname[esterel/kernel].
 @defform*[[(loop body-expr ...+)
            (loop body-expr ...+ #:each test-expr)]]{
 
-In the first form, runs @racket[body-expr] over and over.
-In the second form, starts by running @racket[body-expr] and then @racket[halt]ing.
+ In the first form, runs @racket[body-expr] over and over.
+ When the @racket[body-expr]s terminate in a single reaction, @racket[loop]
+ raises an @racket[exn:fail:instantaneous-loop?] exception.
+
+ In the second form, starts by running @racket[body-expr] and then @racket[halt]ing.
  Restarts @racket[body-expr] when @racket[test-expr] becomes true.
 
  For example, this program emits @racket[S1] in every instant that @racket[S2] is
@@ -65,6 +68,14 @@ In the second form, starts by running @racket[body-expr] and then @racket[halt]i
  (eval:check (react! r) (hash S1 #t S2 #f))
  (eval:check (react! r) (hash S1 #t S2 #f))
  ]
+}
+
+@defproc[(exn:fail:instantaneous-loop? [v any/c]) boolean?]{
+
+ Recognizes the exception that @racket[react!] raises when
+ @racket[loop] terminates within a single reaction.
+ This exception is a substruct of @racket[exn:fail].
+
 }
 
 @defform*[[(abort body-expr ...+ #:when when-expr)

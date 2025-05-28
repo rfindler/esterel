@@ -89,6 +89,7 @@ provides additional functionality.
 
  Recognizes the exception that @racket[react!] raises when an
  @tech{instant} is not constructive.
+ This exception is a substruct of @racket[exn:fail].
 
 }
 

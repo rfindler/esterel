@@ -416,3 +416,10 @@
   (check-equal? (react! r2) (hash S1 #t S2 #f))
   (check-equal? (react! r2) (hash S1 #t S2 #f))
   (check-equal? (react! r2 #:emit (list S2)) (hash S2 #t S3 #t)))
+
+(let ()
+  (define r
+    (esterel
+     (loop (void))))
+  (check-exn exn:fail:instantaneous-loop?
+             (λ () (react! r))))
