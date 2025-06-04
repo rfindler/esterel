@@ -324,3 +324,65 @@
                 (hash S1 8 O1 #t)))
 
 
+;; these next four tests are checking
+;; based on the rules in the formalism
+;; which handles sig declarations slightly
+;; differently. in the formalism, we don't
+;; restart when encountering a nested sig
+;; but in the implementation we do
+;; these tests don't correspond to special
+;; cases in the implementation but they
+;; do capture what the "sig encountered in
+;; can mode" behaviors are, according to the
+;; rules in the formalism.
+(check-true
+ (for/and ([(k v)
+            (in-hash
+             (react!
+              (esterel
+               (with-signal (s1)
+                 (if (present? s1)
+                     (with-signal (s2)
+                       (if (present? s2)
+                           (emit s1)
+                           (void)))
+                     (void))))))])
+   (not v)))
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (s1)
+       (if (present? s1)
+           (with-signal (s2)
+             (if (present? s2)
+                 (void)
+                 (emit s1)))
+           (void)))))))
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (s1)
+       (if (present? s1)
+           (with-signal (s2)
+             (par (emit s2)
+                  (if (present? s2)
+                      (void)
+                      (emit s1))))
+           (void)))))))
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (s1)
+       (if (present? s1)
+           (with-signal (s2)
+             (par (emit s2)
+                  (if (present? s2)
+                      (emit s1)
+                      (void))))
+           (void)))))))
