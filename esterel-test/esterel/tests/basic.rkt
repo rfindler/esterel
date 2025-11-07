@@ -423,3 +423,17 @@
      (loop (void))))
   (check-exn exn:fail:instantaneous-loop?
              (λ () (react! r))))
+
+(with-signal (S)
+  (define machine
+    (esterel
+     (with-trap T
+       (loop
+        (if (present? S)
+            (exit-trap T)
+            (begin (pause)
+                   (emit S)))))))
+
+  (check-equal? (react! machine) (hash S #f))
+  (check-equal? (react! machine) (hash S #t))
+  (check-equal? (react! machine) (hash)))
