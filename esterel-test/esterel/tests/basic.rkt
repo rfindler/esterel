@@ -106,6 +106,18 @@
    (react! r)
    (hash s #f)))
 
+(check-true
+ (hash?
+  (react!
+   (esterel
+    (with-signal (s1)
+      (if (present? s1)
+          (with-signal (s2)
+            (if (present? s2)
+                (emit s1)
+                (void)))
+          (void)))))))
+
 ;; test that suspension suspends signals
 (with-signal (S2
               O #:init (set) #:combine set-union)

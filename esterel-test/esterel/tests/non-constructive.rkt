@@ -386,3 +386,29 @@
                       (emit s1)
                       (void))))
            (void)))))))
+
+(with-signal (S)
+  (define r
+    (esterel
+     (if (present? S)
+         (void)
+         (if (present? S)
+             (emit S)
+             (void)))))
+
+  (check-exn
+   non-constructive-exn?
+   (λ () (react! r))))
+
+(with-signal (S)
+  (define r
+    (esterel
+     (if (present? S)
+         (if (present? S)
+             (void)
+             (emit S))
+         (void))))
+
+  (check-exn
+   non-constructive-exn?
+   (λ () (react! r))))

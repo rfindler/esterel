@@ -872,56 +872,62 @@ value for can explorations and subsequent must evaluation.
 ;                                                                                    
 ;                                                                                    
 
+  ;; the can struct tracks our progress in can mode; each time progress
+  ;; is blocked on some number of signals, we grab the continuations
+  ;; where we are and save them to return to them, thereby searching for
+  ;; emits that are downstream to determine what Can should be.
+  ;;
   ;; emits : the signals that can be emitted (that we've learned about so far)
-  ;; ordered-signals : the order tracks the bits in `signal-states` telling of the signals' state
-  ;; newly-ready : the signals that we were blocked on with `signal-value`;
-  ;;               unblock to see if there are emits past them.
-  ;; signal-states : the bits tell us which signals are present/absent
-  ;; starting-point : this is the continuations at the point where must mode is waiting for us
+  ;; considered-signals: the signals that we were blocked in, for any past stage
+  ;;    that is, as each stage finishes we'll add in the ordered signals
+  ;;    from that stage so by the end of can mode we know what ever got blocked on
+  ;;    as candidates for signals that we can set to false
+  ;; stages : each time the computation is blocked, we add another element to
+  ;;    this list; when we collect all the emitted signals from exploring
+  ;;    past the signals in that stage, we drop the stage from the list
   (struct/contract can ([emits (set/c signal?)]
-                        [ordered-signals (listof signal?)]
-                        [newly-ready (set/c signal?)]
-                        [signal-states (and/c exact? integer?)]
-                        [starting-point (λ (x) (starting-point? x))])
+                        [considered-signals (set/c signal?)]
+                        [stages (non-empty-listof (λ (x) (can-stage? x)))])
+                   #:transparent)
+
+  ;; newly-ready : the signals that we were blocked on with `signal-value`;
+  ;;    unblock to see if there are emits past them (this doesn't invoke the
+  ;;    continuation, but just returns what the programmer wrote)
+  ;; starting-point : these are the continuations for the blocked state of this stage
+  ;; ordered-signals : the signals that were blocked on at starting-point
+  ;; signal-states : the bits in this integer tell us what the signal values for
+  ;;    the next exploration starting from the starting point should be
+  (struct/contract can-stage ([newly-ready (set/c signal?)]
+                              [starting-point (λ (x) (starting-point? x))]
+                              [ordered-signals (listof signal?)]
+                              [signal-states (and/c exact? integer?)])
                    #:transparent)
 
   (define/contract mode
     (or/c #f    ;; we're in Must mode
           can?) ;; we're in Can mode
     #f)
-  
-  (define (inc-signal-states a-can)
-    (struct-copy can a-can
-                 [signal-states (+ (can-signal-states a-can) 1)]))
-  (define (signal-states-done? a-can)
-    ;; we need to run (expt 2 (length (length (can-two-choice-signals a-can))))
+
+  ;; inc-signal-states : can-stage -> can-stage
+  (define (inc-signal-states a-can-stage)
+    (struct-copy can-stage a-can-stage
+                 [signal-states (+ (can-stage-signal-states a-can-stage) 1)]))
+
+  ;; signal-states-done? : can-stage -> boolean
+  (define (signal-states-done? a-can-stage)
+    ;; we need to run (expt 2 (length (length (can-stage-ordered-signals a-can-stage))))
     ;; iterations to be sure we've tried every combination of absent and present
     ;; for the two-choice signals, going from all zeros to all ones
-    (= (- (expt 2 (length (can-ordered-signals a-can))) 1)
-       (can-signal-states a-can)))
-  
-  ;; set-can-signals! : can? -> void?
-  ;; STATE: updates `signal-status` and `signal-ready` based on the choices in `a-can`
-  (define (set-can-signals! a-can)
-    (match-define (can emits ordered-signals newly-ready signal-states starting-point) a-can)
-    (set! signal-status
-          (for/fold ([signal-status signal-status])
-                    ([a-signal (in-list ordered-signals)]
-                     [i (in-naturals)])
-            (define on? (bitwise-bit-set? signal-states i))
-            (hash-set signal-status a-signal on?)))
-    (set! signal-ready (set-union newly-ready signal-ready)))
+    (= (- (expt 2 (length (can-stage-ordered-signals a-can-stage))) 1)
+       (can-stage-signal-states a-can-stage)))
 
-  ;; get-unemitted-signals : can? -> (set/c signal?)
-  ;; returns the set of signals that cannot be emitted
-  (define (get-unemitted-signals a-can)
-    (match-define (can emits ordered-signals newly-ready
-                       signal-states starting-point)
-      a-can)
-    (for/set ([signal (in-set (set-union (list->set ordered-signals)
-                                         newly-ready))]
-              #:unless (set-member? emits signal))
-      signal))
+  ;; signal-states->hash : can-stage -> hash[signal -o> boolean?]
+  (define (signal-states->hash a-can-stage)
+    (match-define (can-stage newly-ready starting-point ordered-signals signal-states) a-can-stage)
+    (for/hash ([a-signal (in-list ordered-signals)]
+               [i (in-naturals)])
+      (define on? (bitwise-bit-set? signal-states i))
+      (values a-signal on?)))
   
   ;; add-emitted-signal : can? signal? -> can?
   ;; adds `a-signal` as emitted to `a-can`
@@ -1180,16 +1186,14 @@ value for can explorations and subsequent must evaluation.
         (and (pair? signal-values-pre)
              (hash-has-key? (car signal-values-pre) a-signal))))
 
-  ;; unblock-presence-threads : (listof signal) -> void
+  ;; unblock-presence-threads : hash[signal -o> boolean?] -> void
   ;; wakes up all the threads that are blocked on a presence test for
-  ;; the signals in `signals`, using `signal-status` to determine if
-  ;; they see #t or #f
-  (define (unblock-presence-threads signals)
-    (for ([a-signal (in-list signals)])
+  ;; the signals in `signals-maps`
+  (define (unblock-presence-threads signals-map)
+    (for ([(a-signal status) (in-hash signals-map)])
       (define presence-blocked-threads (hash-ref presence-waiters a-signal #f))
       (when presence-blocked-threads
         (set! presence-waiters (hash-remove presence-waiters a-signal))
-        (define status (hash-ref signal-status a-signal))
         (for ([a-blocked-thread (in-set presence-blocked-threads)])
           (unblock-a-thread a-blocked-thread status)))))
 
@@ -1562,55 +1566,70 @@ value for can explorations and subsequent must evaluation.
        (log-esterel-debug "~a: ~a"
                           (eq-hash-code (current-thread))
                           (if (can? mode)
-                              (format "finished a can exploration: ~a; emits ~s" (can-signal-states mode) (can-emits mode))
+                              (format "finished a stage of can exploration: ~a; emits ~s"
+                                      (signal-states->hash (car (can-stages mode)))
+                                      (can-emits mode))
                               "instant has completed"))
        (log-esterel-info (if (can? mode)
-                             (format "finishing can mode: ~a of 2^~a"
-                                     (can-signal-states mode)
-                                     (length (can-ordered-signals mode)))
+                             (format "finishing a can stage; emits: ~a"
+                                     (can-emits mode))
                              "finished instant"))
        (log-par-state)
        (cond
          [(can? mode)
           ;; we've finished the instant in can mode
+          (define current-stage (car (can-stages mode)))
+          (define considered-signals
+            (set-union (list->set (can-stage-ordered-signals current-stage))
+                       (can-stage-newly-ready current-stage)
+                       (can-considered-signals mode)))
           (cond
-            [(signal-states-done? mode)
-             ;; we've explored all possibilities of relevant signals
-             ;; either go back to must mode or report the discovery
-             ;; of a non-constructive program
-             (define unemitted-signals (get-unemitted-signals mode))
+            [(signal-states-done? current-stage)
              (cond
-               [(set-empty? unemitted-signals)
-                (channel-put instant-complete-chan
-                             (cons 'non-constructive
-                                   (set-union (list->set (can-ordered-signals mode))
-                                              (can-newly-ready mode))))
-                ;; when we send back 'non-constructive, then we will
-                ;; never come back to this thread again, so just let it expire
-                (void)]
+               [(null? (cdr (can-stages mode)))
+                ;; we've explored all possibilities of relevant signals
+                ;; either go back to must mode or report the discovery
+                ;; of a non-constructive program
+                (define unemitted-signals (set-subtract considered-signals (can-emits mode)))
+                (cond
+                  [(set-empty? unemitted-signals)
+                   (channel-put instant-complete-chan
+                                (cons 'non-constructive considered-signals))
+                   ;; when we send back 'non-constructive, then we will
+                   ;; never come back to this thread again, so just let it expire
+                   (void)]
+                  [else
+                   (set! mode #f)
+                   (restore-must-state)
+                   (set! signal-status
+                         (for/fold ([signal-status signal-status])
+                                   ([a-signal (in-set unemitted-signals)])
+                           (hash-set signal-status a-signal #f)))
+                   (set! signal-ready (set-union
+                                       signal-ready
+                                       (for/set ([a-signal (in-set unemitted-signals)]
+                                                 #:when (signal-combine a-signal))
+                                         a-signal)))
+                   (unblock-presence-threads (for/hash ([signal (in-set unemitted-signals)])
+                                               (values signal #f)))
+                   (unblock-value-threads (set->list unemitted-signals))
+                   (loop)])]
                [else
-                (set! mode #f)
-                (restore-must-state)
-                (set! signal-status
-                      (for/fold ([signal-status signal-status])
-                                ([a-signal (in-set unemitted-signals)])
-                        (hash-set signal-status a-signal #f)))
-                (set! signal-ready (set-union
-                                    signal-ready
-                                    (for/set ([a-signal (in-set unemitted-signals)]
-                                              #:when (signal-combine a-signal))
-                                      a-signal)))
-                (define unemitted-signal-list (set->list unemitted-signals))
-                (unblock-presence-threads unemitted-signal-list)
-                (unblock-value-threads unemitted-signal-list)
+                ;; we've finished one stage but there are more stages to complete,
+                ;; go back to work on the previous stage; this will land us right
+                ;; back in the same case, but as if we've just finished the outer
+                ;; stage, so we'll move on to the next one there (or do this again)
+                (set! mode (struct-copy can mode
+                                        [considered-signals considered-signals]
+                                        [stages (cdr (can-stages mode))]))
                 (loop)])]
             [else
              ;; we've got more possible signal values to explore; set them up
              ;; and go back to the rollback point to try them out
-             (set! mode (inc-signal-states mode))
-             (rollback! (can-starting-point mode))
-             (set-can-signals! mode)
-             (unblock-presence-threads (can-ordered-signals mode))
+             (define new-stage (inc-signal-states current-stage))
+             (set! mode (struct-copy can mode [stages (cons new-stage (cdr (can-stages mode)))]))
+             (rollback! (can-stage-starting-point current-stage))
+             (unblock-presence-threads (signal-states->hash new-stage))
              (unblock-value-threads (hash-keys value-waiters))
              (loop)])]
          [(pair? raised-exns)
@@ -1733,14 +1752,8 @@ value for can explorations and subsequent must evaluation.
                           (hash-keys presence-waiters)
                           (hash-keys value-waiters)
                           (and mode (can-emits mode)))
-       (log-esterel-info "entering can mode: ~s ~s ~s"
-                         (length (hash-keys presence-waiters))
-                         (and mode (length (can-ordered-signals mode)))
-                         (sort (remove-duplicates (append (hash-keys presence-waiters)
-                                                          (hash-keys value-waiters)
-                                                          (if mode (can-ordered-signals mode) '())))
-                               string<?
-                               #:key (λ (x) (format "~s" x))))
+       (log-esterel-info "entering can mode: blocked on ~s"
+                         (hash-keys presence-waiters))
        (when (and (= 0 (hash-count presence-waiters))
                   (= 0 (hash-count value-waiters)))
          (internal-error "expected some thread to be blocked on a signal"))
@@ -1748,26 +1761,23 @@ value for can explorations and subsequent must evaluation.
          (for/list ([(a-signal blocked-threads) (in-hash presence-waiters)])
            a-signal))
        (define newly-ready (list->set (hash-keys value-waiters)))
+       (define new-can-stage (can-stage newly-ready
+                                      (get-starting-point)
+                                      ordered-signals
+                                      0))
        (cond
          [(can? mode)
-          ;; it might be possible to do something more efficient here but when we
-          ;; run into the second set of completely blocked threads, just
-          ;; add some signals into the can and start everything over again
-          (set! mode (can (set)
-                          (append ordered-signals (can-ordered-signals mode))
-                          (set-union newly-ready (can-newly-ready mode))
-                          0
-                          (can-starting-point mode)))]
+          ;; we're already in can mode and blocked so start a new stage
+          (set! mode
+                (struct-copy can mode [stages (cons new-can-stage (can-stages mode))]))]
          [else
+          ;; otherwise, we need to start up a new can mode
           (save-must-state)
           (set! mode (can (set)
-                          ordered-signals
-                          newly-ready
-                          0
-                          (get-starting-point)))])
-       (rollback! (can-starting-point mode))
-       (set-can-signals! mode)
-       (unblock-presence-threads (can-ordered-signals mode))
+                          (set)
+                          (list new-can-stage)))])
+       (rollback! (can-stage-starting-point new-can-stage))
+       (unblock-presence-threads (signal-states->hash new-can-stage))
        (unblock-value-threads (hash-keys value-waiters))
        (loop)]
 
