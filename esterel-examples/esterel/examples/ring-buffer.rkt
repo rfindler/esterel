@@ -4,6 +4,21 @@
 ;; public interface
 (define-signal rem-s add-s top-s #:single inp-s #:single)
 
+#|
+
+Q: top should be the value next to be removed, unless
+the FIFO is empty, in which case ...?
+
+A: the top-s should always be "the thing that got removed" and
+if nothing got removed, well, we don't care.
+
+also: add an err-s when someone adds to a full or removes from an empty buffer
+
+another idea: what about "find" operation that searches through the FIFO
+for something.
+
+|#
+
 ;; private state
 (define-signal in-s #:single out-s #:single buffer-s #:single size-s #:single)
 
