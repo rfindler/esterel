@@ -449,3 +449,32 @@
   (check-equal? (react! machine) (hash S #f))
   (check-equal? (react! machine) (hash S #t))
   (check-equal? (react! machine) (hash)))
+
+(check-equal?
+ (let ()
+   (define mach
+     (esterel
+      (with-signal (s1)
+        (if (present? s1)
+            (with-signal (s2)
+              (if (present? s2)
+                  (emit s1)
+                  (void))
+              (void))
+            (void)))))
+   (hash-values (react! mach)))
+ (list #f #f))
+
+(check-equal?
+ (let ()
+   (define mach
+     (esterel
+      (with-signal (s1)
+        (with-signal (s2)
+          (if (present? s1)
+              (if (present? s2)
+                  (emit s1)
+                  (void))
+              (void))))))
+   (hash-values (react! mach)))
+ (list #f #f))
