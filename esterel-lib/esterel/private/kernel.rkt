@@ -533,37 +533,38 @@ value for can explorations and subsequent must evaluation.
 
 ;; get-suspend-info : marks -> suspend-info
 (define (get-suspend-info thds)
-  (for/fold ([suspend? #f]
+  (for/fold ([suspended? #f]
              [suspended-signals (set)])
             ([thd (in-list thds)])
-    (define iter
-      (continuation-mark-set->iterator
+    (define marks
+      (continuation-mark-set->list
        (continuation-marks thd)
-       (list suspend-mark)))
-    (let loop ([iter iter]
-               [suspend? suspend?]
-               [suspended-signals suspended-signals]
-               [pending-signals (set)])
-      (define-values (next-val next-iter) (iter))
-      (match next-val
-        [(vector (? procedure? suspend-proc))
-         (cond
-           [(suspend-proc)
-            (loop next-iter
-                  #t
-                  (set-union pending-signals suspended-signals)
-                  (set))]
-           [else
-            (loop next-iter
-                  suspend?
-                  suspended-signals
-                  pending-signals)])]
-        [(vector (? set? signals))
-         (loop next-iter
-               suspend?
-               suspended-signals
-               (set-union signals pending-signals))]
-        [#f (values suspend? suspended-signals)]))))
+       suspend-mark))
+    ;; work from the outermost suspend inwards (hence
+    ;; the reverse of the marks) so that we can tell
+    ;; when we're traversing an already suspended part
+    ;; of the continuation
+    (let loop ([items (reverse marks)]
+               [suspended? suspended?]
+               [suspended-signals suspended-signals])
+      (match items
+        ['()
+         (values suspended? suspended-signals)]
+        [(cons (? procedure? suspend-proc) items)
+         (loop items
+               ;; if we're already suspended, take care
+               ;; to avoid running the suspend-proc, as
+               ;; it is code that's supposed to be
+               ;; suspended (so may test a suspended signal
+               ;; or emit a suspended one)
+               (or suspended? (suspend-proc))
+               suspended-signals)]
+        [(cons (? set? signals) items)
+         (loop items
+               suspended?
+               (if suspended?
+                   (set-union signals suspended-signals)
+                   suspended-signals))]))))
 
 (define (handle-suspension signal-table thds)
   (define-values (suspend? suspended-signals) (get-suspend-info thds))
@@ -1720,11 +1721,14 @@ value for can explorations and subsequent must evaluation.
            (set! instant-complete-chan _instant-complete-chan)
            (for ([(paused-thread resp-chan) (in-hash paused-threads)])
              (define thd-and-parent-thds
-               (let loop ([thd paused-thread])
-                 (cons thd
-                       (cond
-                         [(hash-ref par-parents thd #f) => (λ (v) (loop v))]
-                         [else '()]))))
+               (let loop ([thd paused-thread]
+                          [thds (list paused-thread)])
+                 (cond
+                   [(hash-ref par-parents thd #f) => (λ (v) (loop v (cons v thds)))]
+                   [else thds])))
+             ;; parent threads come first in this list so
+             ;; that the traversal of the suspends can go
+             ;; from outermost to innermost
              (channel-put resp-chan thd-and-parent-thds)
              (add-running-thread paused-thread))
            (set! paused-threads (hash))

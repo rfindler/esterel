@@ -478,3 +478,32 @@
               (void))))))
    (hash-values (react! mach)))
  (list #f #f))
+
+(let ()
+  (define r
+    (esterel
+     (suspend
+      (with-signal (s)
+        (suspend (pause)
+                 (present? s)))
+      #true)))
+
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash)))
+
+(with-signal (s2)
+  (define r
+    (esterel
+     (par (suspend
+           (with-signal (s1)
+             (suspend (pause)
+                      (present? s1)))
+           (present? s2))
+          (loop
+           (emit s2)
+           (pause)))))
+
+  (check-equal? (react! r) (hash s2 #t))
+  (check-equal? (react! r) (hash s2 #t))
+  (check-equal? (react! r) (hash s2 #t)))
