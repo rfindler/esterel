@@ -478,3 +478,16 @@
               (void))))))
    (hash-values (react! mach)))
  (list #f #f))
+
+(let ()
+  (define r
+    (esterel
+     (suspend
+      (with-signal (s)
+        (suspend (pause)
+                 (present? s)))
+      #true)))
+
+  (check-equal? (react! r) (hash))
+  (check-equal? (react! r) (hash)))
+
