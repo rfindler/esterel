@@ -1566,9 +1566,10 @@ value for can explorations and subsequent must evaluation.
        (log-esterel-debug "~a: ~a"
                           (eq-hash-code (current-thread))
                           (if (can? mode)
-                              (format "finished a stage of can exploration: ~a; emits ~s"
+                              (format "finished a stage of can exploration: ~a; emits ~s; ~a more stages"
                                       (signal-states->hash (car (can-stages mode)))
-                                      (can-emits mode))
+                                      (can-emits mode)
+                                      (length (cdr (can-stages mode))))
                               "instant has completed"))
        (log-esterel-info (if (can? mode)
                              (format "finishing a can stage; emits: ~a"
@@ -1747,8 +1748,11 @@ value for can explorations and subsequent must evaluation.
       ;; nothing is running, but at least one thread is
       ;; waiting for a signal's value; switch into Can mode
       [(set-empty? running-threads)
-       (log-esterel-debug "~a: switching into Can mode; ~s ~s ~s"
+       (log-esterel-debug "~a: ~a; ~s ~s ~s"
                           (eq-hash-code (current-thread))
+                          (if (can? mode)
+                              "entering new can stage"
+                              "entering can mode")
                           (hash-keys presence-waiters)
                           (hash-keys value-waiters)
                           (and mode (can-emits mode)))
