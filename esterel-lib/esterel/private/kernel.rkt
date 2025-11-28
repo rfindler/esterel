@@ -580,7 +580,8 @@ value for can explorations and subsequent must evaluation.
 (define-syntax (suspend stx)
   (syntax-case stx ()
     [(_ e-body e-when)
-     #'(suspend/proc (λ () e-body) (λ () e-when))]))
+     #`(suspend/proc #,(syntax/loc #'e-body (λ () e-body))
+                     #,(syntax/loc #'e-when (λ () e-when)))]))
 
 (define suspend-mark (gensym 'suspend))
 (define (suspend/proc body signal-thunk)
