@@ -164,11 +164,13 @@
      #'(weak-abort-immediate/proc (λ () test) (λ () body ...))]))
 
 (define (abort-when/proc body-thunk when-thunk)
-  (with-trap T-abort-when.1
-    (with-trap T-abort-when.2
-      (par (begin (suspend (body-thunk) (when-thunk)) (exit-trap T-abort-when.1))
-           (begin (await (when-thunk))
-                  (exit-trap T-abort-when.2))))))
+  (with-trap T-abort-when
+    (par (begin (suspend (body-thunk) (when-thunk))
+                (exit-trap T-abort-when))
+         (loop
+          (pause)
+          (when (when-thunk)
+            (exit-trap T-abort-when))))))
 
 (define (weak-abort/proc test body)
   (with-trap T-weak-abort
