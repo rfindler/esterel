@@ -1747,7 +1747,9 @@ value for can explorations and subsequent must evaluation.
                    (values parent-thread (par-state checkpoint/result-chan
                                                     presence-waiting value-waiting
                                                     (set) paused
-                                                    (esterel-thread-value (set))))))
+                                                    (if (esterel-thread-value? a-trap)
+                                                        a-trap
+                                                        (esterel-thread-value (set)))))))
            (loop))))]
 
       ;; nothing is running, but at least one thread is

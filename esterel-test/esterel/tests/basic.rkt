@@ -507,3 +507,13 @@
   (check-equal? (react! r) (hash s2 #t))
   (check-equal? (react! r) (hash s2 #t))
   (check-equal? (react! r) (hash s2 #t)))
+
+(with-signal (not-size-two size-two)
+  (define r
+    (esterel
+     (if (= (set-count (par 1 (begin (pause) 2))) 2)
+         (emit size-two)
+         (emit not-size-two))))
+  (react! r)
+  (check-equal? (react! r)
+                (hash size-two #t)))
