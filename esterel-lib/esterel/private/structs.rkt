@@ -33,21 +33,21 @@
 ;; If the identity is not #t, it is expected to be a pair
 ;; whose car component is might be useful as debugging
 ;; information so it printed as part of the signal
-(struct signal (name identity init combine)
+(struct atomic-signal (name identity init combine)
   #:methods gen:custom-write
   [(define write-proc
      (mk-write-proc
       (λ (x)
-        (if (signal-identity x)
-            (format "~a (~s)" (signal-name x) (car (signal-identity x)))
-            (signal-name x)))
+        (if (atomic-signal-identity x)
+            (format "~a (~s)" (atomic-signal-name x) (car (atomic-signal-identity x)))
+            (atomic-signal-name x)))
       "signal"))]
   #:methods gen:equal-mode+hash
   [(define (equal-mode-proc self other rec mode)
      (cond
-       [(signal? other)
-        (define self-id (signal-identity self))
-        (define other-id (signal-identity other))
+       [(atomic-signal? other)
+        (define self-id (atomic-signal-identity self))
+        (define other-id (atomic-signal-identity other))
         (cond
           [(and self-id other-id)
            ;; the identity of the signal is not a generic thing
@@ -58,15 +58,15 @@
            (eq? self other)])]
        [else #f]))
    (define (hash-mode-proc self rec mode)
-     (define self-id (signal-identity self))
+     (define self-id (atomic-signal-identity self))
      (cond
        [self-id (hash-code-combine (equal-hash-code self-id))]
        [else (eq-hash-code self)]))])
 (define (signal-index s)
-  (define id (signal-identity s))
+  (define id (atomic-signal-identity s))
   (and id (car id)))
 
-(struct memoryless-signal signal ())
+(struct memoryless-signal atomic-signal ())
 
 (struct trap (name counter escape)
   #:methods gen:custom-write
@@ -78,8 +78,29 @@
 ;; escaping to and the value is which values we'll return to the trap
 (struct trap+vals (trap vals) #:transparent)
 
-(provide (struct-out signal)
+;; get-name : -> sexp [that names the signal]
+;; get-value/dependencies :
+;;     hash[atomic-signal -o> boolean]
+;;  -> (or/c boolean?                         -- the signal is resolved
+;;           (and/c (set/c atomic-signal?)    -- the signal needs these atomic signals to resolve
+;;                  (not/c set-empty?)))
+;; the argument to get-value/dependencies is expected
+;; a table with the same signature as the `signal-status`
+;; table from private/kernel.rkt
+(struct compound-signal (get-name get-value/dependencies)
+  #:methods gen:custom-write
+  [(define write-proc
+     (mk-write-proc
+      (λ (x)
+        ((compound-signal-get-name x)))
+      "signal"))])
+
+(define (signal? s) (or (atomic-signal? s) (compound-signal? s)))
+
+(provide (struct-out atomic-signal)
+         (struct-out compound-signal)
          (struct-out memoryless-signal)
+         signal?
          signal-index
          (struct-out trap)
          (struct-out trap+vals))

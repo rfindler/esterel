@@ -1,5 +1,7 @@
 #lang racket/base
 (require "private/kernel.rkt"
+         "private/compound-signals.rkt"
+         "private/structs.rkt"
          racket/math
          racket/contract
          racket/set)
@@ -29,16 +31,16 @@
   [esterel? (-> any/c boolean?)]
   [react! (->* (esterel?)
                (#:emit (listof
-                        (or/c (and/c signal? (not/c signal-combine))
-                              (cons/c (and/c signal? signal-combine)
+                        (or/c (and/c atomic-signal? (not/c atomic-signal-combine))
+                              (cons/c (and/c atomic-signal? atomic-signal-combine)
                                       any/c))))
-               (hash/dc [s signal?]
+               (hash/dc [s atomic-signal?]
                         ;; if a signal is not emitted
                         ;; and also has a combination function,
                         ;; then it just won't be in the map,
                         ;; so we won't be told that its absense
                         ;; mattered to the computation
-                        [v (s) (if (signal-combine s)
+                        [v (s) (if (atomic-signal-combine s)
                                    any/c
                                    boolean?)]
                         #:immutable #t #:kind 'flat))]
@@ -56,25 +58,29 @@
   [make-global-signal (->* (string?)
                            (#:init any/c #:combine any/c #:memoryless? any/c)
                            #:pre/desc (pre-cond-check-outside-esterel)
-                           signal?)]
+                           atomic-signal?)]
   
   ;; when a signal is not emitted it will return the
   ;; previous instant's value from signal-value, following
   ;; _The ESTEREL synchronous programming language: design,
   ;; semantics, implementation*_ by Berry and Gonthier
   [signal-value (values
-                 (->* ((and/c signal? signal-combine))
+                 (->* ((and/c atomic-signal? atomic-signal-combine))
                       ;; NB when we go "too far" with #:pre the values are just #f,
                       ;; even if the signal never had that value... is this okay?
                       (#:pre natural?
-                       #:can (set/c signal?))
+                       #:can (set/c atomic-signal?))
                       #:pre/desc (pre-cond-check)
                       any/c))]
   [signal? (-> any/c boolean?)]
-  [signal-name (-> signal? (or/c #f string?))]
-  [signal-index (-> signal? (or/c #f natural?))]
-  [signal-combine (-> signal? (or/c #f (-> any/c any/c any)))]
-  [emit (values (->* (signal?)
+  [atomic-signal? (-> any/c boolean?)]
+  [signal-and (->* (signal?) #:rest (listof signal?) compound-signal?)]
+  [signal-or (->* (signal?) #:rest (listof signal?) compound-signal?)]
+  [signal-not (-> signal? compound-signal?)]
+  [signal-name (-> atomic-signal? (or/c #f string?))]
+  [signal-index (-> atomic-signal? (or/c #f natural?))]
+  [signal-combine (-> atomic-signal? (or/c #f (-> any/c any/c any)))]
+  [emit (values (->* (atomic-signal?)
                      (any/c)
                      #:pre/desc (pre-cond-check)
                      void?))]
@@ -82,3 +88,5 @@
   [exit-trap (->* (trap?) (any/c) any)]
   [trap? (-> any/c boolean?)]
   [exn:fail:not-constructive? (-> any/c boolean?)]))
+
+(define (signal-combine s) (atomic-signal-combine s))

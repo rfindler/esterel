@@ -1,5 +1,6 @@
 #lang racket/base
 (require "structs.rkt"
+         "compound-signals.rkt"
          syntax/location
          racket/hash
          racket/match
@@ -26,9 +27,9 @@
  present?
  signal-value
  signal?
- signal-name
+ atomic-signal?
  signal-index
- signal-combine
+ atomic-signal-combine
  emit
  pause
  exit-trap
@@ -223,7 +224,7 @@ value for can explorations and subsequent must evaluation.
       [else #f]))
   (if memoryless?
       (memoryless-signal n id init combine)
-      (signal n id init combine)))
+      (atomic-signal n id init combine)))
 
 (define (run-and-kill-signals! s bodies)
   (define signal-table (current-signal-table))
@@ -275,14 +276,14 @@ value for can explorations and subsequent must evaluation.
 (define (emit-check-and-error name a-signal value)
   (define no-value-provided? (equal? value no-value-provided))
   (if no-value-provided?
-      (when (signal-combine a-signal)
+      (when (atomic-signal-combine a-signal)
         (error name
                (string-append
                 "signal emitted with no value but has a combination function\n"
                 "  signal: ~e\n"
                 "  value: ~e")
                a-signal value))
-      (unless (signal-combine a-signal)
+      (unless (atomic-signal-combine a-signal)
         (error name
                (string-append
                 "signal emitted with a value but has no combination function\n"
@@ -326,7 +327,7 @@ value for can explorations and subsequent must evaluation.
                            ;; we make up a value here to emit but that should
                            ;; be okay as the values of valued signals are ignored
                            ;; when we're in can mode
-                           (if (signal-combine a-signal)
+                           (if (atomic-signal-combine a-signal)
                                (emit a-signal 'bogus-signal-value-that-we-made-up)
                                (emit a-signal)))
                          (pause)))
@@ -342,7 +343,7 @@ value for can explorations and subsequent must evaluation.
        (error (if is-present? 'present? 'signal-value)
               "signal is suspended\n  signal: ~e" a-signal)]
       [(signal-never-before-emitted)
-       (define init (signal-init a-signal))
+       (define init (atomic-signal-init a-signal))
        (if (no-init? init)
            (error 'signal-value
                   "signal has never been emitted\n  signal: ~e" a-signal)
@@ -849,10 +850,10 @@ value for can explorations and subsequent must evaluation.
 
   ;; tracks the values of signals in previous instants
   (define/contract signals-pre
-    (listof (set/c signal?))
+    (listof (set/c atomic-signal?))
     '())
   (define/contract signal-values-pre
-    (listof (hash/c signal? any/c #:flat? #t #:immutable #t))
+    (listof (hash/c atomic-signal? any/c #:flat? #t #:immutable #t))
     '())
 
 
@@ -887,8 +888,8 @@ value for can explorations and subsequent must evaluation.
   ;; stages : each time the computation is blocked, we add another element to
   ;;    this list; when we collect all the emitted signals from exploring
   ;;    past the signals in that stage, we drop the stage from the list
-  (struct/contract can ([emits (set/c signal?)]
-                        [considered-signals (set/c signal?)]
+  (struct/contract can ([emits (set/c atomic-signal?)]
+                        [considered-signals (set/c atomic-signal?)]
                         [stages (non-empty-listof (λ (x) (can-stage? x)))])
                    #:transparent)
 
@@ -897,9 +898,11 @@ value for can explorations and subsequent must evaluation.
   ;;    continuation, but just returns what the programmer wrote)
   ;; starting-point : these are the continuations for the blocked state of this stage
   ;; ordered-signals : the signals that were blocked on at starting-point
+  ;;    these are possibly compound signals as we block on the entire
+  ;;    expression (when it cannot be evaluated)
   ;; signal-states : the bits in this integer tell us what the signal values for
   ;;    the next exploration starting from the starting point should be
-  (struct/contract can-stage ([newly-ready (set/c signal?)]
+  (struct/contract can-stage ([newly-ready (set/c (and/c atomic-signal? atomic-signal-combine))]
                               [starting-point (λ (x) (starting-point? x))]
                               [ordered-signals (listof signal?)]
                               [signal-states (and/c exact? integer?)])
@@ -969,12 +972,12 @@ value for can explorations and subsequent must evaluation.
   ;; if it is #f, the signal is not going to be emitted this instant
   ;; this applies to both value-carrying signals and regular ones
   (define/contract signal-status
-    (hash/c signal? (or/c boolean? 'suspended) #:flat? #t #:immutable #t)
+    (hash/c atomic-signal? (or/c boolean? 'suspended) #:flat? #t #:immutable #t)
     (hash))
 
   ;; signals in `signal-ready` will not be emitted again this instant
   (define/contract signal-ready
-    (set/c (and/c signal? signal-combine))
+    (set/c (and/c atomic-signal? atomic-signal-combine))
     (set))
 
   ;; if a signal is mapped in `signal-value`, then
@@ -982,13 +985,13 @@ value for can explorations and subsequent must evaluation.
   ;; b) it has a `combine` function
   ;; it is mapped to its current value
   (define/contract signal-value
-    (hash/c signal? any/c #:flat? #t #:immutable #t)
+    (hash/c atomic-signal? any/c #:flat? #t #:immutable #t)
     (hash))
 
   ;; these are all the signals that can no longer be emitted because the
   ;; dynamic extent of their `with-signal` declaration is has ended
   (define/contract dead-signals
-    (set/c signal?)
+    (set/c atomic-signal?)
     (set))
 
   ;; this is all of the exceptions that were raised
@@ -1008,13 +1011,33 @@ value for can explorations and subsequent must evaluation.
     (define new-waiters (cons a-blocked-thread (hash-ref presence-waiters a-signal '())))
     (set! presence-waiters (hash-set presence-waiters a-signal new-waiters)))
 
+  ;; -> (set/c hash/c[blocked-thread? -o> boolean?])
+  ;; recheck all of the signals that we're waiting for to see if we
+  ;; can make progress on any of them, return the ones that're no longer blocked
+  ;; effect: changes presence-waiters
+  (define (update-presence-waiters-following-emission)
+    (define-values (new-presence-waiters newly-unblocked)
+      (for/fold ([new-presence-waiters (hash)]
+                 [newly-unblocked-threads (hash)])
+                ([(a-signal blocked-threads) (in-hash presence-waiters)])
+        (define presence-result (compute-signal-presence a-signal signal-status))
+        (cond
+          [(set? presence-result)
+           (values (hash-set new-presence-waiters a-signal blocked-threads)
+                   newly-unblocked-threads)]
+          [else
+           (values new-presence-waiters
+                   (hash-set newly-unblocked-threads blocked-threads presence-result))])))
+    (set! presence-waiters new-presence-waiters)
+    newly-unblocked)
+
   ;; find-presence-waiter : thread -> (cons signal blocked-thread) or #f
   ;; returns the signal that `thread` is blocked on, or #f it is isn't blocked on a signal
   (define (find-presence-waiter thread) (find-waiter presence-waiters thread))
 
   ;; threads that are blocked, waiting for a signal's value to be decided
   (define/contract value-waiters
-    (hash/c signal? (non-empty-listof blocked-thread?) #:flat? #t #:immutable #t)
+    (hash/c atomic-signal? (non-empty-listof blocked-thread?) #:flat? #t #:immutable #t)
     (hash))
   (define (add-value-waiter! a-signal the-thread resp-chan)
     (define a-blocked-thread (blocked-thread the-thread resp-chan))
@@ -1174,7 +1197,7 @@ value for can explorations and subsequent must evaluation.
               (λ ()
                 (cond
                   [(memoryless-signal? a-signal)
-                   (signal-init a-signal)]
+                   (atomic-signal-init a-signal)]
                   [else
                    (if (pair? signal-values-pre)
                        (hash-ref (car signal-values-pre)
@@ -1188,13 +1211,22 @@ value for can explorations and subsequent must evaluation.
         (and (pair? signal-values-pre)
              (hash-has-key? (car signal-values-pre) a-signal))))
 
-  ;; unblock-presence-threads : hash[signal -o> boolean?] -> void
+  ;; unblock-presence-threads : (or/c #f (hash[signal -o> boolean?])) -> void
   ;; wakes up all the threads that are blocked on a presence test for
-  ;; the signals in `signals-maps`
+  ;; the signals in `signals-maps` or, if signals-map is #f, wake
+  ;; up the ones whose signals now evaluate to a boolean (as signal-status
+  ;; has changed since the threads blocked)
   (define (unblock-presence-threads signals-map)
-    (for ([(a-signal status) (in-hash signals-map)])
-      (define presence-blocked-threads (hash-ref presence-waiters a-signal #f))
-      (when presence-blocked-threads
+    (for ([(a-signal presence-blocked-threads) (in-hash presence-waiters)])
+      (define status (cond
+                       [signals-map
+                        (cond
+                          [(hash-has-key? signals-map a-signal)
+                           (hash-ref signals-map a-signal)]
+                          [else "not a boolean"])]
+                       [else
+                        (compute-signal-presence a-signal signal-status)]))
+      (when (boolean? status)
         (set! presence-waiters (hash-remove presence-waiters a-signal))
         (for ([a-blocked-thread (in-set presence-blocked-threads)])
           (unblock-a-thread a-blocked-thread status)))))
@@ -1593,7 +1625,17 @@ value for can explorations and subsequent must evaluation.
                 ;; we've explored all possibilities of relevant signals
                 ;; either go back to must mode or report the discovery
                 ;; of a non-constructive program
-                (define unemitted-signals (set-subtract considered-signals (can-emits mode)))
+                (define atomic-considered-signals
+                  (set-union
+                   (can-stage-newly-ready current-stage)
+                   (for/fold ([atomic-considered-signals (set)])
+                             ([a-signal (in-set (set-union (list->set (can-stage-ordered-signals current-stage))
+                                                           (can-considered-signals mode)))])
+                     (define sp (compute-signal-presence a-signal signal-status))
+                     (cond
+                       [(set? sp) (set-union sp atomic-considered-signals)]
+                       [else atomic-considered-signals]))))
+                (define unemitted-signals (set-subtract atomic-considered-signals (can-emits mode)))
                 (cond
                   [(set-empty? unemitted-signals)
                    (channel-put instant-complete-chan
@@ -1611,10 +1653,9 @@ value for can explorations and subsequent must evaluation.
                    (set! signal-ready (set-union
                                        signal-ready
                                        (for/set ([a-signal (in-set unemitted-signals)]
-                                                 #:when (signal-combine a-signal))
+                                                 #:when (atomic-signal-combine a-signal))
                                          a-signal)))
-                   (unblock-presence-threads (for/hash ([signal (in-set unemitted-signals)])
-                                               (values signal #f)))
+                   (unblock-presence-threads #f)
                    (unblock-value-threads (set->list unemitted-signals))
                    (loop)])]
                [else
@@ -1647,7 +1688,7 @@ value for can explorations and subsequent must evaluation.
           (channel-put instant-complete-chan
                        (hash-union
                         (for/hash ([(s v) (in-hash signal-status)]
-                                   #:unless (signal-combine s)
+                                   #:unless (atomic-signal-combine s)
 
                                    ;; drop suspended signals from the result
                                    #:when (boolean? v))
@@ -1708,10 +1749,10 @@ value for can explorations and subsequent must evaluation.
                                    [signal-value signal-value])
                                   ([signal-to-emit (in-list signals-to-emit)])
                           (match signal-to-emit
-                            [(? signal?)
+                            [(? atomic-signal?)
                              (values (hash-set signal-status signal-to-emit #t)
                                      signal-value)]
-                            [(cons (? signal? signal-to-emit) val)
+                            [(cons (? atomic-signal? signal-to-emit) val)
                              (values (hash-set signal-status signal-to-emit #t)
                                      (hash-set signal-value signal-to-emit val))])))
            (when first-instant-sema
@@ -1773,9 +1814,9 @@ value for can explorations and subsequent must evaluation.
            a-signal))
        (define newly-ready (list->set (hash-keys value-waiters)))
        (define new-can-stage (can-stage newly-ready
-                                      (get-starting-point)
-                                      ordered-signals
-                                      0))
+                                        (get-starting-point)
+                                        ordered-signals
+                                        0))
        (cond
          [(can? mode)
           ;; we're already in can mode and blocked so start a new stage
@@ -1818,11 +1859,12 @@ value for can explorations and subsequent must evaluation.
            (log-par-state)
            (cond
              [(= pre 0)
+              (define a-signals-presence (and is-present? (compute-signal-presence a-signal signal-status)))
               (cond
                 [(equal? 'suspended (hash-ref signal-status a-signal #f))
                  (channel-put resp-chan (signal-suspended))]
                 [(if is-present?
-                     (not (hash-has-key? signal-status a-signal))
+                     (set? a-signals-presence)
                      (not (set-member? signal-ready a-signal)))
                  ;; here we need to block
                  (remove-running-thread the-thread)
@@ -1848,7 +1890,7 @@ value for can explorations and subsequent must evaluation.
                 [else
                  (define response
                    (if is-present?
-                       (hash-ref signal-status a-signal)
+                       a-signals-presence
                        (get-signals-value a-signal)))
                  (channel-put resp-chan response)])]
              [else
@@ -1912,7 +1954,7 @@ value for can explorations and subsequent must evaluation.
                     (define new-value
                       (cond
                         [(hash-has-key? signal-value a-signal)
-                         (define comb (signal-combine a-signal))
+                         (define comb (atomic-signal-combine a-signal))
                          (define prev (hash-ref signal-value a-signal))
                          (when (equal? comb 'single)
                            (channel-put resp-chan (signal-single-emitted-twice prev))
@@ -1932,26 +1974,26 @@ value for can explorations and subsequent must evaluation.
                      ;; when in can mode we should ignore emission so we
                      ;; don't cut off branches that have potential emitters
                      (set! signal-status (hash-set signal-status a-signal #t))
-                     (define still-blocked-threads '())
-                     (for ([a-blocked-thread (in-list (hash-ref presence-waiters a-signal '()))])
-                       (match-define (blocked-thread thread resp-chan) a-blocked-thread)
-                       (channel-put resp-chan #t) ;; it was emitted
-                       (define parent-thread (hash-ref par-parents thread #f))
-                       (when parent-thread
-                         (define old-par-state (hash-ref parent->par-state parent-thread))
-                         (define new-par-state
-                           (struct-copy
-                            par-state old-par-state
-                            [presence-waiting (if value-provided?
-                                                  (par-state-presence-waiting old-par-state)
-                                                  (set-remove (par-state-presence-waiting old-par-state) thread))]
-                            [value-waiting (if value-provided?
-                                               (set-remove (par-state-value-waiting old-par-state) thread)
-                                               (par-state-value-waiting old-par-state))]
-                            [active (set-add (par-state-active old-par-state) thread)]))
-                         (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
-                       (add-running-thread thread))
-                     (set! presence-waiters (hash-remove presence-waiters a-signal)))]
+                     (define newly-unblocked (update-presence-waiters-following-emission))
+                     (for ([(some-blocked-threads val) (in-hash newly-unblocked)])
+                       (for ([a-blocked-thread (in-list some-blocked-threads)])
+                         (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+                         (channel-put resp-chan val)
+                         (define parent-thread (hash-ref par-parents thread #f))
+                         (when parent-thread
+                           (define old-par-state (hash-ref parent->par-state parent-thread))
+                           (define new-par-state
+                             (struct-copy
+                              par-state old-par-state
+                              [presence-waiting (if value-provided?
+                                                    (par-state-presence-waiting old-par-state)
+                                                    (set-remove (par-state-presence-waiting old-par-state) thread))]
+                              [value-waiting (if value-provided?
+                                                 (set-remove (par-state-value-waiting old-par-state) thread)
+                                                 (par-state-value-waiting old-par-state))]
+                              [active (set-add (par-state-active old-par-state) thread)]))
+                           (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
+                         (add-running-thread thread))))]
                   ['suspended
                    ;; the signal's suspended, so send back a message that triggers an error
                    (channel-put resp-chan (signal-suspended))]

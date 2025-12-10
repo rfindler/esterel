@@ -125,6 +125,19 @@ provides additional functionality.
 
 @section{Signals}
 
+Signals are the way Esterel programs threads communicate
+with each other. A signal comes in two varieties, an @deftech{atomic
+ signals} and are introduced by declarations like
+@racket[with-signal] and @racket[define-signal]. These
+signals behave in a manner similar to booleans, either being
+@racket[emit]ed or not. The other variety is
+@deftech{compound signals} which are boolean combinations of
+atomic signals and other compound signals. Compound signals
+can be created via the functions @racket[signal-and],
+@racket[signal-or], and @racket[signal-not]. The particular
+boolean value of a signal can be tested with the function
+@racket[present?].
+
 @defform[(with-signal (signal ...)
            body-expr ...+)
          #:grammar ([signal
@@ -135,7 +148,7 @@ provides additional functionality.
                      (code:line #:init init-expr #:combine combine-expr)
                      (code:line #:memoryless #:init init-expr #:combine combine-expr)
                      #:single])]{
- Creates new signals and binds them to the the @racket[signal-id]s.
+ Creates new @tech{atomic signals} and binds them to the the @racket[signal-id]s.
 
  Each signal suffixed with @racket[#:combine] is a value-carrying
  signal, and those without are not. Multiple emissions of the signal are
@@ -197,7 +210,7 @@ provides additional functionality.
 }
 
 @defform[(define-signal signal ...)]{
- Creates signals and binds them to the @racket[_signal-id]s
+ Creates @tech{atomic signals} and binds them to the @racket[_signal-id]s
  in each @racket[signal].
 
  The signals that @racket[define-signal] creates have
@@ -214,7 +227,7 @@ provides additional functionality.
                              [#:memoryless memoryless #f boolean?])
          signal?]{
 
- Creates a global signal named @racket[name]. If @racket[combine] is not @racket[#f],
+ Creates a global @tech{atomic signals} named @racket[name]. If @racket[combine] is not @racket[#f],
  creates a valued signal. The @racket[init] argument is not required. If it is not
  supplied, then the signal has no initial value, otherwise the initial value is @racket[init].
  If @racket[memoryless] is @racket[#t], the signal is memoryless; see @racket[with-signal]
@@ -234,11 +247,28 @@ provides additional functionality.
 }
 
 @defproc[(signal? [v any/c]) boolean?]{
- Determines if @racket[v] is a signal, i.e. returned from @racket[signal].
+ Determines if @racket[v] is a @tech{signal}, e.g. returned from @racket[with-signal]
+ or from @racket[signal-and].
  @examples[
  #:eval esterel-eval
  (with-signal (s1)
    (signal? s1))
+ (with-signal (s1)
+   (atomic-signal? (signal-not s1)))
+ (signal? "not a signal, but a string")
+ ]
+}
+
+@defproc[(atomic-signal? [v any/c]) boolean?]{
+ Determines if @racket[v] is an @tech{atomic signal},
+ e.g. returned from @racket[with-signal]
+ (but not, e.g., from @racket[signal-and]).
+ @examples[
+ #:eval esterel-eval
+ (with-signal (s1)
+   (atomic-signal? s1))
+ (with-signal (s1)
+   (atomic-signal? (signal-not s1)))
  (signal? "not a signal, but a string")
  ]
 }
@@ -252,8 +282,8 @@ provides additional functionality.
  (eval:check (signal-name S) "S")]
 }
 
-@defproc[(signal-index [s signal?]) (or/c #f natural?)]{
- Returns the index of a signal. This index counts the number
+@defproc[(signal-index [s atomic-signal?]) (or/c #f natural?)]{
+ Returns the index of an @tech{atomic signal}. This index counts the number
  of times the @racket[with-signal] that introduced @racket[s]
  has been executed to produce this particular signal. If the
  signal was created outside the dynamic extent of @racket[esterel],
@@ -288,7 +318,7 @@ provides additional functionality.
        (list "S" 2 #f)))]
 }
 
-@defproc[(signal-combine [s signal?]) (or/c #f (-> any/c any/c any/c))]{
+@defproc[(signal-combine [s atomic-signal?]) (or/c #f (-> any/c any/c any/c))]{
  Returns the combining operation for @racket[s], or @racket[#f] if
  @racket[s] is not a value-carrying signal.
 
@@ -303,7 +333,8 @@ provides additional functionality.
 @defproc[(present? [s signal?]
                    [#:pre pre natural? 0])
          boolean?]{
- Determines if @racket[s] is present in the current instant when @racket[pre] is @racket[0].
+ Determines if the @tech{signal} @racket[s] is present in
+ the current instant when @racket[pre] is @racket[0].
 
  If @racket[pre] is larger than zero, returns whether or not
  @racket[s] was present in previous instants. If @racket[pre]
@@ -377,6 +408,88 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  the value @racket[v] is emitted.
 
 }
+
+@defproc[(signal-and [s signal?] ...+) signal?]{
+
+ Builds a new @tech{compound signal} that is
+ @racket[present?] if all of the argument signals are present
+ and is absent if any of the argument signals are absent. It
+ is short-circuiting in the sense that once any one its
+ arguments are known to be absent, then its is known to be
+ absent.
+
+ @examples[
+ #:eval esterel-eval
+ (react!
+  (esterel
+   (with-signal (s1 s2 s3)
+     (if (present? (signal-and s1 s2))
+         (emit s3)
+         (void)))))
+ 
+ (react!
+  (esterel
+   (with-signal (s1 s2 s3)
+     (par (emit s1)
+          (if (present? (signal-and s1 s2))
+              (emit s3)
+              (void))))))
+
+ 
+ (react!
+  (esterel
+   (with-signal (s1 s2 s3)
+     (par (emit s1)
+          (emit s2)
+          (if (present? (signal-and s1 s2))
+              (emit s3)
+              (void))))))]
+ 
+ Unlike @racket[and], it does not need to evaluate from left
+ to right. For example, this program is not constructive
+ because @racket[and] evaluates its argument from left to right:
+
+ @examples[
+ #:eval esterel-eval
+ (eval:error
+  (react!
+   (esterel
+    (with-signal (s1 s2)
+      (if (and (present? s1) (present? s2))
+          (void)
+          (emit s1))))))]
+
+ The corresponding program that uses @racket[signal-and],
+ however, is constructive:
+
+ @examples[
+ #:eval esterel-eval
+ (react!
+  (esterel
+   (with-signal (s1 s2)
+     (if (present? (signal-and s1 s2))
+         (void)
+         (emit s1)))))]
+
+}
+
+@defproc[(signal-or [s signal?] ...+) signal?]{
+
+ Builds a new @tech{compound signal} whose that is
+ @racket[present?] if any of the argument signals are present
+ and absent if all of the argument signals are absent. It is
+ short-circuiting in the sense that once any one its
+ arguments are known to be present, then its is known to be
+ present. See also @racket[signal-and].
+
+ }
+
+@defproc[(signal-not [s signal?]) signal?]{
+ Builds a new @tech{compound signal} whose boolean value
+ (when determined via @racket[present?]) is present if
+ @racket[s] is absent and absent if @racket[s] is present.
+}
+
 
 @section{Control Operations}
 
