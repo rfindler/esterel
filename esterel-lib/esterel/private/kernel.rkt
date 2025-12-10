@@ -1614,10 +1614,16 @@ value for can explorations and subsequent must evaluation.
          [(can? mode)
           ;; we've finished the instant in can mode
           (define current-stage (car (can-stages mode)))
-          (define considered-signals
-            (set-union (list->set (can-stage-ordered-signals current-stage))
-                       (can-stage-newly-ready current-stage)
-                       (can-considered-signals mode)))
+          (define atomic-considered-signals
+            (set-union
+             (can-stage-newly-ready current-stage)
+             (can-considered-signals mode)
+             (for/fold ([atomic-considered-signals (set)])
+                       ([a-signal (in-list (can-stage-ordered-signals current-stage))])
+               (define sp (compute-signal-presence a-signal signal-status))
+               (cond
+                 [(set? sp) (set-union sp atomic-considered-signals)]
+                 [else atomic-considered-signals]))))
           (cond
             [(signal-states-done? current-stage)
              (cond
@@ -1625,21 +1631,11 @@ value for can explorations and subsequent must evaluation.
                 ;; we've explored all possibilities of relevant signals
                 ;; either go back to must mode or report the discovery
                 ;; of a non-constructive program
-                (define atomic-considered-signals
-                  (set-union
-                   (can-stage-newly-ready current-stage)
-                   (for/fold ([atomic-considered-signals (set)])
-                             ([a-signal (in-set (set-union (list->set (can-stage-ordered-signals current-stage))
-                                                           (can-considered-signals mode)))])
-                     (define sp (compute-signal-presence a-signal signal-status))
-                     (cond
-                       [(set? sp) (set-union sp atomic-considered-signals)]
-                       [else atomic-considered-signals]))))
                 (define unemitted-signals (set-subtract atomic-considered-signals (can-emits mode)))
                 (cond
                   [(set-empty? unemitted-signals)
                    (channel-put instant-complete-chan
-                                (cons 'non-constructive considered-signals))
+                                (cons 'non-constructive atomic-considered-signals))
                    ;; when we send back 'non-constructive, then we will
                    ;; never come back to this thread again, so just let it expire
                    (void)]
@@ -1664,7 +1660,7 @@ value for can explorations and subsequent must evaluation.
                 ;; back in the same case, but as if we've just finished the outer
                 ;; stage, so we'll move on to the next one there (or do this again)
                 (set! mode (struct-copy can mode
-                                        [considered-signals considered-signals]
+                                        [considered-signals atomic-considered-signals]
                                         [stages (cdr (can-stages mode))]))
                 (loop)])]
             [else

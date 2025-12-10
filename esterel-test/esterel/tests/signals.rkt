@@ -282,3 +282,59 @@
       (if (present? (signal-and s1 s2))
           (void)
           (emit s1)))))))
+
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (s1 s2)
+       (if (present? s1)
+           (if (present? (signal-and (signal-not s1) s2))
+               (void)
+               (emit s1))
+           (void)))))))
+
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (s1 s2)
+       (if (present? s1)
+           (if (present? (signal-and (signal-not s2) s2))
+               (void)
+               (emit s1))
+           (void)))))))
+
+(check-true
+ (hash?
+  (react!
+   (esterel
+    (with-signal (s1 s2)
+      (if (present? s1)
+          (if (present? (signal-and (signal-not s2) s2))
+              (emit s1)
+              (void))
+          (void)))))))
+
+
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (s1)
+       (if (present? (signal-and (signal-not s1) s1))
+           (void)
+           (emit s1)))))))
+
+(check-exn
+ #rx"not constructive"
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (s1)
+       (if (present? (signal-and (signal-not s1) s1))
+           (emit s1)
+           (void)))))))
