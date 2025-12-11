@@ -416,7 +416,7 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  and is absent if any of the argument signals are absent. It
  is short-circuiting in the sense that once any one its
  arguments are known to be absent, then its is known to be
- absent.
+ absent. See also @racket[signal-or].
 
  @examples[
  #:eval esterel-eval
@@ -460,7 +460,9 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
           (emit s1))))))]
 
  The corresponding program that uses @racket[signal-and],
- however, is constructive:
+ however, is constructive, because once @racket[_s2] has been
+ determined to be absent @racket[_s1] does not need to be
+ resolved to know which way the branch goes.
 
  @examples[
  #:eval esterel-eval
@@ -482,12 +484,94 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
  arguments are known to be present, then its is known to be
  present. See also @racket[signal-and].
 
+ 
+ @examples[
+ #:eval esterel-eval
+ (react!
+  (esterel
+   (with-signal (s1 s2 s3)
+     (if (present? (signal-or s1 s2))
+         (emit s3)
+         (void)))))
+ 
+ (react!
+  (esterel
+   (with-signal (s1 s2 s3)
+     (par (emit s1)
+          (if (present? (signal-or s1 s2))
+              (emit s3)
+              (void))))))
+
+ 
+ (react!
+  (esterel
+   (with-signal (s1 s2 s3)
+     (par (emit s2)
+          (if (present? (signal-or s1 s2))
+              (emit s3)
+              (void))))))]
+
+ Unlike @racket[or], @racket[signal-or] does not need to
+ evaluate from left to right. As an example of that can make
+ a difference, this program is not constructive because
+ @racket[or] must know if @racket[_s1] is true or false before it
+ considers @racket[_s2].
+
+
+ @examples[
+ #:eval esterel-eval
+ (eval:error
+  (react!
+   (esterel
+    (with-signal (s1 s2)
+      (par (emit s2)
+           (if (or (present? s1) (present? s2))
+               (emit s1)
+               (void)))))))]
+
+ This program, however, is constructive because
+ @racket[signal-or] can determine the value of the entire
+ @racket[present?] test once @racket[_s2] has been emitted.
+ 
+ @examples[
+ #:eval esterel-eval
+ (react!
+  (esterel
+   (with-signal (s1 s2)
+     (par (emit s2)
+          (if (present? (signal-or s1 s2))
+              (emit s1)
+              (void))))))
+
+]
  }
 
 @defproc[(signal-not [s signal?]) signal?]{
  Builds a new @tech{compound signal} whose boolean value
  (when determined via @racket[present?]) is present if
  @racket[s] is absent and absent if @racket[s] is present.
+
+ @examples[
+ #:eval esterel-eval
+ (react!
+  (esterel
+   (with-signal (s-condition
+                 s-true-branch
+                 s-false-branch)
+     (if (present? (signal-not s-condition))
+         (emit s-true-branch)
+         (emit s-false-branch)))))
+
+ (react!
+  (esterel
+   (with-signal (s-condition
+                 s-true-branch
+                 s-false-branch)
+     (par (emit s-condition)
+          (if (present? (signal-not s-condition))
+              (emit s-true-branch)
+              (emit s-false-branch))))))
+ ]
 }
 
 
