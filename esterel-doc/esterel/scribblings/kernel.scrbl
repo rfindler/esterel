@@ -37,11 +37,11 @@ provides additional functionality.
 @defproc[(react! [r esterel?]
                  [#:emit signals
                   (listof
-                   (or/c (and/c signal? (not/c signal-combine))
-                         (cons/c (and/c signal? signal-combine)
+                   (or/c (and/c atomic-signal? (not/c signal-combine))
+                         (cons/c (and/c atomic-signal? signal-combine)
                                  any/c)))
                   '()])
-         (hash/dc [s signal?]
+         (hash/dc [s atomic-signal?]
                   [v (s) (if (signal-combine s)
                              any/c
                              boolean?)]
@@ -225,7 +225,7 @@ boolean value of a signal can be tested with the function
                              [#:combine combine #f (or/c #f (procedure-arity-includes/c 2))]
                              [#:init init any/c]
                              [#:memoryless memoryless #f boolean?])
-         signal?]{
+         atomic-signal?]{
 
  Creates a global @tech{atomic signals} named @racket[name]. If @racket[combine] is not @racket[#f],
  creates a valued signal. The @racket[init] argument is not required. If it is not
@@ -273,13 +273,18 @@ boolean value of a signal can be tested with the function
  ]
 }
 
-@defproc[(signal-name [s signal?]) (and/c string? immutable?)]{
+@defproc[(signal-name [s signal?]) any/c]{
  Returns the name of a signal.
+
+ An @tech{atomic signal}'s name will be a string and a
+ @tech{compound signal}'s name will be an s-expression
+ respresenting the way it was constructed.
 
  @examples[
  #:eval esterel-eval
- (define-signal S)
- (eval:check (signal-name S) "S")]
+ (define-signal S1 S2)
+ (eval:check (signal-name S1) "S1")
+ (eval:check (signal-name (signal-or S1 (signal-not S2))) `(or "S1" (not "S2")))]
 }
 
 @defproc[(signal-index [s atomic-signal?]) (or/c #f natural?)]{
@@ -358,7 +363,7 @@ boolean value of a signal can be tested with the function
  ]
 }
 
-@defproc[(signal-value [s signal?] [#:pre n natural? 0] [#:can can (setof signal?)]) any/c]{
+@defproc[(signal-value [s atomic-signal?] [#:pre n natural? 0] [#:can can (setof signal?)]) any/c]{
 Returns the value of @racket[s] in the current instant if @racket[n] is @racket[0],
  unless it hasn't been emitted, in which case it returns the value in the previous
  instant.
@@ -399,8 +404,8 @@ Returns the value of @racket[s] in the current instant if @racket[n] is @racket[
 
 }
 
-@defproc*[([(emit [s (signal?)]) void?]
-           [(emit [s (signal?)] [v any/c]) void?])]{
+@defproc*[([(emit [s (atomic-signal?)]) void?]
+           [(emit [s (atomic-signal?)] [v any/c]) void?])]{
 
  Emits @racket[s]. If one argument is passed, then @racket[s]
  must not be a value-carrying signal. If two arguments are

@@ -77,7 +77,13 @@
   [signal-and (->* (signal?) #:rest (listof signal?) compound-signal?)]
   [signal-or (->* (signal?) #:rest (listof signal?) compound-signal?)]
   [signal-not (-> signal? compound-signal?)]
-  [signal-name (-> atomic-signal? (or/c #f string?))]
+  [signal-name (-> signal? (flat-rec-contract
+                            signal-name?
+                            (cons/c 'or (listof signal-name?))
+                            (cons/c 'and (listof signal-name?))
+                            (list/c 'not signal-name?)
+                            (or/c (and/c string? immutable?)
+                                  #f)))]
   [signal-index (-> atomic-signal? (or/c #f natural?))]
   [signal-combine (-> atomic-signal? (or/c #f (-> any/c any/c any)))]
   [emit (values (->* (atomic-signal?)
