@@ -246,9 +246,11 @@ value for can explorations and subsequent must evaluation.
   (channel-put (signal-table-emit-chan signal-table) (vector a-signal no-value-provided? value resp-chan))
   (match (channel-get resp-chan)
     [(signal-suspended)
+     #;
      (if (equal? value no-value-provided)
          (error 'emit "signal is suspended\n  signal: ~e" a-signal)
-         (error 'emit "signal is suspended\n  signal: ~e\n  value: ~e" a-signal value))]
+         (error 'emit "signal is suspended\n  signal: ~e\n  value: ~e" a-signal value))
+     (void)]
     
     [(signal-ready-and-emitted ready-value)
      (error 'signal-value "emission of a ready signal\n  signal: ~s\n  ready value: ~e\n  emitted value: ~e"
@@ -340,8 +342,10 @@ value for can explorations and subsequent must evaluation.
               resp-chan)
             esterel-prompt-tag))])]
       [(signal-suspended)
+       #;
        (error (if is-present? 'present? 'signal-value)
-              "signal is suspended\n  signal: ~e" a-signal)]
+              "signal is suspended\n  signal: ~e" a-signal)
+       #f]
       [(signal-never-before-emitted)
        (define init (atomic-signal-init a-signal))
        (if (no-init? init)
@@ -575,7 +579,7 @@ value for can explorations and subsequent must evaluation.
                  (cons suspended-signals resp-chan))
     (define resp (channel-get resp-chan))
     (when resp
-      (error 'suspend "suspended signal was used\n  signal: ~e"
+      '(error 'suspend "suspended signal was used\n  signal: ~e"
              resp)))
   suspend?)
 
