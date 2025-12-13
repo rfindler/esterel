@@ -222,18 +222,21 @@ value for can explorations and subsequent must evaluation.
          (channel-put new-signal-chan resp)
          (cons (channel-get resp) src))]
       [else #f]))
+  (define suspensions
+    (if id
+        (continuation-mark-set->list #f suspend-mark)
+        '()))
   (if memoryless?
-      (memoryless-signal n id init combine)
-      (atomic-signal n id init combine)))
+      (memoryless-signal n id init combine suspensions)
+      (atomic-signal n id init combine suspensions)))
 
 (define (run-and-kill-signals! s bodies)
   (define signal-table (current-signal-table))
   (cond
     [signal-table
-     (with-continuation-mark suspend-mark s
-       (let ([vals (call-with-values bodies list)])
-         (channel-put (signal-table-signal-dead-chan signal-table) s)
-         (apply values vals)))]
+     (define vals (call-with-values bodies list))
+     (channel-put (signal-table-signal-dead-chan signal-table) s)
+     (apply values vals)]
     [else
      (bodies)]))
 
@@ -246,19 +249,18 @@ value for can explorations and subsequent must evaluation.
   (channel-put (signal-table-emit-chan signal-table) (vector a-signal no-value-provided? value resp-chan))
   (match (channel-get resp-chan)
     [(signal-suspended)
-     #;
      (if (equal? value no-value-provided)
          (error 'emit "signal is suspended\n  signal: ~e" a-signal)
          (error 'emit "signal is suspended\n  signal: ~e\n  value: ~e" a-signal value))
      (void)]
     
     [(signal-ready-and-emitted ready-value)
-     (error 'signal-value "emission of a ready signal\n  signal: ~s\n  ready value: ~e\n  emitted value: ~e"
+     (error 'signal-value "emission of a ready signal\n  signal: ~e\n  ready value: ~e\n  emitted value: ~e"
             a-signal
             ready-value
             value)]
     [(signal-single-emitted-twice previous-value)
-     (error 'signal-value "multiple emission of a single signal\n  signal: ~s\n  value: ~e\n  value: ~e"
+     (error 'signal-value "multiple emission of a single signal\n  signal: ~e\n  value: ~e\n  value: ~e"
             a-signal
             previous-value
             value)]
@@ -342,10 +344,8 @@ value for can explorations and subsequent must evaluation.
               resp-chan)
             esterel-prompt-tag))])]
       [(signal-suspended)
-       #;
        (error (if is-present? 'present? 'signal-value)
-              "signal is suspended\n  signal: ~e" a-signal)
-       #f]
+              "signal is suspended\n  signal: ~e" a-signal)]
       [(signal-never-before-emitted)
        (define init (atomic-signal-init a-signal))
        (if (no-init? init)
@@ -536,52 +536,52 @@ value for can explorations and subsequent must evaluation.
        [else
         (void)])]))
 
-;; get-suspend-info : marks -> suspend-info
-(define (get-suspend-info thds)
-  (for/fold ([suspended? #f]
-             [suspended-signals (set)])
-            ([thd (in-list thds)])
-    (define marks
-      (continuation-mark-set->list
-       (continuation-marks thd)
-       suspend-mark))
-    ;; work from the outermost suspend inwards (hence
-    ;; the reverse of the marks) so that we can tell
-    ;; when we're traversing an already suspended part
-    ;; of the continuation
-    (let loop ([items (reverse marks)]
-               [suspended? suspended?]
-               [suspended-signals suspended-signals])
-      (match items
-        ['()
-         (values suspended? suspended-signals)]
-        [(cons (? procedure? suspend-proc) items)
-         (loop items
-               ;; if we're already suspended, take care
-               ;; to avoid running the suspend-proc, as
-               ;; it is code that's supposed to be
-               ;; suspended (so may test a suspended signal
-               ;; or emit a suspended one)
-               (or suspended? (suspend-proc))
-               suspended-signals)]
-        [(cons (? set? signals) items)
-         (loop items
-               suspended?
-               (if suspended?
-                   (set-union signals suspended-signals)
-                   suspended-signals))]))))
-
+;; handle-suspension: signal-table (listof thread) -> boolean?
+;; the argument threads are the parents of the about-to-be-unpaused
+;; thread that can be used to find the continuation marks to figure
+;; out if we should suspend
+;; the result is #t if we are suspended and #f otherwise
 (define (handle-suspension signal-table thds)
-  (define-values (suspend? suspended-signals) (get-suspend-info thds))
-  (unless (set-empty? suspended-signals)
+  (define maybe-suspension
+    (for/or ([thd (in-list thds)])
+      (define marks
+        (continuation-mark-set->list
+         (continuation-marks thd)
+         suspend-mark))
+      ;; work from the outermost suspend inwards (hence
+      ;; the reverse of the marks) so that we can tell
+      ;; when we're traversing an already suspended part
+      ;; of the continuation
+      ;; also, be sure to abort the loop as soon as we
+      ;; find we're suspended so that we don't run
+      ;; thunks that might touch signals that are
+      ;; supposed to be suspended
+      (for/or ([a-suspension (in-list (reverse marks))])
+        (define suspend? ((suspension-thunk a-suspension)))
+        (if suspend?
+            a-suspension
+            #f))))
+  (when maybe-suspension
+    ;; if we found a suspend whose test returns #t, let
+    ;; the main thread know that it was suspended so that
+    ;; signals in its body will know they're not to be used.
     (define resp-chan (make-channel))
     (channel-put (signal-table-suspended-signals-chan signal-table)
-                 (cons suspended-signals resp-chan))
-    (define resp (channel-get resp-chan))
-    (when resp
-      '(error 'suspend "suspended signal was used\n  signal: ~e"
-             resp)))
-  suspend?)
+                 (cons maybe-suspension resp-chan))
+    (define problematic-suspended-signals (channel-get resp-chan))
+    (unless (set-empty? problematic-suspended-signals)
+      (define the-signals (sort (set->list problematic-suspended-signals)
+                                string<?
+                                #:key (λ (x) (format "~s" x))))
+      (apply error
+             'suspend
+             (apply
+              string-append
+              "suspended signal was used"
+              (for/list ([a-signal (in-list the-signals)])
+                "\n  signal: ~e"))
+             the-signals)))
+  (and maybe-suspension #t))
 
 (define-syntax (suspend stx)
   (syntax-case stx ()
@@ -592,7 +592,7 @@ value for can explorations and subsequent must evaluation.
 (define suspend-mark (gensym 'suspend))
 (define (suspend/proc body signal-thunk)
   (unless (in-esterel?) (error 'suspend "not in `esterel`"))
-  (with-continuation-mark suspend-mark signal-thunk
+  (with-continuation-mark suspend-mark (suspension signal-thunk)
     ;; we don't want the body to be in tail position
     (begin0
       (body)
@@ -952,6 +952,7 @@ value for can explorations and subsequent must evaluation.
                       signal-ready
                       signal-value
                       dead-signals
+                      active-suspensions
                       latest-exn
                       presence-waiters
                       value-waiters
@@ -976,7 +977,7 @@ value for can explorations and subsequent must evaluation.
   ;; if it is #f, the signal is not going to be emitted this instant
   ;; this applies to both value-carrying signals and regular ones
   (define/contract signal-status
-    (hash/c atomic-signal? (or/c boolean? 'suspended) #:flat? #t #:immutable #t)
+    (hash/c atomic-signal? boolean? #:flat? #t #:immutable #t)
     (hash))
 
   ;; signals in `signal-ready` will not be emitted again this instant
@@ -997,6 +998,20 @@ value for can explorations and subsequent must evaluation.
   (define/contract dead-signals
     (set/c atomic-signal?)
     (set))
+
+  ;; these are all the suspensions whose second
+  ;; argument has evaluated to #true in the current
+  ;; instant
+  (define/contract active-suspensions
+    (set/c suspension?)
+    (set))
+
+  (define (signal-is-suspended? a-signal)
+    (define deps (compute-signal-presence a-signal signal-status))
+    (and (set? deps)
+         (for/or ([an-atomic-signal (in-set deps)])
+           (for/or ([suspension (in-list (atomic-signal-suspensions an-atomic-signal))])
+             (set-member? active-suspensions suspension)))))
 
   ;; this is all of the exceptions that were raised
   ;; when running the current instant
@@ -1276,6 +1291,7 @@ value for can explorations and subsequent must evaluation.
                       signal-ready
                       signal-value
                       dead-signals
+                      active-suspensions
                       raised-exns
                       presence-waiters
                       value-waiters
@@ -1290,6 +1306,7 @@ value for can explorations and subsequent must evaluation.
                               _signal-ready
                               _signal-value
                               _dead-signals
+                              _active-suspensions
                               _raised-exns
                               _presence-waiters
                               _value-waiters
@@ -1303,6 +1320,7 @@ value for can explorations and subsequent must evaluation.
     (set! signal-ready _signal-ready)
     (set! signal-value _signal-value)
     (set! dead-signals _dead-signals)
+    (set! active-suspensions _active-suspensions)
     (set! raised-exns _raised-exns) ;; there cannot be anything there ... right?
     (set! presence-waiters _presence-waiters)
     (set! value-waiters _value-waiters)
@@ -1317,17 +1335,19 @@ value for can explorations and subsequent must evaluation.
   ;; of the signals to see what can be emitted (and thus, what cannot be emitted)
   ;; rb-tree : rb-tree?
   ;; signals : (hash/c signal? boolean? #:flat? #t #:immutable #t)
-  (struct starting-point (rb-tree new-signal-counter signal-status signal-ready signal-value dead-signals))
+  (struct starting-point (rb-tree new-signal-counter signal-status signal-ready signal-value dead-signals active-suspensions))
   (define (rollback! a-starting-point)
     (match-define (starting-point rb-tree rb-new-signal-counter
                                   rb-signal-status rb-signal-ready
-                                  rb-signal-value rb-dead-signals)
+                                  rb-signal-value rb-dead-signals
+                                  rb-active-suspensions)
       a-starting-point)
     (set! new-signal-counter rb-new-signal-counter)
     (set! signal-status rb-signal-status)
     (set! signal-ready rb-signal-ready)
     (set! signal-value rb-signal-value)
     (set! dead-signals rb-dead-signals)
+    (set! active-suspensions rb-active-suspensions)
     (set! raised-exns '())
     (set! presence-waiters (hash))
     (set! value-waiters (hash))
@@ -1345,7 +1365,8 @@ value for can explorations and subsequent must evaluation.
                         [(hash-has-key? signal-value a-signal) signal-value]
                         [else (hash-set signal-value a-signal
                                         'dummy-value-that-shouldn’t-be-used-anywhere)]))
-                    dead-signals))
+                    dead-signals
+                    active-suspensions))
 
   (struct rb-tree () #:transparent)
 
@@ -1706,16 +1727,15 @@ value for can explorations and subsequent must evaluation.
                 [else (cons (car l) (loop (cdr l) (- i 1)))])))
           (set! signals-pre
                 (keep-count
-                 (for/set ([(a-signal val) (in-hash signal-status)]
-                           #:when
-                           (match val
-                             [#t #t]
-                             [#f #f]
-                             ['suspended
-                              (and (pair? signals-pre)
-                                   (set-member? (car signals-pre)
-                                                a-signal))]))
-                   a-signal)
+                 (set-union
+                  (if (pair? signals-pre)
+                      (for/set ([a-signal (in-set (car signals-pre))]
+                                #:when (signal-is-suspended? a-signal))
+                        a-signal)
+                      (set))
+                  (for/set ([(a-signal val) (in-hash signal-status)]
+                            #:when val)
+                    a-signal))
                  signals-pre
                  pre-count))
           (set! signal-values-pre (keep-count
@@ -1730,6 +1750,7 @@ value for can explorations and subsequent must evaluation.
           (set! signal-status (hash))
           (set! signal-ready (set))
           (set! signal-value (hash))
+          (set! active-suspensions (set))
           (set! raised-exns '()) ;; TODO: is this right?
           (set! instant-number (+ instant-number 1))
           (loop)])]
@@ -1861,7 +1882,7 @@ value for can explorations and subsequent must evaluation.
              [(= pre 0)
               (define a-signals-presence (and is-present? (compute-signal-presence a-signal signal-status)))
               (cond
-                [(equal? 'suspended (hash-ref signal-status a-signal #f))
+                [(signal-is-suspended? a-signal)
                  (channel-put resp-chan (signal-suspended))]
                 [(if is-present?
                      (set? a-signals-presence)
@@ -1941,6 +1962,9 @@ value for can explorations and subsequent must evaluation.
               ;; back the message to trigger an error
               (channel-put resp-chan 'dead)
               (loop)]
+             [(signal-is-suspended? a-signal)
+              (channel-put resp-chan (signal-suspended))
+              (loop)]
              [else
               (when (can? mode)
                 ;; we're in can mode, so record that this signal can be emitted
@@ -1994,9 +2018,6 @@ value for can explorations and subsequent must evaluation.
                               [active (set-add (par-state-active old-par-state) thread)]))
                            (set! parent->par-state (hash-set parent->par-state parent-thread new-par-state)))
                          (add-running-thread thread))))]
-                  ['suspended
-                   ;; the signal's suspended, so send back a message that triggers an error
-                   (channel-put resp-chan (signal-suspended))]
 
                   [#t
                    ;; the signal's not dead, so send back a message that doesn't trigger
@@ -2084,15 +2105,23 @@ value for can explorations and subsequent must evaluation.
            (loop)))
         (handle-evt
          suspended-signals-chan
-         (λ (signals+resp-chan)
-           (match-define (cons signals resp-chan) signals+resp-chan)
-           (define resp #f)
-           (for ([a-signal (in-set signals)])
-             (when (and (hash-has-key? signal-status a-signal)
-                        (boolean? (hash-ref signal-status a-signal)))
-               (set! resp a-signal))
-             (set! signal-status (hash-set signal-status a-signal 'suspended)))
-           (channel-put resp-chan resp)
+         (λ (a-suspension+resp-chan)
+           (match-define (cons a-suspension resp-chan) a-suspension+resp-chan)
+           (set! active-suspensions (set-add active-suspensions a-suspension))
+           (define problematic-suspended-signals
+             (for/set ([(a-signal value) (in-hash signal-status)]
+
+                       ;; we declare signals whose value is #f to not
+                       ;; be problematic here (and thus not to trigger
+                       ;; errors when a suspend's second argument is #t)
+                       ;; not sure if this is a good idea or not but let's
+                       ;; go with it until a better idea comes along
+                       #:when value
+
+                       #:when (for/or ([signal-suspension (in-list (atomic-signal-suspensions a-signal))])
+                                (equal? signal-suspension a-suspension)))
+               a-signal))
+           (channel-put resp-chan problematic-suspended-signals)
            (loop)))
         (handle-evt
          react-thread-done-chan

@@ -17,11 +17,6 @@
        (display ">" port)]))
   write-proc)
 
-;; combine :
-;; (or/c #f         -- not a valued signal
-;;      'single     -- a valued signal that can only be emitted once per instant
-;;      (α α -> α)) -- a (hopefully) associative, commutative operation
-
 ;; identity controls the equivalence relation on signals
 ;; if it is #f, then the comparison is just like a regular
 ;; opaque struct, namely based on each allocation being different
@@ -33,7 +28,16 @@
 ;; If the identity is not #t, it is expected to be a pair
 ;; whose car component is might be useful as debugging
 ;; information so it printed as part of the signal
-(struct atomic-signal (name identity init combine)
+;;
+;; combine :
+;; (or/c #f          -- not a valued signal
+;;       'single     -- a valued signal that can only be emitted once per instant
+;;       (α α -> α)) -- a (hopefully) associative, commutative operation
+;;
+;; suspensions : (set/c suspension)
+;;  the suspensions are the set of `suspension` structs corresponding
+;;  to the suspensions that this signal is created in the scope of
+(struct atomic-signal (name identity init combine suspensions)
   #:methods gen:custom-write
   [(define write-proc
      (mk-write-proc
@@ -97,9 +101,18 @@
 
 (define (signal? s) (or (atomic-signal? s) (compound-signal? s)))
 
+;; the identity of these is important; each signal is
+;; associated with a set of these and, when a suspend
+;; happens (ie the second argument to `suspend` is true),
+;; we'll note that these suspensions are active and thus
+;; using any signals created inside them are not allowed
+;; to be used.
+(struct suspension (thunk) #:transparent)
+
 (provide (struct-out atomic-signal)
          (struct-out compound-signal)
          (struct-out memoryless-signal)
+         (struct-out suspension)
          signal?
          signal-index
          (struct-out trap)

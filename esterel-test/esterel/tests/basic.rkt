@@ -161,15 +161,7 @@
             (sleep .01)
             (emit S1)))))
   (react! r)
-  (check-true (hash? (react! r)))
-
-  ;; this test is commented out because the checks that can produce this error
-  ;; are disabled in kernel.rkt. not sure how to implement the check correctly
-  ;; the check-true above is a bogus test case.
-  #;
-  ;; this test will usually be the emit error but it isn't guaranteed;
-  ;; one of these errors should be guaranteed, however.
-  (check-exn #rx"(emit: signal is suspended)|(suspend: suspended signal was used)"
+  (check-exn #rx"emit: signal is suspended"
              (λ () (react! r))))
 
 (with-signal (C #:combine (λ (x y) x) S2)
@@ -190,15 +182,7 @@
             (sleep .01)
             (present? S1)))))
   (react! r)
-  (check-true (hash? (react! r)))
-
-  ;; this test is commented out because the checks that can produce this error
-  ;; are disabled in kernel.rkt. not sure how to implement the check correctly
-  ;; the check-true above is a bogus test case.
-  #;
-  ;; this test will usually be the emit error but it isn't guaranteed;
-  ;; one of these errors should be guaranteed, however.
-  (check-exn #rx"(present[?]: signal is suspended)|(suspend: suspended signal was used)"
+  (check-exn #rx"present[?]: signal is suspended"
              (λ () (react! r))))
 
 (with-signal (C #:combine (λ (x y) x) S2)
@@ -219,16 +203,7 @@
             (sleep .01)
             (signal-value S1 #:can (set))))))
   (react! r)
-  
-  (check-true (hash? (react! r)))
-
-  ;; this test is commented out because the checks that can produce this error
-  ;; are disabled in kernel.rkt. not sure how to implement the check correctly
-  ;; the check-true above is a bogus test case.
-  #;
-  ;; this test will usually be the emit error but it isn't guaranteed;
-  ;; one of these errors should be guaranteed, however.
-  (check-exn #rx"(signal-value: signal is suspended)|(suspend: suspended signal was used)"
+  (check-exn #rx"signal-value: signal is suspended"
              (λ () (react! r))))
 
 (with-signal (C #:combine (λ (x y) x) S2)
@@ -249,16 +224,7 @@
             (sleep .01)
             (emit S2)))))
   (react! r)
-
-  (check-true (hash? (react! r)))
-
-  ;; this test is commented out because the checks that can produce this error
-  ;; are disabled in kernel.rkt. not sure how to implement the check correctly
-  ;; the check-true above is a bogus test case.
-  #;
-  ;; this test will usually be the suspend error but it isn't guaranteed;
-  ;; one of these errors should be guaranteed, however.
-  (check-exn #rx"(emit: signal is suspended)|(suspend: suspended signal was used)"
+  (check-exn #rx"suspend: suspended signal was used"
              (λ () (react! r))))
 
 ;; this test demonstrates that the the check (from the previous test)
