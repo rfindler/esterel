@@ -412,3 +412,20 @@
   (check-exn
    non-constructive-exn?
    (λ () (react! r))))
+
+;; this one is constructive, but
+;; there was a bug that caused it
+;; to report as being nonconstructive
+(check-equal?
+ (let ()
+   (define sigs
+     (react!
+      (esterel
+       (with-signal (s)
+         (par (pause)
+              (present? s))
+         (emit s)))))
+   (for/set ([(k v) (in-hash sigs)]
+             #:when v)
+     k))
+ (set))
