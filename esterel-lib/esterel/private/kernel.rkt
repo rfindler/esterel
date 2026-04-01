@@ -909,14 +909,16 @@ value for can explorations and subsequent must evaluation.
   ;;    unblock to see if there are emits past them (this doesn't invoke the
   ;;    continuation, but just returns what the programmer wrote)
   ;; starting-point : these are the continuations for the blocked state of this stage
-  ;; ordered-signals : the signals that were blocked on at starting-point
-  ;;    these are possibly compound signals as we block on the entire
-  ;;    expression (when it cannot be evaluated)
+  ;; blocked-thread-count : natural?
+  ;;    used to determine how many different runs we need to do in can mode
+  ;; considered-signals : all of the signals that we were blocked in, possible
+  ;;    including signals that we considered from already completed can-stages
   ;; signal-states : the bits in this integer tell us what the signal values for
   ;;    the next exploration starting from the starting point should be
   (struct/contract can-stage ([newly-ready (set/c (and/c atomic-signal? atomic-signal-combine))]
                               [starting-point (λ (x) (starting-point? x))]
-                              [ordered-signals (listof signal?)]
+                              [blocked-thread-count exact-nonnegative-integer?]
+                              [considered-signals (set/c signal?)]
                               [signal-states (and/c exact? integer?)])
                    #:transparent)
 
@@ -932,20 +934,12 @@ value for can explorations and subsequent must evaluation.
 
   ;; signal-states-done? : can-stage -> boolean
   (define (signal-states-done? a-can-stage)
-    ;; we need to run (expt 2 (length (length (can-stage-ordered-signals a-can-stage))))
-    ;; iterations to be sure we've tried every combination of absent and present
+    ;; we need to run (expt 2 blocked-thread-count) iterations
+    ;; to be sure we've tried every combination of absent and present
     ;; for the two-choice signals, going from all zeros to all ones
-    (= (- (expt 2 (length (can-stage-ordered-signals a-can-stage))) 1)
+    (= (- (expt 2 (can-stage-blocked-thread-count a-can-stage)) 1)
        (can-stage-signal-states a-can-stage)))
 
-  ;; signal-states->hash : can-stage -> hash[signal -o> boolean?]
-  (define (signal-states->hash a-can-stage)
-    (match-define (can-stage newly-ready starting-point ordered-signals signal-states) a-can-stage)
-    (for/hash ([a-signal (in-list ordered-signals)]
-               [i (in-naturals)])
-      (define on? (bitwise-bit-set? signal-states i))
-      (values a-signal on?)))
-  
   ;; add-emitted-signal : can? signal? -> can?
   ;; adds `a-signal` as emitted to `a-can`
   (define (add-emitted-signal a-can a-signal)
@@ -1027,14 +1021,19 @@ value for can explorations and subsequent must evaluation.
     (listof exn?)
     '())
 
-  (struct blocked-thread (thread resp-chan) #:transparent)
+  ;; thread : thread
+  ;; resp-chan : channel
+  ;; presence-index : (or/c natural? #f)
+  ;;  if #f, we're running in must mode or this thread is a value waiter
+  ;;  if a natural, the index helps determine the boolean we supply
+  (struct blocked-thread (thread resp-chan presence-index) #:transparent)
 
   ;; threads that are blocked, waiting for a signal's presence to be decided
   (define/contract presence-waiters
     (hash/c signal? (non-empty-listof blocked-thread?) #:flat? #t #:immutable #t)
     (hash))
-  (define (add-presence-waiter! a-signal the-thread resp-chan)
-    (define a-blocked-thread (blocked-thread the-thread resp-chan))
+  (define (add-presence-waiter! a-signal presence-index the-thread resp-chan)
+    (define a-blocked-thread (blocked-thread the-thread resp-chan presence-index))
     (define new-waiters (cons a-blocked-thread (hash-ref presence-waiters a-signal '())))
     (set! presence-waiters (hash-set presence-waiters a-signal new-waiters)))
 
@@ -1067,7 +1066,7 @@ value for can explorations and subsequent must evaluation.
     (hash/c atomic-signal? (non-empty-listof blocked-thread?) #:flat? #t #:immutable #t)
     (hash))
   (define (add-value-waiter! a-signal the-thread resp-chan)
-    (define a-blocked-thread (blocked-thread the-thread resp-chan))
+    (define a-blocked-thread (blocked-thread the-thread resp-chan #f))
     (define new-waiters (cons a-blocked-thread (hash-ref value-waiters a-signal '())))
     (set! value-waiters (hash-set value-waiters a-signal new-waiters)))
 
@@ -1238,25 +1237,30 @@ value for can explorations and subsequent must evaluation.
         (and (pair? signal-values-pre)
              (hash-has-key? (car signal-values-pre) a-signal))))
 
-  ;; unblock-presence-threads : (or/c #f (hash[signal -o> boolean?])) -> void
-  ;; wakes up all the threads that are blocked on a presence test for
-  ;; the signals in `signals-maps` or, if signals-map is #f, wake
-  ;; up the ones whose signals now evaluate to a boolean (as signal-status
-  ;; has changed since the threads blocked)
-  (define (unblock-presence-threads signals-map)
+  ;; unblock-presence-threads : -> void
+  ;; wakes up all the threads whose signals now evaluate to a boolean
+  ;; (as signal-status has changed since the threads blocked)
+  (define (unblock-presence-threads)
     (for ([(a-signal presence-blocked-threads) (in-hash presence-waiters)])
-      (define status (cond
-                       [signals-map
-                        (cond
-                          [(hash-has-key? signals-map a-signal)
-                           (hash-ref signals-map a-signal)]
-                          [else "not a boolean"])]
-                       [else
-                        (compute-signal-presence a-signal signal-status)]))
+      (define status (compute-signal-presence a-signal signal-status))
       (when (boolean? status)
         (set! presence-waiters (hash-remove presence-waiters a-signal))
         (for ([a-blocked-thread (in-set presence-blocked-threads)])
           (unblock-a-thread a-blocked-thread status)))))
+
+  ;; unblock-presence-threads-can-mode : (hash[signal -o> boolean?]) -> void
+  ;; when we start a can mode stage, this kicks off the evaluation of
+  ;; all of the presence waiters, sending the booleans into the continuations
+  (define (unblock-presence-threads-can-mode a-can-stage)
+    (match-define (can-stage newly-ready starting-point blocked-thread-count considered-signals signal-states)
+      a-can-stage)
+    (define previous-presence-waiters presence-waiters)
+    (set! presence-waiters (hash))
+    (for* ([(signal blocked-threads) (in-hash previous-presence-waiters)]
+           [a-blocked-thread (in-list blocked-threads)])
+      (match-define (blocked-thread thread chan index) a-blocked-thread)
+      (define on? (bitwise-bit-set? signal-states index))
+      (unblock-a-thread a-blocked-thread on?)))
 
   ;; unblock-value-threads : (listof signal) -> void
   ;; wakes up all the threads that are blocked on a signal's value for
@@ -1273,7 +1277,7 @@ value for can explorations and subsequent must evaluation.
   ;; unblock-a-thread : blocked-thread any -> void
   ;; wakes up the thread in `a-blocked-thread` using `value-to-send` to continue
   (define (unblock-a-thread a-blocked-thread value-to-send)
-    (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+    (match-define (blocked-thread thread resp-chan presence-index) a-blocked-thread)
     (channel-put resp-chan value-to-send)
     (add-running-thread thread)
     (define parent-thread (hash-ref par-parents thread #f))
@@ -1389,9 +1393,10 @@ value for can explorations and subsequent must evaluation.
     #:transparent)
 
   ;; signal : signal?
-  ;; presence? : boolean?  -- indicates if they are blocked on `present?` or `signal-value`
+  ;; presence? : (or/c natural? #f)  -- indicates if they are blocked on `present?` or `signal-value`
+  ;;   if present?, then it is an index used to calculate which boolean we supply in can mode
   ;; cont : continuation[channel]
-  (struct rb-blocked rb-tree (signal presence? cont) #:transparent)
+  (struct rb-blocked rb-tree (signal presence-index cont) #:transparent)
 
   (struct rb-paused rb-tree (thread resp-chan cont) #:transparent)
 
@@ -1399,6 +1404,8 @@ value for can explorations and subsequent must evaluation.
   (define (build-rb-tree-from-current-state)
     (define k-chan (make-channel))
     (define a-checkpoint-request (checkpoint-request k-chan))
+    (define blocked-index 0)
+    (define (next-blocked-index) (begin0 blocked-index (set! blocked-index (+ blocked-index 1))))
     (let loop ([thread esterel-thread])
       (cond
         [(hash-has-key? parent->par-state thread)
@@ -1425,14 +1432,14 @@ value for can explorations and subsequent must evaluation.
         [(find-presence-waiter thread)
          =>
          (λ (signal+blocked-thread)
-           (match-define (cons signal (blocked-thread thread resp-chan))
+           (match-define (cons signal (blocked-thread thread resp-chan presence-index))
              signal+blocked-thread)
            (channel-put resp-chan a-checkpoint-request)
-           (rb-blocked signal #t (channel-get k-chan)))]
+           (rb-blocked signal (next-blocked-index) (channel-get k-chan)))]
         [(find-value-waiter thread)
          =>
          (λ (signal+blocked-thread)
-           (match-define (cons signal (blocked-thread thread resp-chan))
+           (match-define (cons signal (blocked-thread thread resp-chan presence-index))
              signal+blocked-thread)
            (channel-put resp-chan a-checkpoint-request)
            (rb-blocked signal #f (channel-get k-chan)))]
@@ -1505,7 +1512,7 @@ value for can explorations and subsequent must evaluation.
                           checkpoint/result-chan)))))
          (semaphore-wait sema)
          par-parent-thread]
-        [(rb-blocked a-signal presence? cont)
+        [(rb-blocked a-signal presence-index cont)
          (define resp-chan (make-channel))
          (define blocked-thread
            (parameterize ([current-signal-table the-signal-table])
@@ -1513,8 +1520,8 @@ value for can explorations and subsequent must evaluation.
               #:before-par-trap-counter parent-before-par-trap-counter
               #:par-child-result-chan par-child-result-chan
               (λ () (cont resp-chan)))))
-         (if presence?
-             (add-presence-waiter! a-signal blocked-thread resp-chan)
+         (if presence-index
+             (add-presence-waiter! a-signal presence-index blocked-thread resp-chan)
              (add-value-waiter! a-signal blocked-thread resp-chan))
          blocked-thread]
         [(rb-paused paused-thread resp-chan cont)
@@ -1650,8 +1657,8 @@ value for can explorations and subsequent must evaluation.
        (log-esterel-debug "~a: ~a"
                           (eq-hash-code (current-thread))
                           (if (can? mode)
-                              (format "finished a stage of can exploration: ~a; emits ~s; ~a more stages"
-                                      (signal-states->hash (car (can-stages mode)))
+                              (format "finished a stage of can exploration: ~a blocked threads; emits ~s; ~a more stages"
+                                      (can-stage-blocked-thread-count (car (can-stages mode)))
                                       (can-emits mode)
                                       (length (cdr (can-stages mode))))
                               "instant has completed"))
@@ -1669,7 +1676,7 @@ value for can explorations and subsequent must evaluation.
              (can-stage-newly-ready current-stage)
              (can-considered-signals mode)
              (for/fold ([atomic-considered-signals (set)])
-                       ([a-signal (in-list (can-stage-ordered-signals current-stage))])
+                       ([a-signal (in-set (can-stage-considered-signals current-stage))])
                (define sp (compute-signal-presence a-signal signal-status))
                (cond
                  [(set? sp) (set-union sp atomic-considered-signals)]
@@ -1701,7 +1708,7 @@ value for can explorations and subsequent must evaluation.
                                        (for/set ([a-signal (in-set unemitted-signals)]
                                                  #:when (atomic-signal-combine a-signal))
                                          a-signal)))
-                   (unblock-presence-threads #f)
+                   (unblock-presence-threads)
                    (unblock-value-threads (set->list unemitted-signals))
                    (loop)])]
                [else
@@ -1719,7 +1726,7 @@ value for can explorations and subsequent must evaluation.
              (define new-stage (inc-signal-states current-stage))
              (set! mode (struct-copy can mode [stages (cons new-stage (cdr (can-stages mode)))]))
              (rollback! (can-stage-starting-point current-stage))
-             (unblock-presence-threads (signal-states->hash new-stage))
+             (unblock-presence-threads-can-mode new-stage)
              (unblock-value-threads (hash-keys value-waiters))
              (loop)])]
          [(pair? raised-exns)
@@ -1847,21 +1854,25 @@ value for can explorations and subsequent must evaluation.
                           (if (can? mode)
                               "entering new can stage"
                               "entering can mode")
-                          (hash-keys presence-waiters)
+                          (map blocked-thread-thread (apply append (hash-values presence-waiters)))
                           (hash-keys value-waiters)
                           (and mode (can-emits mode)))
-       (log-esterel-info "entering can mode: blocked on ~s"
-                         (hash-keys presence-waiters))
+       (log-esterel-info "entering can mode: blocked threads: ~s"
+                         (map blocked-thread-thread (apply append (hash-values presence-waiters))))
        (when (and (= 0 (hash-count presence-waiters))
                   (= 0 (hash-count value-waiters)))
          (internal-error "expected some thread to be blocked on a signal"))
-       (define ordered-signals
-         (for/list ([(a-signal blocked-threads) (in-hash presence-waiters)])
+       (define blocked-thread-count
+         (for/sum ([(a-signal blocked-threads) (in-hash presence-waiters)])
+           (length blocked-threads)))
+       (define considered-signals
+         (for/set ([(a-signal blocked-threads) (in-hash presence-waiters)])
            a-signal))
        (define newly-ready (list->set (hash-keys value-waiters)))
        (define new-can-stage (can-stage newly-ready
                                         (get-starting-point)
-                                        ordered-signals
+                                        blocked-thread-count
+                                        considered-signals
                                         0))
        (cond
          [(can? mode)
@@ -1875,7 +1886,7 @@ value for can explorations and subsequent must evaluation.
                           (set)
                           (list new-can-stage)))])
        (rollback! (can-stage-starting-point new-can-stage))
-       (unblock-presence-threads (signal-states->hash new-can-stage))
+       (unblock-presence-threads-can-mode new-can-stage)
        (unblock-value-threads (hash-keys value-waiters))
        (loop)]
 
@@ -1915,7 +1926,7 @@ value for can explorations and subsequent must evaluation.
                  ;; here we need to block
                  (remove-running-thread the-thread)
                  (if is-present?
-                     (add-presence-waiter! a-signal the-thread resp-chan)
+                     (add-presence-waiter! a-signal #f the-thread resp-chan)
                      (add-value-waiter! a-signal the-thread resp-chan))
                  (define parent-thread (hash-ref par-parents the-thread #f))
                  (when parent-thread
@@ -2026,7 +2037,7 @@ value for can explorations and subsequent must evaluation.
                      (define newly-unblocked (update-presence-waiters-following-emission))
                      (for ([(some-blocked-threads val) (in-hash newly-unblocked)])
                        (for ([a-blocked-thread (in-list some-blocked-threads)])
-                         (match-define (blocked-thread thread resp-chan) a-blocked-thread)
+                         (match-define (blocked-thread thread resp-chan presence-index) a-blocked-thread)
                          (channel-put resp-chan val)
                          (define parent-thread (hash-ref par-parents thread #f))
                          (when parent-thread

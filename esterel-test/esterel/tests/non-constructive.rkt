@@ -429,3 +429,21 @@
              #:when v)
      k))
  (set))
+
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (react!
+    (esterel
+     #:pre 1
+     (with-signal (s)
+
+       (par
+        (if (present? s)
+            (void)
+            (pause))
+        (if (present? s)
+            (pause)
+            (void)))
+
+       (emit s))))))
