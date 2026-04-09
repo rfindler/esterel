@@ -1710,6 +1710,8 @@ value for can explorations and subsequent must evaluation.
                                          a-signal)))
                    (unblock-presence-threads)
                    (unblock-value-threads (set->list unemitted-signals))
+                   (log-esterel-info (format "finished can stages; unemitted signals: ~s"
+                                             unemitted-signals))
                    (loop)])]
                [else
                 ;; we've finished one stage but there are more stages to complete,
