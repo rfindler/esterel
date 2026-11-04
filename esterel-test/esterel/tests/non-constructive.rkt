@@ -447,3 +447,31 @@
             (void)))
 
        (emit s))))))
+
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (j)
+       (if (if (present? j) #true #true)
+           (with-signal (k)
+             (begin (emit k)
+                    (if (present? k)
+                        (void)
+                        (emit j))))
+           (void)))))))
+
+(check-exn
+ non-constructive-exn?
+ (λ ()
+   (react!
+    (esterel
+     (with-signal (j)
+       (begin
+         (present? j)
+         (with-signal (k)
+           (begin (emit k)
+                  (if (present? k)
+                      (void)
+                      (emit j))))))))))
